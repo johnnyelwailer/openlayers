@@ -2,7 +2,6 @@
  * @module ol/webgpu/Helper
  */
 import Disposable from '../Disposable.js';
-import {getUid} from '../util.js';
 
 /**
  * @typedef {Object} CanvasCacheItem
@@ -93,12 +92,11 @@ export const ShaderType = {
 
 /**
  * @typedef {Object} GPUCanvasContext
- * @property {HTMLCanvasElement} canvas
- * @property {function(Object): void} configure
- * @property {function(): string} getCurrentTexture
- * @property {function(): void} unconfigure
+ * @property {HTMLCanvasElement} canvas Canvas.
+ * @property {function(Object): void} configure Configure the canvas context.
+ * @property {function(): string} getCurrentTexture Get the current texture.
+ * @property {function(): void} unconfigure Unconfigure the context.
  */
-
 
 /**
  * @classdesc

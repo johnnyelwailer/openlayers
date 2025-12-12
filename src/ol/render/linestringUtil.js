@@ -142,4 +142,3 @@ export function writeLineSegmentToBuffers(
     angle: newAngleTangentSum,
   };
 }
-

@@ -3,26 +3,41 @@
  */
 import earcut from 'earcut';
 import {asArray} from '../../color.js';
-import WebGPUBuffer from '../../webgpu/Buffer.js';
-import {WGSLBuilder} from './WGSLBuilder.js';
-import {writeLineSegmentToBuffers} from '../linestringUtil.js';
-import {collectGetProperties, compileWgslExpression} from './expr.js';
 import {
   create as createTransform,
+  multiply as multiplyTransform,
+  rotate as rotateTransform,
   scale as scaleTransform,
   translate as translateTransform,
-  rotate as rotateTransform,
-  multiply as multiplyTransform,
 } from '../../transform.js';
 import {
   create as createMat4,
   fromTransform as mat4FromTransform,
 } from '../../vec/mat4.js';
+import WebGPUBuffer from '../../webgpu/Buffer.js';
+import {writeLineSegmentToBuffers} from '../linestringUtil.js';
+import {WGSLBuilder} from './WGSLBuilder.js';
+import {collectGetProperties, compileWgslExpression} from './expr.js';
+
+/**
+ * @typedef {Object} StrokePatternTexture
+ * @property {GPUSampler} sampler Sampler.
+ * @property {GPUTextureView} view Texture view.
+ * @property {[number, number]} size Texture size in pixels.
+ */
+
+/**
+ * @typedef {Object} LineStringBufferSet
+ * @property {WebGPUBuffer} vertex Vertex buffer.
+ * @property {WebGPUBuffer} style Style buffer.
+ * @property {string} [strokeShader] Optional WGSL shader override.
+ * @property {StrokePatternTexture} [pattern] Optional stroke pattern resources.
+ */
 
 /**
  * @param {*} value Expression or literal.
  * @param {import("../../Feature.js").default|import("../../render/Feature.js").default} feature Feature.
- * @return {*}
+ * @return {*} Resolved value.
  */
 function resolveExpression(value, feature) {
   if (Array.isArray(value) && value.length === 2 && value[0] === 'get') {
@@ -35,7 +50,7 @@ function resolveExpression(value, feature) {
  * @param {*} value Expression or literal.
  * @param {import("../../Feature.js").default|import("../../render/Feature.js").default} feature Feature.
  * @param {number} fallback Fallback.
- * @return {number}
+ * @return {number} Resolved number.
  */
 function resolveNumber(value, feature, fallback) {
   const resolved = resolveExpression(value, feature);
@@ -45,30 +60,44 @@ function resolveNumber(value, feature, fallback) {
 
 /**
  * @param {*} expr Encoded expression.
- * @return {number} Maximum numeric output found, or NaN.
+ * @return {number} Maximum numeric output found, or NaN if unknown.
  */
 function maxNumberInExpression(expr) {
-  if (typeof expr === 'number') return expr;
+  if (typeof expr === 'number') {
+    return expr;
+  }
   if (typeof expr === 'string') {
     const n = Number(expr);
     return Number.isFinite(n) ? n : NaN;
   }
-  if (!Array.isArray(expr) || expr.length === 0) return NaN;
+  if (!Array.isArray(expr) || expr.length === 0) {
+    return NaN;
+  }
 
   const op = expr[0];
   if (op === 'case' && expr.length >= 4) {
     const t = maxNumberInExpression(expr[2]);
     const f = maxNumberInExpression(expr[3]);
-    if (!Number.isFinite(t)) return f;
-    if (!Number.isFinite(f)) return t;
+    if (!Number.isFinite(t)) {
+      return f;
+    }
+    if (!Number.isFinite(f)) {
+      return t;
+    }
     return Math.max(t, f);
   }
-  if (op === 'interpolate' && Array.isArray(expr[1]) && expr[1][0] === 'linear') {
+  if (
+    op === 'interpolate' &&
+    Array.isArray(expr[1]) &&
+    expr[1][0] === 'linear'
+  ) {
     // stops are [stop, output] pairs after the input expression
     let maxVal = NaN;
     for (let i = 3; i + 1 < expr.length; i += 2) {
       const out = maxNumberInExpression(expr[i + 1]);
-      if (!Number.isFinite(out)) continue;
+      if (!Number.isFinite(out)) {
+        continue;
+      }
       maxVal = Number.isFinite(maxVal) ? Math.max(maxVal, out) : out;
     }
     return maxVal;
@@ -81,7 +110,7 @@ function maxNumberInExpression(expr) {
  * @param {*} value Expression or literal.
  * @param {import("../../Feature.js").default|import("../../render/Feature.js").default} feature Feature.
  * @param {number} fallback Fallback.
- * @return {number}
+ * @return {number} Stroke width.
  */
 function resolveStrokeWidth(value, feature, fallback) {
   if (!Array.isArray(value)) {
@@ -101,7 +130,7 @@ function resolveStrokeWidth(value, feature, fallback) {
  * @param {*} value Expression or literal.
  * @param {import("../../Feature.js").default|import("../../render/Feature.js").default} feature Feature.
  * @param {Array<number>} fallback Fallback RGBA (0..1).
- * @return {Array<number>}
+ * @return {Array<number>} Resolved color.
  */
 function resolveColor(value, feature, fallback) {
   const resolved = resolveExpression(value, feature);
@@ -139,7 +168,7 @@ class VectorStyleRenderer {
     this.styles_ = styles;
     /** @type {Map<string, GPURenderPipeline>} */
     this.strokePipelineCache_ = new Map();
-    /** @type {Map<string, Promise<{sampler: GPUSampler, view: GPUTextureView, size: [number, number]}>>} */
+    /** @type {Map<string, Promise<StrokePatternTexture>>} */
     this.strokePatternCache_ = new Map();
 
     // TODO: Phase 2 - Implement proper style parsing
@@ -178,13 +207,13 @@ class VectorStyleRenderer {
       const width = bitmap.width;
       const height = bitmap.height;
 
+      const TEXTURE_BINDING = 0x04;
+      const COPY_DST = 0x02;
+      const RENDER_ATTACHMENT = 0x10;
       const texture = device.createTexture({
         size: {width, height},
         format: 'rgba8unorm',
-        usage:
-          GPUTextureUsage.TEXTURE_BINDING |
-          GPUTextureUsage.COPY_DST |
-          GPUTextureUsage.RENDER_ATTACHMENT,
+        usage: TEXTURE_BINDING | COPY_DST | RENDER_ATTACHMENT,
       });
       device.queue.copyExternalImageToTexture(
         {source: bitmap},
@@ -385,7 +414,7 @@ class VectorStyleRenderer {
     }
 
     let lineBuffer = null;
-    /** @type {Array<{vertex: WebGPUBuffer, style: WebGPUBuffer, strokeShader?: string}>} */
+    /** @type {Array<LineStringBufferSet>} */
     const lineStringBuffers = [];
     if (lineInstanceAttributes.length > 0 && hasAnyStroke) {
       const lineData = new Float32Array(lineInstanceAttributes);
@@ -445,7 +474,9 @@ class VectorStyleRenderer {
           }
 
           const spacingPx = Number(style['stroke-pattern-spacing'] || 0);
-          const startOffsetPx = Number(style['stroke-pattern-start-offset'] || 0);
+          const startOffsetPx = Number(
+            style['stroke-pattern-start-offset'] || 0,
+          );
           const tintEnabled = 'stroke-color' in style;
           patternOptions = {
             textureSize: `vec2f(${textureSize[0]}, ${textureSize[1]})`,
@@ -461,24 +492,40 @@ class VectorStyleRenderer {
           const feature = lineEntries[i].feature;
           const sIdx = i * STYLE_STRIDE;
 
-          const color = resolveColor(style['stroke-color'], feature, defaultColor);
+          const color = resolveColor(
+            style['stroke-color'],
+            feature,
+            defaultColor,
+          );
           const width = resolveStrokeWidth(style['stroke-width'], feature, 1.0);
           const offsetPx = resolveNumber(style['stroke-offset'], feature, 0.0);
-          const miterLimit = resolveNumber(style['stroke-miter-limit'], feature, 10.0);
+          const miterLimit = resolveNumber(
+            style['stroke-miter-limit'],
+            feature,
+            10.0,
+          );
 
           let capType = 2; // match WebGL default
           if ('stroke-line-cap' in style) {
-            const cap = String(resolveExpression(style['stroke-line-cap'], feature));
+            const cap = String(
+              resolveExpression(style['stroke-line-cap'], feature),
+            );
             capType = cap === 'square' ? 1 : cap === 'butt' ? 0 : 2;
           }
           let joinType = 2; // match WebGL default
           if ('stroke-line-join' in style) {
-            const join = String(resolveExpression(style['stroke-line-join'], feature));
+            const join = String(
+              resolveExpression(style['stroke-line-join'], feature),
+            );
             joinType = join === 'bevel' ? 1 : join === 'round' ? 2 : 0;
           }
 
           const dash = resolveExpression(style['stroke-line-dash'], feature);
-          const dashOffset = resolveNumber(style['stroke-line-dash-offset'], feature, 0.0);
+          const dashOffset = resolveNumber(
+            style['stroke-line-dash-offset'],
+            feature,
+            0.0,
+          );
           let dashValues = Array.isArray(dash) ? dash : null;
           if (dashValues && dashValues.length % 2 === 1) {
             dashValues = dashValues.concat(dashValues);
@@ -498,7 +545,8 @@ class VectorStyleRenderer {
           lineStyleData[sIdx + 4] = width;
           lineStyleData[sIdx + 5] = capType;
           lineStyleData[sIdx + 6] = joinType;
-          lineStyleData[sIdx + 7] = Number.isFinite(miterLimit) && miterLimit > 0 ? miterLimit : 10.0;
+          lineStyleData[sIdx + 7] =
+            Number.isFinite(miterLimit) && miterLimit > 0 ? miterLimit : 10.0;
           lineStyleData[sIdx + 8] = offsetPx;
           lineStyleData[sIdx + 9] = dashCount;
           lineStyleData[sIdx + 10] = dashOffset;
@@ -512,7 +560,11 @@ class VectorStyleRenderer {
 
           // Optional numeric get() property used by `webgpu-line-metric` ("limit").
           if (getProps.has('limit')) {
-            lineStyleData[sIdx + 24] = resolveNumber(['get', 'limit'], feature, 0.0);
+            lineStyleData[sIdx + 24] = resolveNumber(
+              ['get', 'limit'],
+              feature,
+              0.0,
+            );
           }
         }
 
@@ -886,7 +938,8 @@ class VectorStyleRenderer {
         const count = vertexBuffer.size / (12 * 4);
 
         const strokeCode =
-          bufferSet.strokeShader || this.styleShaders_[0].builder.getStrokeShader();
+          bufferSet.strokeShader ||
+          this.styleShaders_[0].builder.getStrokeShader();
         const cacheKey = `${format}|${strokeCode}`;
         let pipeline = this.strokePipelineCache_.get(cacheKey);
         if (!pipeline) {

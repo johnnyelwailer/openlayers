@@ -31,7 +31,9 @@ function wgslColor(colorStr) {
  * @param {Set<string>} out Output set.
  */
 export function collectGetProperties(expr, out) {
-  if (!expr) return;
+  if (!expr) {
+    return;
+  }
   if (Array.isArray(expr)) {
     if (expr[0] === 'get' && typeof expr[1] === 'string') {
       out.add(expr[1]);
@@ -56,12 +58,16 @@ export function compileWgslExpression(expr, ctx, expected) {
     }
     if (typeof expr === 'string') {
       const n = Number(expr);
-      if (!Number.isFinite(n)) return '0.0';
+      if (!Number.isFinite(n)) {
+        return '0.0';
+      }
       return Number.isInteger(n) ? `${n}.0` : `${n}`;
     }
   }
   if (expected === 'vec4f') {
-    if (typeof expr === 'string') return wgslColor(expr);
+    if (typeof expr === 'string') {
+      return wgslColor(expr);
+    }
   }
   if (Array.isArray(expr)) {
     const op = expr[0];
@@ -82,7 +88,11 @@ export function compileWgslExpression(expr, ctx, expected) {
       const f = compileWgslExpression(expr[3], ctx, expected);
       return `select(${f}, ${t}, ${cond})`;
     }
-    if (op === 'interpolate' && Array.isArray(expr[1]) && expr[1][0] === 'linear') {
+    if (
+      op === 'interpolate' &&
+      Array.isArray(expr[1]) &&
+      expr[1][0] === 'linear'
+    ) {
       const input = compileWgslExpression(expr[2], ctx, 'f32');
       // minimal: two-stop interpolate (covers current rendering tests)
       const stop0 = compileWgslExpression(expr[3], ctx, 'f32');
@@ -90,9 +100,6 @@ export function compileWgslExpression(expr, ctx, expected) {
       const stop1 = compileWgslExpression(expr[5], ctx, 'f32');
       const out1 = compileWgslExpression(expr[6], ctx, expected);
       const t = `clamp((${input} - ${stop0}) / (${stop1} - ${stop0}), 0.0, 1.0)`;
-      if (expected === 'vec4f') {
-        return `mix(${out0}, ${out1}, ${t})`;
-      }
       return `mix(${out0}, ${out1}, ${t})`;
     }
   }

@@ -1,22 +1,21 @@
 /**
  * @module ol/renderer/webgpu/VectorLayer
  */
-import MixedGeometryBatch from '../../render/webgl/MixedGeometryBatch.js';
-import VectorStyleRenderer from '../../render/webgpu/VectorStyleRenderer.js';
-import {create as createTransform} from '../../transform.js';
-import WebGPULayerRenderer from './Layer.js';
-
-/**
- * @classdesc
- * WebGPU vector renderer.
- * @extends {WebGPULayerRenderer<import("../../layer/Layer.js").default>}
- */
-import {listen, unlistenByKey} from '../../events.js';
-import {getTransformFromProjections, getUserProjection, toUserExtent, toUserResolution} from '../../proj.js';
-import VectorEventType from '../../source/VectorEventType.js';
 import ViewHint from '../../ViewHint.js';
+import {listen, unlistenByKey} from '../../events.js';
 import {buffer, createEmpty, equals} from '../../extent.js';
 import BaseVector from '../../layer/BaseVector.js';
+import {
+  getTransformFromProjections,
+  getUserProjection,
+  toUserExtent,
+  toUserResolution,
+} from '../../proj.js';
+import MixedGeometryBatch from '../../render/webgl/MixedGeometryBatch.js';
+import VectorStyleRenderer from '../../render/webgpu/VectorStyleRenderer.js';
+import VectorEventType from '../../source/VectorEventType.js';
+import {create as createTransform} from '../../transform.js';
+import WebGPULayerRenderer from './Layer.js';
 
 /**
  * @classdesc
@@ -62,7 +61,7 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
      * @type {boolean}
      */
     this.initialFeaturesAdded_ = false;
-    
+
     /**
      * @private
      * @type {boolean}
@@ -74,7 +73,7 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
      * @type {Array<import("../../events.js").EventsKey|null>}
      */
     this.sourceListenKeys_ = null;
-    
+
     /**
      * @private
      */
@@ -104,7 +103,6 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
    */
   addInitialFeatures_(frameState) {
     const source = this.getLayer().getSource();
-    const features = source.getFeatures();
     const userProjection = getUserProjection();
     let projectionTransform;
     if (userProjection) {
@@ -227,11 +225,11 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
       } else {
         vectorSource.loadFeatures(extent, resolution, projection);
       }
-      
+
       this.ready = false;
       this.generatingBuffers_ = true;
       const transform = createTransform(); // Placeholder, logic moves to shader mainly, or batch transform.
-      
+
       this.styleRenderer_
         .generateBuffers(this.batch_, transform)
         .then((buffers) => {
@@ -274,7 +272,7 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
 
     return this.helper.getCanvas();
   }
-  
+
   /**
    * Clean up.
    * @override

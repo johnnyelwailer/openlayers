@@ -3,6 +3,24 @@
  */
 
 /**
+ * @typedef {Object} StrokePatternShaderOptions
+ * @property {string} textureSize WGSL `vec2f` expression for the full texture size in pixels.
+ * @property {string} textureOffset WGSL `vec2f` expression for the sample offset in pixels.
+ * @property {string} sampleSize WGSL `vec2f` expression for the sample size in pixels.
+ * @property {string} spacingPx WGSL `f32` expression for spacing in pixels.
+ * @property {string} startOffsetPx WGSL `f32` expression for start offset in pixels.
+ * @property {string} tint WGSL `vec4f` expression for optional tint.
+ */
+
+/**
+ * @typedef {Object} StrokeShaderOptions
+ * @property {string} [strokeColor] WGSL `vec4f` expression for the stroke color.
+ * @property {string} [strokeWidth] WGSL `f32` expression for the stroke width.
+ * @property {string} [discard] WGSL `bool` expression for fragment discard.
+ * @property {StrokePatternShaderOptions} [pattern] Stroke pattern sampling options.
+ */
+
+/**
  * @classdesc
  * A builder class for generating WGSL shaders for WebGPU.
  * This mirrors the functionality of ShaderBuilder (GLSL) but for WGSL.
@@ -123,19 +141,7 @@ export class WGSLBuilder {
   }
 
   /**
-   * @param {{
-   *   strokeColor?: string,
-   *   strokeWidth?: string,
-   *   discard?: string,
-   *   pattern?: {
-   *     textureSize: string,
-   *     textureOffset: string,
-   *     sampleSize: string,
-   *     spacingPx: string,
-   *     startOffsetPx: string,
-   *     tint: string,
-   *   }
-   * }} [options] Shader options.
+   * @param {StrokeShaderOptions} [options] Shader options.
    * @return {string} WGSL code.
    */
   getStrokeShader(options = {}) {
