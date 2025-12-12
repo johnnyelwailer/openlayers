@@ -289,7 +289,9 @@ class VectorStyleRenderer {
     for (const entry of pointEntries) {
       // Each entry can have multiple points (MultiPoint)
       for (const flatCoordPoints of entry.flatCoordss) {
-        pointVertexCount += flatCoordPoints.length / 2;
+        // Point geometries can be XYZ/XYZM (e.g. KML coordinates with altitude).
+        // Only the first two components are used for rendering.
+        pointVertexCount += 1;
       }
     }
 
@@ -301,11 +303,9 @@ class VectorStyleRenderer {
       const entry = pointEntries[i];
       // Fill Vertex Buffer
       for (const flatCoordPoints of entry.flatCoordss) {
-        for (let j = 0; j < flatCoordPoints.length; j += 2) {
-          pointData[cursor++] = flatCoordPoints[j];
-          pointData[cursor++] = flatCoordPoints[j + 1];
-          pointData[cursor++] = i; // featureIndex
-        }
+        pointData[cursor++] = flatCoordPoints[0];
+        pointData[cursor++] = flatCoordPoints[1];
+        pointData[cursor++] = i; // featureIndex
       }
     }
 
@@ -1220,7 +1220,7 @@ class VectorStyleRenderer {
    * @param {Object} buffers Buffers.
    * @param {import("../../Map.js").FrameState} frameState Frame state.
    */
-  render(buffers, frameState) {
+  render(buffers, frameState, worldOffsetX = 0) {
     const device = this.helper_.getDevice();
     const context = this.helper_.getContext();
 
@@ -1243,7 +1243,7 @@ class VectorStyleRenderer {
     translateTransform(renderTransform, width / 2, height / 2);
     scaleTransform(renderTransform, 1 / resolution, -1 / resolution);
     rotateTransform(renderTransform, -rotation);
-    translateTransform(renderTransform, -center[0], -center[1]);
+    translateTransform(renderTransform, -center[0] + worldOffsetX, -center[1]);
 
     // 2. Pixel -> Clip
     // Scale (2/w, -2/h), Translate (-1, 1)

@@ -3,7 +3,7 @@
  */
 import ViewHint from '../../ViewHint.js';
 import {listen, unlistenByKey} from '../../events.js';
-import {buffer, createEmpty, equals} from '../../extent.js';
+import {buffer, createEmpty, equals, getWidth} from '../../extent.js';
 import BaseVector from '../../layer/BaseVector.js';
 import {
   getTransformFromProjections,
@@ -16,6 +16,32 @@ import VectorStyleRenderer from '../../render/webgpu/VectorStyleRenderer.js';
 import VectorEventType from '../../source/VectorEventType.js';
 import {create as createTransform} from '../../transform.js';
 import WebGPULayerRenderer from './Layer.js';
+
+/**
+ * Compute world params (wrapX rendering).
+ * Mirrors `src/ol/renderer/webgl/worldUtil.js` but kept local to avoid touching WebGL code.
+ * @param {import("../../Map.js").FrameState} frameState Frame state.
+ * @param {import("../../layer/Layer.js").default} layer Layer.
+ * @return {Array<number>} The world start, end and width.
+ */
+function getWorldParameters(frameState, layer) {
+  const projection = frameState.viewState.projection;
+  const vectorSource = layer.getSource();
+  const multiWorld = vectorSource.getWrapX() && projection.canWrapX();
+  const projectionExtent = projection.getExtent();
+
+  const extent = frameState.extent;
+  const worldWidth = multiWorld ? getWidth(projectionExtent) : 0;
+  const endWorld = multiWorld
+    ? Math.ceil((extent[2] - projectionExtent[2]) / worldWidth) + 1
+    : 1;
+
+  const startWorld = multiWorld
+    ? Math.floor((extent[0] - projectionExtent[0]) / worldWidth)
+    : 0;
+
+  return [startWorld, endWorld, worldWidth];
+}
 
 /**
  * @classdesc
@@ -268,7 +294,17 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
     );
 
     if (this.currentBuffers_) {
-      this.styleRenderer_.render(this.currentBuffers_, frameState);
+      const [startWorld, endWorld, worldWidth] = getWorldParameters(
+        frameState,
+        this.getLayer(),
+      );
+      for (let world = startWorld; world < endWorld; world++) {
+        this.styleRenderer_.render(
+          this.currentBuffers_,
+          frameState,
+          world * worldWidth,
+        );
+      }
     }
 
     return this.helper.getCanvas();
