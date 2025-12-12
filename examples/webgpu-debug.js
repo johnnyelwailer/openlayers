@@ -15,21 +15,22 @@ const vector = new WebGPUVectorLayer({
     format: new GeoJSON(),
   }),
   style: {
-    'fill-color': '#ddd',
-    'stroke-color': '#eee',
-    'stroke-width': 2,
+    'fill-color': 'rgba(255, 255, 255, 0.6)',
+    'stroke-color': 'red',
+    'stroke-width': 4,
+    'stroke-line-dash': [10, 10, 5, 25],
   },
 });
 
-// const raster = new TileLayer({
-//   source: new XYZ({
-//     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-//     maxZoom: 19,
-//   }),
-// });
+const raster = new TileLayer({
+  source: new XYZ({
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    maxZoom: 19,
+  }),
+});
 
 const map = new Map({
-  layers: [vector],
+  layers: [raster, vector],
   target: 'map',
   view: new View({
     center: [8, 47],
@@ -37,9 +38,4 @@ const map = new Map({
   }),
 });
 
-// Force render loop to catch WebGPU readiness
-function render() {
-  map.render();
-  requestAnimationFrame(render);
-}
-render();
+
