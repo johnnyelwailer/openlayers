@@ -5,6 +5,7 @@ import earcut from 'earcut';
 import {asArray} from '../../color.js';
 import WebGPUBuffer from '../../webgpu/Buffer.js';
 import {WGSLBuilder} from './WGSLBuilder.js';
+import {writeLineSegmentToBuffers} from '../webgl/bufferUtil.js';
 import {
   create as createTransform,
   scale as scaleTransform,
@@ -149,21 +150,14 @@ class VectorStyleRenderer {
     const lineEntries = Object.values(lineBatch.entries);
 
     // stride is 3 (XYM) for lines in MixedGeometryBatch
-    const LINE_STRIDE = 3; 
+    const LINE_STRIDE = 3;
 
-    // Calculate total segments
-    let lineSegmentCount = 0;
-    for (const entry of lineEntries) {
-      for (const flatCoords of entry.flatCoordss) {
-        const numPoints = flatCoords.length / LINE_STRIDE;
-        if (numPoints >= 2) {
-          lineSegmentCount += numPoints - 1;
-        }
-      }
-    }
+    // Generate per-segment instance attributes compatible with the WebGL stroke pipeline:
+    // p0(x,y,m), p1(x,y,m), angle0, angle1, distanceLow, distanceHigh, angleTangentSum, featureIndex
+    // -> 12 floats per segment instance.
+    /** @type {Array<number>} */
+    const lineInstanceAttributes = [];
 
-    // 5 floats per segment: p1(2), p2(2), featureIndex(1)
-    const lineData = new Float32Array(lineSegmentCount * 5);
     // Style: Color(4) + Width(1) + Padding(3) = 8 floats
     const lineStyleData = new Float32Array(lineEntries.length * 8);
 
@@ -186,10 +180,8 @@ class VectorStyleRenderer {
       }
     }
 
-    cursor = 0;
+    // Fill the per-feature style buffer (one style per feature in the batch)
     for (let i = 0; i < lineEntries.length; i++) {
-      const entry = lineEntries[i];
-
       // Style
       const sIdx = i * 8;
       lineStyleData[sIdx + 0] = lineColor[0];
@@ -197,30 +189,67 @@ class VectorStyleRenderer {
       lineStyleData[sIdx + 2] = lineColor[2];
       lineStyleData[sIdx + 3] = lineColor[3];
       lineStyleData[sIdx + 4] = lineWidth;
+    }
+
+    const identityTransform = createTransform();
+    // Generate segment instances per feature/linestring
+    for (let i = 0; i < lineEntries.length; i++) {
+      const entry = lineEntries[i];
 
       for (const flatCoords of entry.flatCoordss) {
         const numPoints = flatCoords.length / LINE_STRIDE;
         if (numPoints < 2) {
           continue;
         }
+        const instructions = new Float32Array(flatCoords);
+        const firstInstructionsIndex = 0;
+        const lastInstructionsIndex = (numPoints - 1) * LINE_STRIDE;
+        const isLoop =
+          instructions[firstInstructionsIndex] ===
+            instructions[lastInstructionsIndex] &&
+          instructions[firstInstructionsIndex + 1] ===
+            instructions[lastInstructionsIndex + 1];
+
+        let currentLength = 0;
+        let currentAngleTangentSum = 0;
 
         for (let j = 0; j < numPoints - 1; j++) {
-          const idx = j * LINE_STRIDE;
-          // P1
-          lineData[cursor++] = flatCoords[idx];
-          lineData[cursor++] = flatCoords[idx + 1];
-          // P2
-          lineData[cursor++] = flatCoords[idx + LINE_STRIDE];
-          lineData[cursor++] = flatCoords[idx + LINE_STRIDE + 1];
-          // Feature Index
-          lineData[cursor++] = i;
+          let beforeIndex = null;
+          if (j > 0) {
+            beforeIndex = (j - 1) * LINE_STRIDE;
+          } else if (isLoop) {
+            beforeIndex = lastInstructionsIndex - LINE_STRIDE;
+          }
+
+          let afterIndex = null;
+          if (j < numPoints - 2) {
+            afterIndex = (j + 2) * LINE_STRIDE;
+          } else if (isLoop) {
+            afterIndex = firstInstructionsIndex + LINE_STRIDE;
+          }
+
+          const measures = writeLineSegmentToBuffers(
+            instructions,
+            j * LINE_STRIDE,
+            (j + 1) * LINE_STRIDE,
+            beforeIndex,
+            afterIndex,
+            lineInstanceAttributes,
+            [i], // featureIndex as custom attribute
+            identityTransform,
+            currentLength,
+            currentAngleTangentSum,
+          );
+          currentLength = measures.length;
+          currentAngleTangentSum = measures.angle;
         }
       }
     }
 
     let lineBuffer = null;
     let lineStyleBuffer = null;
-    if (lineSegmentCount > 0) {
+    if (lineInstanceAttributes.length > 0) {
+      const lineData = new Float32Array(lineInstanceAttributes);
       lineBuffer = new WebGPUBuffer({
         size: lineData.byteLength,
         usage: 0x0020 | 0x0008, // VERTEX | COPY_DST
@@ -396,6 +425,7 @@ class VectorStyleRenderer {
     const size = frameState.size;
     const width = size[0];
     const height = size[1];
+    const pixelRatio = frameState.pixelRatio;
     const rotation = frameState.viewState.rotation;
     const resolution = frameState.viewState.resolution;
     const center = frameState.viewState.center;
@@ -431,6 +461,8 @@ class VectorStyleRenderer {
     const commandEncoder = device.createCommandEncoder();
     const textureView = context.getCurrentTexture().createView();
 
+    const format = navigator.gpu.getPreferredCanvasFormat();
+
     const renderPassDescriptor = {
       colorAttachments: [
         {
@@ -449,6 +481,9 @@ class VectorStyleRenderer {
       mat4FromTransform(mat4Data, clipTransform);
       uniformData.set(mat4Data);
       uniformData[16] = resolution;
+      uniformData[17] = pixelRatio;
+      uniformData[18] = width;
+      uniformData[19] = height;
       device.queue.writeBuffer(this.uniformBuffer_, 0, uniformData);
     }
 
@@ -493,7 +528,7 @@ class VectorStyleRenderer {
             entryPoint: 'fs_main',
             targets: [
               {
-                format: navigator.gpu.getPreferredCanvasFormat(),
+                format,
                 blend: {
                   color: {
                     srcFactor: 'src-alpha',
@@ -544,8 +579,8 @@ class VectorStyleRenderer {
       for (const bufferSet of buffers.lineStringBuffers) {
         const vertexBuffer = bufferSet.vertex.getBuffer();
         const styleBuffer = bufferSet.style.getBuffer();
-        // size / 20 = instance count (5 floats * 4 bytes)
-        const count = vertexBuffer.size / 20;
+        // 12 floats per instance (see generation above)
+        const count = vertexBuffer.size / (12 * 4);
 
         const shaderModule = device.createShaderModule({
           code: this.styleShaders_[0].builder.getStrokeVertexShader(),
@@ -558,23 +593,53 @@ class VectorStyleRenderer {
             entryPoint: 'vs_main',
             buffers: [
               {
-                arrayStride: 20, // 5 floats (p1, p2, featureIdx)
+                arrayStride: 48, // 12 floats per instance
                 stepMode: 'instance',
                 attributes: [
                   {
                     shaderLocation: 0,
                     offset: 0,
-                    format: 'float32x2', // p1
+                    format: 'float32x2', // segmentStart
                   },
                   {
                     shaderLocation: 1,
                     offset: 8,
-                    format: 'float32x2', // p2
+                    format: 'float32', // measureStart
                   },
                   {
                     shaderLocation: 2,
-                    offset: 16,
-                    format: 'float32', // featureIndex (aligned?)
+                    offset: 12,
+                    format: 'float32x2', // segmentEnd
+                  },
+                  {
+                    shaderLocation: 3,
+                    offset: 20,
+                    format: 'float32', // measureEnd
+                  },
+                  {
+                    shaderLocation: 4,
+                    offset: 24,
+                    format: 'float32x2', // joinAngles (start,end)
+                  },
+                  {
+                    shaderLocation: 5,
+                    offset: 32,
+                    format: 'float32', // distanceLow
+                  },
+                  {
+                    shaderLocation: 6,
+                    offset: 36,
+                    format: 'float32', // distanceHigh
+                  },
+                  {
+                    shaderLocation: 7,
+                    offset: 40,
+                    format: 'float32', // angleTangentSum
+                  },
+                  {
+                    shaderLocation: 8,
+                    offset: 44,
+                    format: 'float32', // featureIndex
                   },
                 ],
               },
@@ -585,7 +650,7 @@ class VectorStyleRenderer {
             entryPoint: 'fs_main',
             targets: [
               {
-                format: navigator.gpu.getPreferredCanvasFormat(),
+                format,
                 blend: {
                   color: {
                     srcFactor: 'src-alpha',
@@ -627,7 +692,7 @@ class VectorStyleRenderer {
         passEncoder.setPipeline(pipeline);
         passEncoder.setBindGroup(0, bindGroup);
         passEncoder.setVertexBuffer(0, vertexBuffer);
-        passEncoder.draw(4, count); // Draw 4 vertices per instance (Quad)
+        passEncoder.draw(4, count); // 4 vertices per instance (quad as triangle-strip)
       }
     }
 
@@ -670,7 +735,7 @@ class VectorStyleRenderer {
             entryPoint: 'fs_main',
             targets: [
               {
-                format: navigator.gpu.getPreferredCanvasFormat(),
+                format,
                 blend: {
                   color: {
                     srcFactor: 'src-alpha',
