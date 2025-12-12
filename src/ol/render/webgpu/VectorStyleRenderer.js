@@ -295,7 +295,7 @@ class VectorStyleRenderer {
             const cap = String(resolveExpression(style['stroke-line-cap'], feature));
             capType = cap === 'square' ? 1 : cap === 'butt' ? 0 : 2;
           }
-          let joinType = 0;
+          let joinType = 2; // match WebGL default
           if ('stroke-line-join' in style) {
             const join = String(resolveExpression(style['stroke-line-join'], feature));
             joinType = join === 'bevel' ? 1 : join === 'round' ? 2 : 0;
