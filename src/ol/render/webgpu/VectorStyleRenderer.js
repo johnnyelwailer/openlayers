@@ -147,24 +147,36 @@ class VectorStyleRenderer {
     // --- 2. Generate LineString Buffers ---
     const lineBatch = geometryBatch.lineStringBatch;
     const lineEntries = Object.values(lineBatch.entries);
+    const polygonEntries = Object.values(geometryBatch.polygonBatch.entries); // Added for logging
+    console.error(`[VectorStyleRenderer] GenerateBuffers. Polys: ${polygonEntries ? polygonEntries.length : 0}, Lines: ${lineEntries ? lineEntries.length : 0}, Points: ${pointEntries ? pointEntries.length : 0}`);
+    if (this.styles_ && this.styles_.length > 0) {
+       console.error('[VectorStyleRenderer] Style[0]:', JSON.stringify(this.styles_[0]));
+    } else {
+       console.error('[VectorStyleRenderer] Style empty');
+    }
 
-    // Calculate total vertices for lines (LineList topology: 2 vertices per segment)
-    let lineVertexCount = 0;
+    // stride is 3 (XYM) for lines in MixedGeometryBatch
+    const LINE_STRIDE = 3; 
+
+    // Calculate total segments
+    let lineSegmentCount = 0;
     for (const entry of lineEntries) {
       for (const flatCoords of entry.flatCoordss) {
-        const numPoints = flatCoords.length / 2;
+        const numPoints = flatCoords.length / LINE_STRIDE;
         if (numPoints >= 2) {
-          lineVertexCount += (numPoints - 1) * 2; // N points -> N-1 segments -> 2*(N-1) vertices
+          lineSegmentCount += numPoints - 1;
         }
       }
     }
 
-    // 3 floats per vertex: x, y, featureIndex
-    const lineData = new Float32Array(lineVertexCount * 3);
-    const lineStyleData = new Float32Array(lineEntries.length * 4);
+    // 5 floats per segment: p1(2), p2(2), featureIndex(1)
+    const lineData = new Float32Array(lineSegmentCount * 5);
+    // Style: Color(4) + Width(1) + Padding(3) = 8 floats
+    const lineStyleData = new Float32Array(lineEntries.length * 8);
 
-    // Resolve Line Color
-    let lineColor = [0, 0, 0, 1]; // Default Black
+    // Resolve Line Style
+    let lineColor = [0, 0, 0, 1];
+    let lineWidth = 1.0;
     if (this.styles_ && this.styles_[0]) {
       const style = this.styles_[0];
       const colorStr = style['stroke-color'];
@@ -176,6 +188,9 @@ class VectorStyleRenderer {
           // Ignore
         }
       }
+      if (style['stroke-width'] !== undefined) {
+        lineWidth = Number(style['stroke-width']);
+      }
     }
 
     cursor = 0;
@@ -183,27 +198,28 @@ class VectorStyleRenderer {
       const entry = lineEntries[i];
 
       // Style
-      lineStyleData[i * 4 + 0] = lineColor[0];
-      lineStyleData[i * 4 + 1] = lineColor[1];
-      lineStyleData[i * 4 + 2] = lineColor[2];
-      lineStyleData[i * 4 + 3] = lineColor[3];
+      const sIdx = i * 8;
+      lineStyleData[sIdx + 0] = lineColor[0];
+      lineStyleData[sIdx + 1] = lineColor[1];
+      lineStyleData[sIdx + 2] = lineColor[2];
+      lineStyleData[sIdx + 3] = lineColor[3];
+      lineStyleData[sIdx + 4] = lineWidth;
 
       for (const flatCoords of entry.flatCoordss) {
-        const numPoints = flatCoords.length / 2;
+        const numPoints = flatCoords.length / LINE_STRIDE;
         if (numPoints < 2) {
           continue;
         }
 
         for (let j = 0; j < numPoints - 1; j++) {
-          const idx = j * 2;
-          // Segment Start
+          const idx = j * LINE_STRIDE;
+          // P1
           lineData[cursor++] = flatCoords[idx];
           lineData[cursor++] = flatCoords[idx + 1];
-          lineData[cursor++] = i;
-
-          // Segment End
-          lineData[cursor++] = flatCoords[idx + 2];
-          lineData[cursor++] = flatCoords[idx + 3];
+          // P2
+          lineData[cursor++] = flatCoords[idx + LINE_STRIDE];
+          lineData[cursor++] = flatCoords[idx + LINE_STRIDE + 1];
+          // Feature Index
           lineData[cursor++] = i;
         }
       }
@@ -211,10 +227,10 @@ class VectorStyleRenderer {
 
     let lineBuffer = null;
     let lineStyleBuffer = null;
-    if (lineVertexCount > 0) {
+    if (lineSegmentCount > 0) {
       lineBuffer = new WebGPUBuffer({
         size: lineData.byteLength,
-        usage: 0x0020 | 0x0008,
+        usage: 0x0020 | 0x0008, // VERTEX | COPY_DST
         mappedAtCreation: true,
       });
       lineBuffer.create(this.helper_);
@@ -223,7 +239,7 @@ class VectorStyleRenderer {
 
       lineStyleBuffer = new WebGPUBuffer({
         size: lineStyleData.byteLength,
-        usage: 0x0080 | 0x0008,
+        usage: 0x0080 | 0x0008, // STORAGE
         mappedAtCreation: true,
       });
       lineStyleBuffer.create(this.helper_);
@@ -411,14 +427,13 @@ class VectorStyleRenderer {
     const mat4Data = createMat4();
     mat4FromTransform(mat4Data, clipTransform);
 
-    // 5. Update Uniform Buffer
+    // 5. Update Uniform Buffer (re-done inside render to include resolution)
     if (!this.uniformBuffer_) {
       this.uniformBuffer_ = device.createBuffer({
-        size: 64, // mat4x4<f32>
+        size: 80, // mat4x4<f32> (64) + f32 (4) + padding
         usage: 0x0040 | 0x0008, // UNIFORM | COPY_DST
       });
     }
-    device.queue.writeBuffer(this.uniformBuffer_, 0, new Float32Array(mat4Data));
 
     const commandEncoder = device.createCommandEncoder();
     const textureView = context.getCurrentTexture().createView();
@@ -433,6 +448,16 @@ class VectorStyleRenderer {
         },
       ],
     };
+
+    // Update Uniform Buffer with resolution
+    if (this.uniformBuffer_) {
+      const uniformData = new Float32Array(20); // 80 bytes (64 mat + 4 res + padding)
+      const mat4Data = createMat4();
+      mat4FromTransform(mat4Data, clipTransform);
+      uniformData.set(mat4Data);
+      uniformData[16] = resolution;
+      device.queue.writeBuffer(this.uniformBuffer_, 0, uniformData);
+    }
 
     const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
 
@@ -526,7 +551,8 @@ class VectorStyleRenderer {
       for (const bufferSet of buffers.lineStringBuffers) {
         const vertexBuffer = bufferSet.vertex.getBuffer();
         const styleBuffer = bufferSet.style.getBuffer();
-        const count = vertexBuffer.size / 12;
+        // size / 20 = instance count (5 floats * 4 bytes)
+        const count = vertexBuffer.size / 20;
 
         const shaderModule = device.createShaderModule({
           code: this.styleShaders_[0].builder.getStrokeVertexShader(),
@@ -539,17 +565,23 @@ class VectorStyleRenderer {
             entryPoint: 'vs_main',
             buffers: [
               {
-                arrayStride: 12,
+                arrayStride: 20, // 5 floats (p1, p2, featureIdx)
+                stepMode: 'instance',
                 attributes: [
                   {
                     shaderLocation: 0,
                     offset: 0,
-                    format: 'float32x2',
+                    format: 'float32x2', // p1
                   },
                   {
                     shaderLocation: 1,
                     offset: 8,
-                    format: 'float32',
+                    format: 'float32x2', // p2
+                  },
+                  {
+                    shaderLocation: 2,
+                    offset: 16,
+                    format: 'float32', // featureIndex (aligned?)
                   },
                 ],
               },
@@ -577,7 +609,7 @@ class VectorStyleRenderer {
             ],
           },
           primitive: {
-            topology: 'line-list',
+            topology: 'triangle-strip',
           },
         });
 
@@ -602,7 +634,7 @@ class VectorStyleRenderer {
         passEncoder.setPipeline(pipeline);
         passEncoder.setBindGroup(0, bindGroup);
         passEncoder.setVertexBuffer(0, vertexBuffer);
-        passEncoder.draw(count);
+        passEncoder.draw(4, count); // Draw 4 vertices per instance (Quad)
       }
     }
 

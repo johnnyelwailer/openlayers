@@ -2,6 +2,83 @@
  * @module ol/webgpu/Helper
  */
 import Disposable from '../Disposable.js';
+import {getUid} from '../util.js';
+
+/**
+ * @typedef {Object} CanvasCacheItem
+ * @property {GPUCanvasContext} context The context of this canvas.
+ * @property {number} users The count of users of this canvas.
+ */
+
+/**
+ * @type {Object<string,CanvasCacheItem>}
+ */
+const canvasCache = {};
+
+/**
+ * @param {string} key The cache key for the canvas.
+ * @return {string} The shared cache key.
+ */
+function getSharedCanvasCacheKey(key) {
+  return 'shared/' + key;
+}
+
+let uniqueCanvasCacheKeyCount = 0;
+
+/**
+ * @return {string} The unique cache key.
+ */
+function getUniqueCanvasCacheKey() {
+  const key = 'unique/' + uniqueCanvasCacheKeyCount;
+  uniqueCanvasCacheKeyCount += 1;
+  return key;
+}
+
+/**
+ * @param {string} key The cache key for the canvas.
+ * @return {GPUCanvasContext} The canvas.
+ */
+function getOrCreateContext(key) {
+  let cacheItem = canvasCache[key];
+  if (!cacheItem) {
+    const canvas = document.createElement('canvas');
+    canvas.style.position = 'absolute';
+    canvas.style.left = '0';
+    canvas.style.top = '0';
+    canvas.style.display = 'block';
+    const context = canvas.getContext('webgpu');
+    cacheItem = {users: 0, context};
+    canvasCache[key] = cacheItem;
+  }
+
+  cacheItem.users += 1;
+  return cacheItem.context;
+}
+
+/**
+ * @param {string} key The cache key for the canvas.
+ */
+function releaseCanvas(key) {
+  const cacheItem = canvasCache[key];
+  if (!cacheItem) {
+    return;
+  }
+
+  cacheItem.users -= 1;
+  if (cacheItem.users > 0) {
+    return;
+  }
+
+  // WebGPU doesn't have a direct "loseContext" extension equivalent that is standard/required here,
+  // but we can at least remove it from the cache and resize it down.
+  const context = cacheItem.context;
+  const canvas = context.canvas;
+  canvas.width = 1;
+  canvas.height = 1;
+  canvas.style.display = 'none';
+
+  delete canvasCache[key];
+}
 
 export const ShaderType = {
   FRAGMENT_SHADER: 'fragment',
@@ -11,8 +88,17 @@ export const ShaderType = {
 
 /**
  * @typedef {Object} Options
- * @property {string} [canvasCacheKey] The block cache key for the canvas.
+ * @property {string} [canvasCacheKey] The request cache key for the canvas.
  */
+
+/**
+ * @typedef {Object} GPUCanvasContext
+ * @property {HTMLCanvasElement} canvas
+ * @property {function(Object): void} configure
+ * @property {function(): string} getCurrentTexture
+ * @property {function(): void} unconfigure
+ */
+
 
 /**
  * @classdesc
@@ -30,6 +116,14 @@ class WebGPUHelper extends Disposable {
 
     /**
      * @private
+     * @type {string}
+     */
+    this.canvasCacheKey_ = options.canvasCacheKey
+      ? getSharedCanvasCacheKey(options.canvasCacheKey)
+      : getUniqueCanvasCacheKey();
+
+    /**
+     * @private
      * @type {GPUDevice|null}
      */
     this.device_ = null;
@@ -42,15 +136,15 @@ class WebGPUHelper extends Disposable {
 
     /**
      * @private
-     * @type {HTMLCanvasElement|null}
+     * @type {GPUCanvasContext}
      */
-    this.canvas_ = null;
+    this.context_ = getOrCreateContext(this.canvasCacheKey_);
 
     /**
      * @private
-     * @type {GPUCanvasContext|null}
+     * @type {HTMLCanvasElement}
      */
-    this.context_ = null;
+    this.canvas_ = this.context_.canvas;
 
     /**
      * @private
@@ -80,12 +174,6 @@ class WebGPUHelper extends Disposable {
     }
 
     this.device_ = await this.adapter_.requestDevice();
-
-    // Auto-create canvas if not provided (though usually provided by renderer)
-    if (!this.canvas_) {
-      this.canvas_ = document.createElement('canvas');
-      this.context_ = this.canvas_.getContext('webgpu');
-    }
   }
 
   /**
@@ -127,16 +215,21 @@ class WebGPUHelper extends Disposable {
    * Configures the canvas context.
    * @param {number} width Width.
    * @param {number} height Height.
+   * @param {number} [pixelRatio] Pixel ratio.
    */
-  configureContext(width, height) {
+  configureContext(width, height, pixelRatio) {
     if (!this.device_ || !this.context_) {
       return;
     }
+
+    const dpr = pixelRatio || window.devicePixelRatio || 1;
 
     // Resize canvas if needed
     if (this.canvas_.width !== width || this.canvas_.height !== height) {
       this.canvas_.width = width;
       this.canvas_.height = height;
+      this.canvas_.style.width = width / dpr + 'px';
+      this.canvas_.style.height = height / dpr + 'px';
     }
 
     this.context_.configure({
@@ -154,6 +247,7 @@ class WebGPUHelper extends Disposable {
     if (this.device_) {
       this.device_.destroy();
     }
+    releaseCanvas(this.canvasCacheKey_);
     super.disposeInternal();
   }
 }
