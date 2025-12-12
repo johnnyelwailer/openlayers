@@ -122,7 +122,14 @@ export class WGSLBuilder {
     return this.getShader();
   }
 
-  getStrokeShader() {
+  /**
+   * @param {{strokeColor?: string, strokeWidth?: string, discard?: string}} [options] Shader options.
+   * @return {string} WGSL code.
+   */
+  getStrokeShader(options = {}) {
+    const strokeColorExpr = options.strokeColor || 'style.color';
+    const strokeWidthExpr = options.strokeWidth || 'style.width';
+    const discardExpr = options.discard || 'false';
     return `
       struct VertexOutput {
         @builtin(position) position : vec4f,
@@ -134,6 +141,7 @@ export class WGSLBuilder {
         @location(5) @interpolate(flat) measureStart : f32,
         @location(6) @interpolate(flat) measureEnd : f32,
         @location(7) @interpolate(flat) featureIndex : f32,
+        @location(8) width : f32,
       };
 
       struct StrokeUniforms {
@@ -156,7 +164,8 @@ export class WGSLBuilder {
         _pad0 : f32,
         dash0 : vec4f,
         dash1 : vec4f,
-        _pad1 : vec4f,
+        get0 : f32,
+        _pad1 : vec3f,
       };
 
       @group(0) @binding(0) var<storage, read> styles : array<Style>;
@@ -253,6 +262,9 @@ export class WGSLBuilder {
         output.segmentEndPx = segmentEndPx;
 
         let startEndRatio = localPos.x * 0.5 + 0.5;
+        let lineMetric = mix(measureStart, measureEnd, startEndRatio);
+        let lineWidth = max(0.0, (${strokeWidthExpr}));
+        output.width = lineWidth;
         let normalDir = -1.0 * localPos.y;
         let tangentDir = -1.0 * localPos.x;
         let angle = mix(output.angleStart, output.angleEnd, startEndRatio);
@@ -266,7 +278,7 @@ export class WGSLBuilder {
 
         // Add 1px fringe for antialiasing (WebGL behavior).
         let positionPx = mix(segmentStartPx, segmentEndPx, startEndRatio) +
-          joinDirection * (style.width * 0.5 + 1.0);
+          joinDirection * (lineWidth * 0.5 + 1.0);
 
         output.position = pxToScreen(positionPx);
         
@@ -403,11 +415,24 @@ export class WGSLBuilder {
           uniforms.viewportSizePx.y * uniforms.pixelRatio - input.position.y,
         ) / uniforms.pixelRatio;
 
+        let segmentVec = input.segmentEndPx - input.segmentStartPx;
+        let segmentLengthPx = length(segmentVec);
+        let safeSegLen = max(segmentLengthPx, 1.17549435e-38);
+        let segmentTangent = segmentVec / safeSegLen;
+        let startToPointPx = currentPointPx - input.segmentStartPx;
+        let lengthToPointPx = max(0.0, min(dot(segmentTangent, startToPointPx), segmentLengthPx));
+        let lineMetric = mix(input.measureStart, input.measureEnd, lengthToPointPx / safeSegLen);
+        let lineWidth = max(0.0, input.width);
+
+        if (${discardExpr}) {
+          discard;
+        }
+
         let segmentStartDistance = computeSegmentPointDistance(
           currentPointPx,
           input.segmentStartPx,
           input.segmentEndPx,
-          style.width,
+          lineWidth,
           input.angleStart,
           style.capType,
           style.joinType,
@@ -417,32 +442,32 @@ export class WGSLBuilder {
           currentPointPx,
           input.segmentEndPx,
           input.segmentStartPx,
-          style.width,
+          lineWidth,
           input.angleEnd,
           style.capType,
           style.joinType,
           style.miterLimit,
         );
         var distanceField = max(
-          segmentDistanceField(currentPointPx, input.segmentStartPx, input.segmentEndPx, style.width),
+          segmentDistanceField(
+            currentPointPx,
+            input.segmentStartPx,
+            input.segmentEndPx,
+            lineWidth,
+          ),
           max(segmentStartDistance, segmentEndDistance),
         );
 
         // Dash distance field, integrated like WebGL (sharp/round dash caps based on capType).
         if (style.dashCount > 0.0 && style.dashTotal > 0.0) {
-          let segmentVec = input.segmentEndPx - input.segmentStartPx;
-          let segLen = max(length(segmentVec), 1.17549435e-38);
-          let tangent = segmentVec / segLen;
-          let startToPoint = currentPointPx - input.segmentStartPx;
-          let lengthToPoint = max(0.0, min(dot(tangent, startToPoint), segLen));
-          let currentLengthPx = lengthToPoint + input.distancePx;
+          let currentLengthPx = lengthToPointPx + input.distancePx;
           let radius = distanceFromSegment(currentPointPx, input.segmentStartPx, input.segmentEndPx);
           let count = u32(min(style.dashCount, 8.0));
           let dashDf = dashDistanceField(
             currentLengthPx + style.dashOffset,
             radius,
             style.capType,
-            style.width,
+            lineWidth,
             count,
             style.dashTotal,
             style.dash0,
@@ -451,7 +476,7 @@ export class WGSLBuilder {
           distanceField = max(distanceField, dashDf);
         }
 
-        var color = style.color;
+        var color = ${strokeColorExpr};
         color.a = color.a * smoothstep(0.5, -0.5, distanceField);
         return color;
       }

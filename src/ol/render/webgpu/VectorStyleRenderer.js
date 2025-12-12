@@ -6,6 +6,7 @@ import {asArray} from '../../color.js';
 import WebGPUBuffer from '../../webgpu/Buffer.js';
 import {WGSLBuilder} from './WGSLBuilder.js';
 import {writeLineSegmentToBuffers} from '../linestringUtil.js';
+import {collectGetProperties, compileWgslExpression} from './expr.js';
 import {
   create as createTransform,
   scale as scaleTransform,
@@ -40,6 +41,60 @@ function resolveNumber(value, feature, fallback) {
   const resolved = resolveExpression(value, feature);
   const num = Number(resolved);
   return Number.isFinite(num) ? num : fallback;
+}
+
+/**
+ * @param {*} expr Encoded expression.
+ * @return {number} Maximum numeric output found, or NaN.
+ */
+function maxNumberInExpression(expr) {
+  if (typeof expr === 'number') return expr;
+  if (typeof expr === 'string') {
+    const n = Number(expr);
+    return Number.isFinite(n) ? n : NaN;
+  }
+  if (!Array.isArray(expr) || expr.length === 0) return NaN;
+
+  const op = expr[0];
+  if (op === 'case' && expr.length >= 4) {
+    const t = maxNumberInExpression(expr[2]);
+    const f = maxNumberInExpression(expr[3]);
+    if (!Number.isFinite(t)) return f;
+    if (!Number.isFinite(f)) return t;
+    return Math.max(t, f);
+  }
+  if (op === 'interpolate' && Array.isArray(expr[1]) && expr[1][0] === 'linear') {
+    // stops are [stop, output] pairs after the input expression
+    let maxVal = NaN;
+    for (let i = 3; i + 1 < expr.length; i += 2) {
+      const out = maxNumberInExpression(expr[i + 1]);
+      if (!Number.isFinite(out)) continue;
+      maxVal = Number.isFinite(maxVal) ? Math.max(maxVal, out) : out;
+    }
+    return maxVal;
+  }
+
+  return NaN;
+}
+
+/**
+ * @param {*} value Expression or literal.
+ * @param {import("../../Feature.js").default|import("../../render/Feature.js").default} feature Feature.
+ * @param {number} fallback Fallback.
+ * @return {number}
+ */
+function resolveStrokeWidth(value, feature, fallback) {
+  if (!Array.isArray(value)) {
+    return resolveNumber(value, feature, fallback);
+  }
+  if (value[0] === 'get') {
+    return resolveNumber(value, feature, fallback);
+  }
+  const maxWidth = maxNumberInExpression(value);
+  if (Number.isFinite(maxWidth) && maxWidth > 0) {
+    return maxWidth;
+  }
+  return fallback;
 }
 
 /**
@@ -82,6 +137,8 @@ class VectorStyleRenderer {
   constructor(styles, variables, helper) {
     this.helper_ = helper;
     this.styles_ = styles;
+    /** @type {Map<string, GPURenderPipeline>} */
+    this.strokePipelineCache_ = new Map();
 
     // TODO: Phase 2 - Implement proper style parsing
     // For now, we manually create a single builder/shader pair
@@ -105,6 +162,10 @@ class VectorStyleRenderer {
    * @return {Promise<Object>} Buffers.
    */
   async generateBuffers(geometryBatch, transform) {
+    const rules = (Array.isArray(this.styles_) ? this.styles_ : []).map(
+      (entry) => (entry && entry.style ? entry : {style: entry}),
+    );
+
     // --- 1. Generate Point Buffers ---
     const pointBatch = geometryBatch.pointBatch;
     const pointEntries = Object.values(pointBatch.entries);
@@ -122,11 +183,18 @@ class VectorStyleRenderer {
     const pointData = new Float32Array(pointVertexCount * 3);
     const pointStyleData = new Float32Array(pointEntries.length * 4); // 4 floats (RGBA) per feature
 
-    // Resolve Point Color
-    // For MVP, look at first style 'circle-fill-color' or 'fill-color'
+    // Resolve Point Color (only if a literal color is provided in any rule).
     let pointColor = [1, 0, 0, 1]; // Default Red
-    if (this.styles_ && this.styles_[0]) {
-      const style = this.styles_[0];
+    const pointStyleRule = rules.find((r) => {
+      const s = r.style;
+      return (
+        s &&
+        (typeof s['circle-fill-color'] === 'string' ||
+          typeof s['fill-color'] === 'string')
+      );
+    });
+    if (pointStyleRule) {
+      const style = pointStyleRule.style;
       const colorStr = style['circle-fill-color'] || style['fill-color'];
       if (colorStr) {
         try {
@@ -160,7 +228,7 @@ class VectorStyleRenderer {
     let pointBuffer = null;
     let pointStyleBuffer = null;
 
-    if (pointVertexCount > 0) {
+    if (pointVertexCount > 0 && pointStyleRule) {
       pointBuffer = new WebGPUBuffer({
         size: pointData.byteLength,
         usage: 0x0020 | 0x0008, // VERTEX | COPY_DST
@@ -195,8 +263,17 @@ class VectorStyleRenderer {
     /** @type {Array<number>} */
     const lineInstanceAttributes = [];
 
-    const stylePasses = Array.isArray(this.styles_) ? this.styles_ : [];
-    const hasAnyStroke = stylePasses.some((s) => s && 'stroke-color' in s);
+    const strokeRules = rules.filter((r) => {
+      const s = r.style;
+      return (
+        s &&
+        ('stroke-color' in s ||
+          'stroke-width' in s ||
+          'stroke-line-dash' in s ||
+          'stroke-offset' in s)
+      );
+    });
+    const hasAnyStroke = strokeRules.length > 0;
 
     const identityTransform = createTransform();
     // Generate segment instances per feature/linestring
@@ -254,7 +331,7 @@ class VectorStyleRenderer {
     }
 
     let lineBuffer = null;
-    /** @type {Array<{vertex: WebGPUBuffer, style: WebGPUBuffer}>} */
+    /** @type {Array<{vertex: WebGPUBuffer, style: WebGPUBuffer, strokeShader?: string}>} */
     const lineStringBuffers = [];
     if (lineInstanceAttributes.length > 0 && hasAnyStroke) {
       const lineData = new Float32Array(lineInstanceAttributes);
@@ -276,17 +353,24 @@ class VectorStyleRenderer {
       const DASH_MAX = 8;
       const defaultColor = [0, 0, 0, 1];
 
-      for (const style of stylePasses) {
-        if (!style || !('stroke-color' in style)) {
-          continue;
-        }
-        const lineStyleData = new Float32Array(lineEntries.length * STYLE_STRIDE);
+      for (const rule of strokeRules) {
+        const style = rule.style;
+        const filter = rule.filter;
+        const lineStyleData = new Float32Array(
+          lineEntries.length * STYLE_STRIDE,
+        );
+
+        const getProps = new Set();
+        collectGetProperties(filter, getProps);
+        collectGetProperties(style['stroke-width'], getProps);
+        collectGetProperties(style['stroke-color'], getProps);
+
         for (let i = 0; i < lineEntries.length; i++) {
           const feature = lineEntries[i].feature;
           const sIdx = i * STYLE_STRIDE;
 
           const color = resolveColor(style['stroke-color'], feature, defaultColor);
-          const width = resolveNumber(style['stroke-width'], feature, 1.0);
+          const width = resolveStrokeWidth(style['stroke-width'], feature, 1.0);
           const offsetPx = resolveNumber(style['stroke-offset'], feature, 0.0);
           const miterLimit = resolveNumber(style['stroke-miter-limit'], feature, 10.0);
 
@@ -333,6 +417,11 @@ class VectorStyleRenderer {
             const vecBase = d < 4 ? sIdx + 16 : sIdx + 20;
             lineStyleData[vecBase + (d % 4)] = len;
           }
+
+          // Optional numeric get() property used by `webgpu-line-metric` ("limit").
+          if (getProps.has('limit')) {
+            lineStyleData[sIdx + 24] = resolveNumber(['get', 'limit'], feature, 0.0);
+          }
         }
 
         const lineStyleBuffer = new WebGPUBuffer({
@@ -346,13 +435,62 @@ class VectorStyleRenderer {
         );
         lineStyleBuffer.getBuffer().unmap();
 
-        lineStringBuffers.push({vertex: lineBuffer, style: lineStyleBuffer});
+        let strokeShader;
+        if (
+          filter ||
+          Array.isArray(style['stroke-width']) ||
+          Array.isArray(style['stroke-color'])
+        ) {
+          const ctx = {
+            lineMetricVar: 'lineMetric',
+            getProp: (name) => (name === 'limit' ? 'style.get0' : '0.0'),
+          };
+          const discard = filter
+            ? `!(${compileWgslExpression(filter, ctx, 'bool')})`
+            : 'false';
+          const widthExpr = Array.isArray(style['stroke-width'])
+            ? compileWgslExpression(style['stroke-width'], ctx, 'f32')
+            : 'style.width';
+          const colorExpr = Array.isArray(style['stroke-color'])
+            ? compileWgslExpression(style['stroke-color'], ctx, 'vec4f')
+            : 'style.color';
+          strokeShader = this.styleShaders_[0].builder.getStrokeShader({
+            strokeColor: colorExpr,
+            strokeWidth: widthExpr,
+            discard: discard,
+          });
+        }
+
+        lineStringBuffers.push({
+          vertex: lineBuffer,
+          style: lineStyleBuffer,
+          strokeShader,
+        });
       }
     }
 
     // --- 3. Generate Polygon Buffers ---
     const polyBatch = geometryBatch.polygonBatch;
     const polyEntries = Object.values(polyBatch.entries);
+
+    const polyStyleRule = rules.find(
+      (r) => r.style && typeof r.style['fill-color'] === 'string',
+    );
+    if (!polyStyleRule) {
+      // No literal fill style: don't render polygons (prevents wrong default fills).
+      return {
+        pointBuffers: pointBuffer
+          ? [
+              {
+                vertex: pointBuffer,
+                style: pointStyleBuffer,
+              },
+            ]
+          : [],
+        lineStringBuffers,
+        polygonBuffers: [],
+      };
+    }
 
     // To estimate size, we'd need to triangulate first or use a dynamic array.
     // Since earcut is fast enough for 2D, let's triangulate into a temp array.
@@ -362,17 +500,13 @@ class VectorStyleRenderer {
 
     // Resolve Poly Color
     let polyColor = [0, 0, 1, 1]; // Default Blue
-    if (this.styles_ && this.styles_[0]) {
-      const style = this.styles_[0];
-      const colorStr = style['fill-color'];
-      // TODO: Parse color string
-      if (colorStr) {
-        try {
-          const c = asArray(colorStr);
-          polyColor = [c[0] / 255, c[1] / 255, c[2] / 255, c[3]];
-        } catch {
-          // Ignore
-        }
+    const colorStr = polyStyleRule.style['fill-color'];
+    if (colorStr) {
+      try {
+        const c = asArray(colorStr);
+        polyColor = [c[0] / 255, c[1] / 255, c[2] / 255, c[3]];
+      } catch {
+        // Ignore
       }
     }
 
@@ -654,94 +788,98 @@ class VectorStyleRenderer {
         // 12 floats per instance (see generation above)
         const count = vertexBuffer.size / (12 * 4);
 
-        const shaderModule = device.createShaderModule({
-          code: this.styleShaders_[0].builder.getStrokeVertexShader(),
-        });
-
-        const pipeline = device.createRenderPipeline({
-          layout: 'auto',
-          vertex: {
-            module: shaderModule,
-            entryPoint: 'vs_main',
-            buffers: [
-              {
-                arrayStride: 48, // 12 floats per instance
-                stepMode: 'instance',
-                attributes: [
-                  {
-                    shaderLocation: 0,
-                    offset: 0,
-                    format: 'float32x2', // segmentStart
-                  },
-                  {
-                    shaderLocation: 1,
-                    offset: 8,
-                    format: 'float32', // measureStart
-                  },
-                  {
-                    shaderLocation: 2,
-                    offset: 12,
-                    format: 'float32x2', // segmentEnd
-                  },
-                  {
-                    shaderLocation: 3,
-                    offset: 20,
-                    format: 'float32', // measureEnd
-                  },
-                  {
-                    shaderLocation: 4,
-                    offset: 24,
-                    format: 'float32x2', // joinAngles (start,end)
-                  },
-                  {
-                    shaderLocation: 5,
-                    offset: 32,
-                    format: 'float32', // distanceLow
-                  },
-                  {
-                    shaderLocation: 6,
-                    offset: 36,
-                    format: 'float32', // distanceHigh
-                  },
-                  {
-                    shaderLocation: 7,
-                    offset: 40,
-                    format: 'float32', // angleTangentSum
-                  },
-                  {
-                    shaderLocation: 8,
-                    offset: 44,
-                    format: 'float32', // featureIndex
-                  },
-                ],
-              },
-            ],
-          },
-          fragment: {
-            module: shaderModule,
-            entryPoint: 'fs_main',
-            targets: [
-              {
-                format,
-                blend: {
-                  color: {
-                    srcFactor: 'src-alpha',
-                    dstFactor: 'one-minus-src-alpha',
-                    operation: 'add',
-                  },
-                  alpha: {
-                    srcFactor: 'one',
-                    dstFactor: 'one-minus-src-alpha',
-                    operation: 'add',
+        const strokeCode =
+          bufferSet.strokeShader || this.styleShaders_[0].builder.getStrokeShader();
+        const cacheKey = `${format}|${strokeCode}`;
+        let pipeline = this.strokePipelineCache_.get(cacheKey);
+        if (!pipeline) {
+          const shaderModule = device.createShaderModule({code: strokeCode});
+          pipeline = device.createRenderPipeline({
+            layout: 'auto',
+            vertex: {
+              module: shaderModule,
+              entryPoint: 'vs_main',
+              buffers: [
+                {
+                  arrayStride: 48, // 12 floats per instance
+                  stepMode: 'instance',
+                  attributes: [
+                    {
+                      shaderLocation: 0,
+                      offset: 0,
+                      format: 'float32x2', // segmentStart
+                    },
+                    {
+                      shaderLocation: 1,
+                      offset: 8,
+                      format: 'float32', // measureStart
+                    },
+                    {
+                      shaderLocation: 2,
+                      offset: 12,
+                      format: 'float32x2', // segmentEnd
+                    },
+                    {
+                      shaderLocation: 3,
+                      offset: 20,
+                      format: 'float32', // measureEnd
+                    },
+                    {
+                      shaderLocation: 4,
+                      offset: 24,
+                      format: 'float32x2', // joinAngles (start,end)
+                    },
+                    {
+                      shaderLocation: 5,
+                      offset: 32,
+                      format: 'float32', // distanceLow
+                    },
+                    {
+                      shaderLocation: 6,
+                      offset: 36,
+                      format: 'float32', // distanceHigh
+                    },
+                    {
+                      shaderLocation: 7,
+                      offset: 40,
+                      format: 'float32', // angleTangentSum
+                    },
+                    {
+                      shaderLocation: 8,
+                      offset: 44,
+                      format: 'float32', // featureIndex
+                    },
+                  ],
+                },
+              ],
+            },
+            fragment: {
+              module: shaderModule,
+              entryPoint: 'fs_main',
+              targets: [
+                {
+                  format,
+                  blend: {
+                    color: {
+                      srcFactor: 'src-alpha',
+                      dstFactor: 'one-minus-src-alpha',
+                      operation: 'add',
+                    },
+                    alpha: {
+                      srcFactor: 'one',
+                      dstFactor: 'one-minus-src-alpha',
+                      operation: 'add',
+                    },
                   },
                 },
-              },
-            ],
-          },
-          primitive: {
-            topology: 'triangle-strip',
-          },
-        });
+              ],
+            },
+            primitive: {
+              topology: 'triangle-strip',
+            },
+          });
+          this.strokePipelineCache_.set(cacheKey, pipeline);
+        }
 
         const bindGroup = device.createBindGroup({
           layout: pipeline.getBindGroupLayout(0),
