@@ -139,6 +139,8 @@ class VectorStyleRenderer {
     this.styles_ = styles;
     /** @type {Map<string, GPURenderPipeline>} */
     this.strokePipelineCache_ = new Map();
+    /** @type {Map<string, Promise<{sampler: GPUSampler, view: GPUTextureView, size: [number, number]}>>} */
+    this.strokePatternCache_ = new Map();
 
     // TODO: Phase 2 - Implement proper style parsing
     // For now, we manually create a single builder/shader pair
@@ -154,6 +156,58 @@ class VectorStyleRenderer {
         uniforms: {},
       },
     ];
+  }
+
+  /**
+   * @param {string} src Image URL or data URL.
+   * @return {Promise<{sampler: GPUSampler, view: GPUTextureView, size: [number, number]}>} Texture resources.
+   * @private
+   */
+  async getStrokePatternTexture_(src) {
+    const cached = this.strokePatternCache_.get(src);
+    if (cached) {
+      return cached;
+    }
+
+    const device = this.helper_.getDevice();
+    const loadPromise = (async () => {
+      const response = await fetch(src);
+      const blob = await response.blob();
+      const bitmap = await createImageBitmap(blob);
+
+      const width = bitmap.width;
+      const height = bitmap.height;
+
+      const texture = device.createTexture({
+        size: {width, height},
+        format: 'rgba8unorm',
+        usage:
+          GPUTextureUsage.TEXTURE_BINDING |
+          GPUTextureUsage.COPY_DST |
+          GPUTextureUsage.RENDER_ATTACHMENT,
+      });
+      device.queue.copyExternalImageToTexture(
+        {source: bitmap},
+        {texture},
+        {width, height},
+      );
+
+      const sampler = device.createSampler({
+        addressModeU: 'clamp-to-edge',
+        addressModeV: 'clamp-to-edge',
+        magFilter: 'linear',
+        minFilter: 'linear',
+      });
+
+      return {
+        sampler,
+        view: texture.createView(),
+        size: [width, height],
+      };
+    })();
+
+    this.strokePatternCache_.set(src, loadPromise);
+    return loadPromise;
   }
 
   /**
@@ -365,6 +419,44 @@ class VectorStyleRenderer {
         collectGetProperties(style['stroke-width'], getProps);
         collectGetProperties(style['stroke-color'], getProps);
 
+        const patternSrc = style['stroke-pattern-src'];
+        const hasStrokePattern = typeof patternSrc === 'string';
+        let patternTexture;
+        let patternOptions;
+        if (hasStrokePattern) {
+          patternTexture = await this.getStrokePatternTexture_(patternSrc);
+          const textureSize = patternTexture.size;
+          const sampleSize = Array.isArray(style['stroke-pattern-size'])
+            ? style['stroke-pattern-size']
+            : textureSize;
+          const baseOffset = Array.isArray(style['stroke-pattern-offset'])
+            ? style['stroke-pattern-offset']
+            : [0, 0];
+          const origin = style['stroke-pattern-offset-origin'] || 'top-left';
+          let offsetX = baseOffset[0] || 0;
+          let offsetY = baseOffset[1] || 0;
+          if (origin === 'top-right') {
+            offsetX = textureSize[0] - sampleSize[0] - offsetX;
+          } else if (origin === 'bottom-left') {
+            offsetY = textureSize[1] - sampleSize[1] - offsetY;
+          } else if (origin === 'bottom-right') {
+            offsetX = textureSize[0] - sampleSize[0] - offsetX;
+            offsetY = textureSize[1] - sampleSize[1] - offsetY;
+          }
+
+          const spacingPx = Number(style['stroke-pattern-spacing'] || 0);
+          const startOffsetPx = Number(style['stroke-pattern-start-offset'] || 0);
+          const tintEnabled = 'stroke-color' in style;
+          patternOptions = {
+            textureSize: `vec2f(${textureSize[0]}, ${textureSize[1]})`,
+            textureOffset: `vec2f(${offsetX}, ${offsetY})`,
+            sampleSize: `vec2f(${sampleSize[0]}, ${sampleSize[1]})`,
+            spacingPx: `${spacingPx}`,
+            startOffsetPx: `${startOffsetPx}`,
+            tint: tintEnabled ? 'style.color' : 'vec4f(1.0, 1.0, 1.0, 1.0)',
+          };
+        }
+
         for (let i = 0; i < lineEntries.length; i++) {
           const feature = lineEntries[i].feature;
           const sIdx = i * STYLE_STRIDE;
@@ -438,8 +530,11 @@ class VectorStyleRenderer {
         let strokeShader;
         if (
           filter ||
-          Array.isArray(style['stroke-width']) ||
-          Array.isArray(style['stroke-color'])
+          (Array.isArray(style['stroke-width']) &&
+            style['stroke-width'][0] !== 'get') ||
+          (Array.isArray(style['stroke-color']) &&
+            style['stroke-color'][0] !== 'get') ||
+          hasStrokePattern
         ) {
           const ctx = {
             lineMetricVar: 'lineMetric',
@@ -458,6 +553,7 @@ class VectorStyleRenderer {
             strokeColor: colorExpr,
             strokeWidth: widthExpr,
             discard: discard,
+            pattern: patternOptions,
           });
         }
 
@@ -465,6 +561,7 @@ class VectorStyleRenderer {
           vertex: lineBuffer,
           style: lineStyleBuffer,
           strokeShader,
+          pattern: patternTexture,
         });
       }
     }
@@ -896,6 +993,18 @@ class VectorStyleRenderer {
                 buffer: this.uniformBuffer_,
               },
             },
+            ...(bufferSet.pattern
+              ? [
+                  {
+                    binding: 2,
+                    resource: bufferSet.pattern.sampler,
+                  },
+                  {
+                    binding: 3,
+                    resource: bufferSet.pattern.view,
+                  },
+                ]
+              : []),
           ],
         });
 

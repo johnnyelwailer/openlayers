@@ -14,6 +14,11 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 *   **Stroke Artifacts Fix**: Resolved stride mismatch (XY vs XYM) in line buffer generation.
 *   **WebGL-Equivalent Stroke AA/Joins**: Ported the WebGL stroke approach (join angles + distance-field based AA coverage) to WebGPU; eliminates visible corner/join artifacts.
 *   **webgpu-vector-geographic Test**: ✅ Passing again and visually indistinguishable from expected.
+*   **Stroke Style Parity**: Added support for `stroke-line-cap`, `stroke-line-join`, `stroke-miter-limit`, and `stroke-offset` in the WebGPU stroke pipeline.
+*   **Dashes**: Added `stroke-line-dash` + `stroke-line-dash-offset` support (WebGL-equivalent distance-field approach).
+*   **Stroke Patterns**: Added `stroke-pattern-src` sampling, including spacing/start-offset + sprite sub-rect offset/origin/size, with optional tint via `stroke-color`.
+*   **Rule/Expression Subset**: Implemented minimal `line-metric` and `get(limit)` support for `webgpu-line-metric` (filter discard, dynamic width/color).
+*   **Rendering Tests**: `webgpu-line`, `webgpu-line-metric`, `webgpu-line-pattern`, and `webgpu-line-zoomed-in` passing locally.
 
 ## 2. Components Implemented
 
@@ -44,9 +49,13 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 
 | Test Case | Mismatch | Notes |
 |-----------|----------|-------|
-| `webgpu-vector` | ~0.5% | ✅ Nearly passing. Minor anti-aliasing differences. |
-| `webgpu-vector-geographic` | ~16% | ❌ Failing. See open issues below. |
-| `webgpu-shapes` | ~2% | Needs investigation. |
+| `webgpu-vector` | n/a | ✅ Passing locally (recent runs). |
+| `webgpu-vector-geographic` | n/a | ✅ Passing locally. |
+| `webgpu-line` | n/a | ✅ Passing locally. |
+| `webgpu-line-metric` | n/a | ✅ Passing locally. |
+| `webgpu-line-pattern` | n/a | ✅ Passing locally. |
+| `webgpu-line-zoomed-in` | n/a | ✅ Passing locally. |
+| `webgpu-shapes` | ~2% | Still needs investigation. |
 
 ## 4. Open Issues
 
@@ -58,21 +67,20 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 
 ### Rendering Quality
 - [x] **Pixelated/Jagged Lines**: Fixed for strokes via distance-field AA (WebGL-equivalent approach).
-- [ ] **Caps/Joins Options**: WebGPU stroke currently uses butt caps + miter joins only (no round/bevel/square variants yet).
+- [x] **Caps/Joins Options**: Implemented and aligned with WebGL defaults.
 
 ### Features (Pending)
-- [ ] **Complex Styling**: Reading full style rules (Expressions, variables).
-- [ ] **Line Caps/Joins**: Miter, round, bevel joins; butt, round, square caps.
+- [ ] **Complex Styling**: Full rule support and broader expression coverage (beyond current `webgpu-line-metric` subset).
 - [ ] **Hit Detection**: `forEachFeatureAtPixel` implementation.
 - [ ] **Texture/Icon Support**: Atlas textures for Point styles.
-- [ ] **Dashed Lines**: `stroke-line-dash` property.
+- [ ] **Fill Patterns**: `fill-pattern-src` (parity with WebGL style parsing).
 
 ## 5. Files Modified (Debug Logging)
 The following files contain temporary debug logging that should be removed before merge:
 (removed)
 
 ## 6. Next Steps
-1. **Port stroke style options**: Implement `stroke-line-cap`, `stroke-line-join`, and `stroke-miter-limit` in the WebGPU stroke shader path.
-2. **Dash patterns**: Port WebGL dash logic (distance/angleTangentSum usage) into WGSL.
-3. **Hit detection**: Add `forEachFeatureAtPixel` support for WebGPU vector.
-4. **Complex styling**: Move from “single flat style” prototype to full rule/expression support.
+1. **Unify expression compilation**: Reuse `src/ol/expr` parsing/typing, add a shared “emit WGSL/GLSL” layer to avoid duplicating operator coverage.
+2. **Fill patterns + icons**: Port `fill-pattern-src` and icon/sprite logic to WebGPU (texture atlas, offsets, anchors).
+3. **Complex styling**: Expand rule handling (multiple rules + filters) and expressions (interpolate multi-stop, variables).
+4. **Hit detection**: Add `forEachFeatureAtPixel` support for WebGPU vector.

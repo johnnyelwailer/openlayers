@@ -123,13 +123,68 @@ export class WGSLBuilder {
   }
 
   /**
-   * @param {{strokeColor?: string, strokeWidth?: string, discard?: string}} [options] Shader options.
+   * @param {{
+   *   strokeColor?: string,
+   *   strokeWidth?: string,
+   *   discard?: string,
+   *   pattern?: {
+   *     textureSize: string,
+   *     textureOffset: string,
+   *     sampleSize: string,
+   *     spacingPx: string,
+   *     startOffsetPx: string,
+   *     tint: string,
+   *   }
+   * }} [options] Shader options.
    * @return {string} WGSL code.
    */
   getStrokeShader(options = {}) {
     const strokeColorExpr = options.strokeColor || 'style.color';
     const strokeWidthExpr = options.strokeWidth || 'style.width';
     const discardExpr = options.discard || 'false';
+    const pattern = options.pattern;
+    const patternBindings = pattern
+      ? `
+      @group(0) @binding(2) var strokePatternSampler : sampler;
+      @group(0) @binding(3) var strokePatternTexture : texture_2d<f32>;
+      `
+      : '';
+    const patternFns = pattern
+      ? `
+      fn sampleStrokePattern(
+        texture : texture_2d<f32>,
+        samp : sampler,
+        textureSize : vec2f,
+        textureOffset : vec2f,
+        sampleSize : vec2f,
+        spacingPx : f32,
+        startOffsetPx : f32,
+        currentLengthPx : f32,
+        currentRadiusRatio : f32,
+        lineWidth : f32,
+      ) -> vec4f {
+        let safeWidth = max(lineWidth, 1.17549435e-38);
+        let currentLengthScaled = (currentLengthPx - startOffsetPx) * sampleSize.y / safeWidth;
+        let spacingScaled = spacingPx * sampleSize.y / safeWidth;
+        var uCoordPx = positiveMod(currentLengthScaled, (sampleSize.x + spacingScaled));
+        let isInsideOfPattern = select(0.0, 1.0, uCoordPx <= sampleSize.x);
+        var vCoordPx = (-currentRadiusRatio * 0.5 + 0.5) * sampleSize.y;
+        // Avoid sampling too close to borders.
+        uCoordPx = clamp(uCoordPx, 0.5, sampleSize.x - 0.5);
+        vCoordPx = clamp(vCoordPx, 0.5, sampleSize.y - 0.5);
+        let texCoord = (vec2f(uCoordPx, vCoordPx) + textureOffset) / textureSize;
+        var c = textureSampleLevel(texture, samp, texCoord, 0.0);
+        c.a = c.a * isInsideOfPattern;
+        return c;
+      }
+      `
+      : '';
+    const patternDistanceMod = pattern
+      ? `
+        let strokePatternLengthPx = (${pattern.sampleSize}.x / ${pattern.sampleSize}.y) * lineWidth + ${pattern.spacingPx};
+        output.distancePx = positiveMod(output.distancePx, strokePatternLengthPx);
+      `
+      : '';
     return `
       struct VertexOutput {
         @builtin(position) position : vec4f,
@@ -165,11 +220,11 @@ export class WGSLBuilder {
         dash0 : vec4f,
         dash1 : vec4f,
         get0 : f32,
-        _pad1 : vec3f,
       };
 
       @group(0) @binding(0) var<storage, read> styles : array<Style>;
       @group(0) @binding(1) var<uniform> uniforms : StrokeUniforms;
+      ${patternBindings}
 
       const LINESTRING_ANGLE_COSINE_CUTOFF : f32 = 0.985;
 
@@ -265,6 +320,7 @@ export class WGSLBuilder {
         let lineMetric = mix(measureStart, measureEnd, startEndRatio);
         let lineWidth = max(0.0, (${strokeWidthExpr}));
         output.width = lineWidth;
+        ${patternDistanceMod}
         let normalDir = -1.0 * localPos.y;
         let tangentDir = -1.0 * localPos.x;
         let angle = mix(output.angleStart, output.angleEnd, startEndRatio);
@@ -366,6 +422,7 @@ export class WGSLBuilder {
         let r = x - floor(x / m) * m;
         return r + select(0.0, m, r < 0.0);
       }
+      ${patternFns}
 
       fn getSingleDashDistance(distance : f32, radius : f32, dashOffset : f32, dashLength : f32, dashLengthTotal : f32, capType : f32, lineWidth : f32) -> f32 {
         let localDistance = positiveMod(distance, dashLengthTotal);
@@ -419,10 +476,13 @@ export class WGSLBuilder {
         let segmentLengthPx = length(segmentVec);
         let safeSegLen = max(segmentLengthPx, 1.17549435e-38);
         let segmentTangent = segmentVec / safeSegLen;
+        let segmentNormal = vec2f(-segmentTangent.y, segmentTangent.x);
         let startToPointPx = currentPointPx - input.segmentStartPx;
         let lengthToPointPx = max(0.0, min(dot(segmentTangent, startToPointPx), segmentLengthPx));
         let lineMetric = mix(input.measureStart, input.measureEnd, lengthToPointPx / safeSegLen);
         let lineWidth = max(0.0, input.width);
+        let currentLengthPx = lengthToPointPx + input.distancePx;
+        let currentRadiusRatio = dot(segmentNormal, startToPointPx) * 2.0 / max(lineWidth, 1.17549435e-38);
 
         if (${discardExpr}) {
           discard;
@@ -460,7 +520,6 @@ export class WGSLBuilder {
 
         // Dash distance field, integrated like WebGL (sharp/round dash caps based on capType).
         if (style.dashCount > 0.0 && style.dashTotal > 0.0) {
-          let currentLengthPx = lengthToPointPx + input.distancePx;
           let radius = distanceFromSegment(currentPointPx, input.segmentStartPx, input.segmentEndPx);
           let count = u32(min(style.dashCount, 8.0));
           let dashDf = dashDistanceField(
@@ -476,7 +535,22 @@ export class WGSLBuilder {
           distanceField = max(distanceField, dashDf);
         }
 
-        var color = ${strokeColorExpr};
+        var color = ${
+          pattern
+            ? `${pattern.tint} * sampleStrokePattern(
+            strokePatternTexture,
+            strokePatternSampler,
+            ${pattern.textureSize},
+            ${pattern.textureOffset},
+            ${pattern.sampleSize},
+            ${pattern.spacingPx},
+            ${pattern.startOffsetPx},
+            currentLengthPx,
+            currentRadiusRatio,
+            lineWidth,
+          )`
+            : strokeColorExpr
+        };
         color.a = color.a * smoothstep(0.5, -0.5, distanceField);
         return color;
       }
