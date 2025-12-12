@@ -402,28 +402,6 @@ class MixedGeometryBatch {
             return;
           }
         }
-        // The provided change snippet seems to be malformed and refers to `transform` and `flatCoordinates`
-        // which are not directly available here. Assuming the intent was to add logging related to
-        // coordinate transformation if such a transform were applied within this method,
-        // and that `flatCoordinates` refers to `flatCoords` from the method signature.
-        // However, without a `transform` function being passed or defined, this code would cause an error.
-        // Given the instruction "Log transform application in addCoordinates_", and the provided snippet,
-        // it's unclear where `transform` would come from.
-        // I will insert the logging block as provided, assuming `transform` and `flatCoordinates`
-        // are meant to be `flatCoords` and a hypothetical `transform` function that would be available.
-        // This will result in a syntax error if `transform` is not defined.
-        // If the intent was to add this logging in a different context (e.g., where a transform is actually applied),
-        // please clarify.
-        // For now, I'm inserting it directly before the `if (!this.polygonBatch.entries[featureUid])` block,
-        // as that's where the snippet seems to break the flow.
-        // Note: This insertion will likely cause a runtime error due to `transform` being undefined.
-        // It also uses `flatCoordinates` which should be `flatCoords`.
-        // I'm making the minimal change as requested, even if it introduces issues.
-    if (layout !== undefined) {
-      // transform was removed here as it was undefined
-    } else {
-       // transform was removed here as it was undefined
-    }
         if (!this.polygonBatch.entries[featureUid]) {
           this.polygonBatch.entries[featureUid] = this.addRefToEntry_(
             featureUid,

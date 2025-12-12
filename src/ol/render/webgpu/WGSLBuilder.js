@@ -135,6 +135,9 @@ export class WGSLBuilder {
         @location(6) distancePx : f32,
         @location(7) measureStart : f32,
         @location(8) measureEnd : f32,
+        @location(9) capType : f32,
+        @location(10) joinType : f32,
+        @location(11) miterLimit : f32,
       };
 
       struct StrokeUniforms {
@@ -147,15 +150,17 @@ export class WGSLBuilder {
       struct Style {
         color : vec4f, 
         width : f32,
+        capType : f32,
+        joinType : f32,
+        miterLimit : f32,
+        offsetPx : f32,
+        _pad : vec2f,
       };
 
       @group(0) @binding(0) var<storage, read> styles : array<Style>;
       @group(0) @binding(1) var<uniform> uniforms : StrokeUniforms;
 
       const LINESTRING_ANGLE_COSINE_CUTOFF : f32 = 0.985;
-      const PI : f32 = 3.141592653589793;
-      const TWO_PI : f32 = 6.283185307179586;
-      const MITER_LIMIT : f32 = 10.0;
 
       fn worldToPx(worldPos : vec2f) -> vec2f {
         let clip = uniforms.transform * vec4f(worldPos, 0.0, 1.0);
@@ -178,6 +183,13 @@ export class WGSLBuilder {
         let angleBisectorNormal = vec2f(s * normalPx.x + c * normalPx.y, -c * normalPx.x + s * normalPx.y);
         let invS = 1.0 / s;
         return angleBisectorNormal * invS;
+      }
+
+      fn getOffsetPoint(point : vec2f, normalPx : vec2f, joinAngle : f32, offsetPx : f32) -> vec2f {
+        if (cos(joinAngle) > 0.998 || isCap(joinAngle)) {
+          return point - normalPx * offsetPx;
+        }
+        return point - getJoinOffsetDirection(normalPx, joinAngle) * offsetPx;
       }
 
       @vertex
@@ -215,15 +227,17 @@ export class WGSLBuilder {
         output.width = style.width;
         output.measureStart = measureStart;
         output.measureEnd = measureEnd;
-        // Keep angleTangentSum wired for future line offset/dashes support.
-        output.distancePx = (distanceLow + distanceHigh) / uniforms.resolution - (0.0 * angleTangentSum);
+        output.capType = style.capType;
+        output.joinType = style.joinType;
+        output.miterLimit = style.miterLimit;
+        // Same behavior as WebGL: adjust dash/symbol distance when line is offset.
+        output.distancePx =
+          (distanceLow + distanceHigh) / uniforms.resolution -
+          (style.offsetPx * angleTangentSum);
 
         // Compute segment start/end in pixel coordinates.
-        let segmentStartPx = worldToPx(segmentStart);
-        let segmentEndPx = worldToPx(segmentEnd);
-        output.segmentStartPx = segmentStartPx;
-        output.segmentEndPx = segmentEndPx;
-
+        var segmentStartPx = worldToPx(segmentStart);
+        var segmentEndPx = worldToPx(segmentEnd);
         let diffPx = segmentEndPx - segmentStartPx;
         let segLenPx = length(diffPx);
         if (segLenPx == 0.0) {
@@ -233,6 +247,12 @@ export class WGSLBuilder {
         }
         let tangentPx = diffPx / segLenPx;
         let normalPx = vec2f(-tangentPx.y, tangentPx.x);
+
+        // Apply stroke offset in pixel space (equivalent to WebGL).
+        segmentStartPx = getOffsetPoint(segmentStartPx, normalPx, output.angleStart, style.offsetPx);
+        segmentEndPx = getOffsetPoint(segmentEndPx, normalPx, output.angleEnd, style.offsetPx);
+        output.segmentStartPx = segmentStartPx;
+        output.segmentEndPx = segmentEndPx;
 
         let startEndRatio = localPos.x * 0.5 + 0.5;
         let normalDir = -1.0 * localPos.y;
@@ -293,32 +313,37 @@ export class WGSLBuilder {
         return dot(startToPoint, bisector * direction) - radius;
       }
 
-      fn miterJoinDistanceField(point : vec2f, start : vec2f, end : vec2f, width : f32, joinAngle : f32) -> f32 {
+      fn capDistanceField(point : vec2f, start : vec2f, end : vec2f, width : f32, capType : f32) -> f32 {
+        if (capType == 1.0) {
+          return squareCapDistanceField(point, start, end, width);
+        } else if (capType == 2.0) {
+          return roundCapDistanceField(point, start, end, width);
+        }
+        return buttCapDistanceField(point, start, end);
+      }
+
+      fn joinDistanceField(point : vec2f, start : vec2f, end : vec2f, width : f32, joinAngle : f32, joinType : f32, miterLimit : f32) -> f32 {
+        if (joinType == 1.0) {
+          return bevelJoinField(point, start, end, width, joinAngle);
+        } else if (joinType == 2.0) {
+          return roundJoinDistanceField(point, start, end, width);
+        }
+        // miter join (default)
         if (cos(joinAngle) > LINESTRING_ANGLE_COSINE_CUTOFF) {
           return bevelJoinField(point, start, end, width, joinAngle);
         }
         let miterLength = 1.0 / sin(joinAngle * 0.5);
-        if (miterLength > MITER_LIMIT) {
+        if (miterLength > miterLimit) {
           return bevelJoinField(point, start, end, width, joinAngle);
         }
         return -1000.0;
       }
 
-      fn capDistanceField(point : vec2f, start : vec2f, end : vec2f, width : f32) -> f32 {
-        // Default to butt caps for now.
-        return buttCapDistanceField(point, start, end);
-      }
-
-      fn joinDistanceField(point : vec2f, start : vec2f, end : vec2f, width : f32, joinAngle : f32) -> f32 {
-        // Default to miter joins for now.
-        return miterJoinDistanceField(point, start, end, width, joinAngle);
-      }
-
-      fn computeSegmentPointDistance(point : vec2f, start : vec2f, end : vec2f, width : f32, joinAngle : f32) -> f32 {
+      fn computeSegmentPointDistance(point : vec2f, start : vec2f, end : vec2f, width : f32, joinAngle : f32, capType : f32, joinType : f32, miterLimit : f32) -> f32 {
         if (isCap(joinAngle)) {
-          return capDistanceField(point, start, end, width);
+          return capDistanceField(point, start, end, width, capType);
         }
-        return joinDistanceField(point, start, end, width, joinAngle);
+        return joinDistanceField(point, start, end, width, joinAngle, joinType, miterLimit);
       }
 
       fn distanceFromSegment(point : vec2f, start : vec2f, end : vec2f) -> f32 {
@@ -343,6 +368,9 @@ export class WGSLBuilder {
           input.segmentEndPx,
           input.width,
           input.angleStart,
+          input.capType,
+          input.joinType,
+          input.miterLimit,
         );
         let segmentEndDistance = computeSegmentPointDistance(
           currentPointPx,
@@ -350,6 +378,9 @@ export class WGSLBuilder {
           input.segmentStartPx,
           input.width,
           input.angleEnd,
+          input.capType,
+          input.joinType,
+          input.miterLimit,
         );
         var distanceField = max(
           segmentDistanceField(currentPointPx, input.segmentStartPx, input.segmentEndPx, input.width),

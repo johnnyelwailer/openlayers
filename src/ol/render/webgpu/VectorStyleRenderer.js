@@ -5,7 +5,7 @@ import earcut from 'earcut';
 import {asArray} from '../../color.js';
 import WebGPUBuffer from '../../webgpu/Buffer.js';
 import {WGSLBuilder} from './WGSLBuilder.js';
-import {writeLineSegmentToBuffers} from '../webgl/bufferUtil.js';
+import {writeLineSegmentToBuffers} from '../linestringUtil.js';
 import {
   create as createTransform,
   scale as scaleTransform,
@@ -114,12 +114,6 @@ class VectorStyleRenderer {
       }
     }
 
-    // Note: Variable 'data' meant 'pointData' here.
-    // Wait, the original code used 'pointData'. The above replacement uses 'data' in loop but 'pointData' definition?
-    // In original code: const pointData = ... pointData[cursor++] = ...
-    // In my replacement: I must use pointData!
-    // I will fix 'data' to 'pointData' in the loop below.
-
     let pointBuffer = null;
     let pointStyleBuffer = null;
 
@@ -158,12 +152,17 @@ class VectorStyleRenderer {
     /** @type {Array<number>} */
     const lineInstanceAttributes = [];
 
-    // Style: Color(4) + Width(1) + Padding(3) = 8 floats
-    const lineStyleData = new Float32Array(lineEntries.length * 8);
+    // Style struct is aligned to 16 bytes; 12 floats = 48 bytes per feature:
+    // color(4) + width + cap + join + miterLimit + offset + padding(3)
+    const lineStyleData = new Float32Array(lineEntries.length * 12);
 
     // Resolve Line Style
     let lineColor = [0, 0, 0, 1];
     let lineWidth = 1.0;
+    let lineCapType = 0; // 0=butt, 1=square, 2=round
+    let lineJoinType = 0; // 0=miter, 1=bevel, 2=round
+    let lineMiterLimit = 10.0;
+    let lineOffset = 0.0;
     if (this.styles_ && this.styles_[0]) {
       const style = this.styles_[0];
       const colorStr = style['stroke-color'];
@@ -178,17 +177,41 @@ class VectorStyleRenderer {
       if (style['stroke-width'] !== undefined) {
         lineWidth = Number(style['stroke-width']);
       }
+      if (style['stroke-line-cap']) {
+        const cap = String(style['stroke-line-cap']);
+        lineCapType = cap === 'square' ? 1 : cap === 'round' ? 2 : 0;
+      }
+      if (style['stroke-line-join']) {
+        const join = String(style['stroke-line-join']);
+        lineJoinType = join === 'bevel' ? 1 : join === 'round' ? 2 : 0;
+      }
+      if (style['stroke-miter-limit'] !== undefined) {
+        const limit = Number(style['stroke-miter-limit']);
+        if (Number.isFinite(limit) && limit > 0) {
+          lineMiterLimit = limit;
+        }
+      }
+      if (style['stroke-offset'] !== undefined) {
+        const offset = Number(style['stroke-offset']);
+        if (Number.isFinite(offset)) {
+          lineOffset = offset;
+        }
+      }
     }
 
     // Fill the per-feature style buffer (one style per feature in the batch)
     for (let i = 0; i < lineEntries.length; i++) {
       // Style
-      const sIdx = i * 8;
+      const sIdx = i * 12;
       lineStyleData[sIdx + 0] = lineColor[0];
       lineStyleData[sIdx + 1] = lineColor[1];
       lineStyleData[sIdx + 2] = lineColor[2];
       lineStyleData[sIdx + 3] = lineColor[3];
       lineStyleData[sIdx + 4] = lineWidth;
+      lineStyleData[sIdx + 5] = lineCapType;
+      lineStyleData[sIdx + 6] = lineJoinType;
+      lineStyleData[sIdx + 7] = lineMiterLimit;
+      lineStyleData[sIdx + 8] = lineOffset;
     }
 
     const identityTransform = createTransform();
