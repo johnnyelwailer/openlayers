@@ -3,6 +3,19 @@
  */
 
 /**
+ * @typedef {Object} FillPatternShaderOptions
+ * @property {string} textureSize WGSL `vec2f` expression for the full texture size in pixels.
+ * @property {string} textureOffset WGSL `vec2f` expression for the sample offset in pixels.
+ * @property {string} sampleSize WGSL `vec2f` expression for the sample size in pixels.
+ * @property {string} tint WGSL `vec4f` expression for optional tint.
+ */
+
+/**
+ * @typedef {Object} FillShaderOptions
+ * @property {FillPatternShaderOptions} [pattern] Fill pattern sampling options.
+ */
+
+/**
  * @typedef {Object} StrokePatternShaderOptions
  * @property {string} textureSize WGSL `vec2f` expression for the full texture size in pixels.
  * @property {string} textureOffset WGSL `vec2f` expression for the sample offset in pixels.
@@ -82,9 +95,66 @@ export class WGSLBuilder {
 
   /**
    * Generates the WGSL code.
+   * @param {FillShaderOptions} [options] Shader options.
    * @return {string} WGSL code.
    */
-  getShader() {
+  getFillShader(options = {}) {
+    const pattern = options.pattern;
+    const patternBindings = pattern
+      ? `
+      @group(0) @binding(2) var fillPatternSampler : sampler;
+      @group(0) @binding(3) var fillPatternTexture : texture_2d<f32>;
+      `
+      : '';
+    const patternFns = pattern
+      ? `
+      fn positiveMod2(x : vec2f, m : vec2f) -> vec2f {
+        let r = x - floor(x / m) * m;
+        return select(r, r + m, r < vec2f(0.0));
+      }
+
+      fn worldToPx(worldPos : vec2f) -> vec2f {
+        let clip = uniforms.transform * vec4f(worldPos, 0.5, 1.0);
+        let ndc = clip.xy / clip.w;
+        return (0.5 * ndc + vec2f(0.5, 0.5)) * uniforms.viewportSizePx;
+      }
+
+      fn sampleFillPattern(
+        texture : texture_2d<f32>,
+        samp : sampler,
+        textureSize : vec2f,
+        textureOffset : vec2f,
+        sampleSize : vec2f,
+        pxOrigin : vec2f,
+        pxPosition : vec2f,
+      ) -> vec4f {
+        // WebGL-equivalent scaleRatio, based on fractional zoom.
+        let scaleRatio = pow(2.0, fract(uniforms.zoom + 0.5) - 0.5);
+        var pxRelativePos = pxPosition - pxOrigin;
+        let cosR = cos(uniforms.rotation);
+        let sinR = sin(uniforms.rotation);
+        pxRelativePos = vec2f(
+          pxRelativePos.x * cosR - pxRelativePos.y * sinR,
+          pxRelativePos.x * sinR + pxRelativePos.y * cosR,
+        );
+
+        // Sample position is computed according to the sample offset & size.
+        var samplePos = positiveMod2(pxRelativePos / scaleRatio, sampleSize);
+        // Avoid sampling too close to borders to avoid interpolation with outside pixels.
+        samplePos = clamp(samplePos, vec2f(0.5), sampleSize - vec2f(0.5));
+        // Invert y axis so that images appear upright.
+        samplePos.y = sampleSize.y - samplePos.y;
+        return textureSampleLevel(texture, samp, (samplePos + textureOffset) / textureSize, 0.0);
+      }
+      `
+      : `
+      fn worldToPx(worldPos : vec2f) -> vec2f {
+        let clip = uniforms.transform * vec4f(worldPos, 0.5, 1.0);
+        let ndc = clip.xy / clip.w;
+        return (0.5 * ndc + vec2f(0.5, 0.5)) * uniforms.viewportSizePx;
+      }
+      `;
+
     return `
       struct VertexOutput {
         @builtin(position) position : vec4f,
@@ -97,10 +167,18 @@ export class WGSLBuilder {
 
       struct Uniforms {
         transform : mat4x4<f32>,
+        resolution : f32,
+        pixelRatio : f32,
+        viewportSizePx : vec2f,
+        rotation : f32,
+        zoom : f32,
+        padding : vec2f,
       };
 
       @group(0) @binding(0) var<storage, read> styles : array<Style>;
       @group(0) @binding(1) var<uniform> uniforms : Uniforms;
+      ${patternBindings}
+      ${patternFns}
 
       @vertex
       fn vs_main(
@@ -119,7 +197,33 @@ export class WGSLBuilder {
 
       @fragment
       fn fs_main(input : VertexOutput) -> @location(0) vec4f {
-        return input.color;
+        ${
+          pattern
+            ? `
+        // Fragment builtin position is in physical pixels with top-left origin.
+        // Convert to CSS pixels with bottom-left origin.
+        let pxPos = vec2f(
+          input.position.x,
+          uniforms.viewportSizePx.y * uniforms.pixelRatio - input.position.y,
+        ) / uniforms.pixelRatio;
+        let pxOrigin = worldToPx(vec2f(0.0, 0.0));
+        let c = sampleFillPattern(
+          fillPatternTexture,
+          fillPatternSampler,
+          ${pattern.textureSize},
+          ${pattern.textureOffset},
+          ${pattern.sampleSize},
+          pxOrigin,
+          pxPos,
+        );
+        let outColor = ${pattern.tint} * c;
+        return vec4f(outColor.rgb * outColor.a, outColor.a);
+            `
+            : `
+        let outColor = input.color;
+        return vec4f(outColor.rgb * outColor.a, outColor.a);
+            `
+        }
       }
     `;
   }
@@ -129,7 +233,7 @@ export class WGSLBuilder {
    * @return {string} WGSL code.
    */
   getFillVertexShader() {
-    return this.getShader();
+    return this.getFillShader();
   }
 
   /**
@@ -137,7 +241,7 @@ export class WGSLBuilder {
    * @return {string} WGSL code.
    */
   getFillFragmentShader() {
-    return this.getShader();
+    return this.getFillShader();
   }
 
   /**
@@ -210,6 +314,9 @@ export class WGSLBuilder {
         resolution : f32,
         pixelRatio : f32,
         viewportSizePx : vec2f,
+        rotation : f32,
+        zoom : f32,
+        padding : vec2f,
       };
 
       struct Style {
@@ -558,7 +665,7 @@ export class WGSLBuilder {
             : strokeColorExpr
         };
         color.a = color.a * smoothstep(0.5, -0.5, distanceField);
-        return color;
+        return vec4f(color.rgb * color.a, color.a);
       }
       `;
   }
@@ -577,5 +684,418 @@ export class WGSLBuilder {
 
   getSymbolFragmentShader() {
     return null; // Placeholder
+  }
+
+  /**
+   * Returns a circle symbol shader (vertex + fragment in same module).
+   * This mirrors WebGL's circle distance-field approach.
+   * @return {string} WGSL code.
+   */
+  getCircleSymbolShader() {
+    return `
+      struct VertexOutput {
+        @builtin(position) position : vec4f,
+        @location(0) @interpolate(flat) featureIndex : f32,
+        @location(1) @interpolate(flat) angle : f32,
+        @location(2) @interpolate(flat) rotateWithView : f32,
+        @location(3) @interpolate(flat) radius : f32,
+        @location(4) @interpolate(flat) strokeWidth : f32,
+        @location(5) @interpolate(flat) opacity : f32,
+        @location(6) @interpolate(flat) scale : vec2f,
+        @location(7) @interpolate(flat) fillColor : vec4f,
+        @location(8) @interpolate(flat) strokeColor : vec4f,
+        @location(9) @interpolate(flat) centerPx : vec2f,
+      };
+
+      struct Style {
+        fillColor : vec4f,
+        strokeColor : vec4f,
+        radius : f32,
+        strokeWidth : f32,
+        opacity : f32,
+        rotateWithView : f32,
+        scale : vec2f,
+        rotation : f32,
+        _pad0 : f32,
+        displacement : vec2f,
+        _pad1 : vec2f,
+      };
+
+      struct Uniforms {
+        transform : mat4x4<f32>,
+        resolution : f32,
+        pixelRatio : f32,
+        viewportSizePx : vec2f,
+        rotation : f32,
+        zoom : f32,
+        padding : vec2f,
+      };
+
+      @group(0) @binding(0) var<storage, read> styles : array<Style>;
+      @group(0) @binding(1) var<uniform> uniforms : Uniforms;
+
+      fn localPosition(vertexIndex : u32) -> vec2f {
+        // triangle-strip order: (-1,-1), (1,-1), (-1,1), (1,1)
+        if (vertexIndex == 0u) { return vec2f(-1.0, -1.0); }
+        if (vertexIndex == 1u) { return vec2f(1.0, -1.0); }
+        if (vertexIndex == 2u) { return vec2f(-1.0, 1.0); }
+        return vec2f(1.0, 1.0);
+      }
+
+      fn pxToScreen(offsetPx : vec2f) -> vec2f {
+        return offsetPx / uniforms.viewportSizePx * 2.0;
+      }
+
+      fn screenToPx(coordScreen : vec2f) -> vec2f {
+        return (coordScreen * 0.5 + 0.5) * uniforms.viewportSizePx;
+      }
+
+      fn circleDistanceField(point : vec2f, radius : f32) -> f32 {
+        return length(point) - radius;
+      }
+
+      fn colorFromDistanceField(distanceField : f32, fillColor : vec4f, strokeColor : vec4f, strokeWidth : f32) -> vec4f {
+        var color = fillColor;
+        if (strokeWidth > 0.0) {
+          let strokeFillRatio = smoothstep(-strokeWidth + 0.63, -strokeWidth - 0.58, distanceField);
+          color = mix(strokeColor, color, strokeFillRatio);
+        }
+        let shapeOpacity = 1.0 - smoothstep(-0.63, 0.58, distanceField);
+        return color * vec4f(1.0, 1.0, 1.0, shapeOpacity);
+      }
+
+      @vertex
+      fn vs_main(
+        @builtin(vertex_index) vertexIndex : u32,
+        @location(0) position : vec2f,
+        @location(1) featureIndex : f32,
+      ) -> VertexOutput {
+        var output : VertexOutput;
+        let style = styles[u32(featureIndex)];
+
+        let quadSizePx = (vec2f(style.radius * 2.0 + 0.5) + vec2f(style.strokeWidth)) * style.scale;
+        let halfSizePx = quadSizePx * 0.5;
+
+        var offsetPx = style.displacement + localPosition(vertexIndex) * halfSizePx * vec2f(1.0, -1.0);
+        let angle = style.rotation + select(0.0, uniforms.rotation, style.rotateWithView > 0.5);
+        let c = cos(-angle);
+        let s = sin(-angle);
+        offsetPx = vec2f(c * offsetPx.x - s * offsetPx.y, s * offsetPx.x + c * offsetPx.y);
+
+        let center = uniforms.transform * vec4f(position, 0.5, 1.0);
+        output.position = center + vec4f(pxToScreen(offsetPx), 0.0, 0.0);
+        output.featureIndex = featureIndex;
+        output.angle = angle;
+        output.rotateWithView = style.rotateWithView;
+        output.radius = style.radius;
+        output.strokeWidth = style.strokeWidth;
+        output.opacity = style.opacity;
+        output.scale = style.scale;
+        output.fillColor = style.fillColor;
+        output.strokeColor = style.strokeColor;
+
+        // Center in CSS pixels (bottom-left origin), used in fragment to compute coordsPx.
+        var centerOffsetPx = style.displacement;
+        let c2 = cos(-angle);
+        let s2 = sin(-angle);
+        centerOffsetPx = vec2f(c2 * centerOffsetPx.x - s2 * centerOffsetPx.y, s2 * centerOffsetPx.x + c2 * centerOffsetPx.y);
+        output.centerPx = screenToPx(center.xy) + centerOffsetPx;
+        return output;
+      }
+
+      @fragment
+      fn fs_main(input : VertexOutput) -> @location(0) vec4f {
+        // Convert from physical pixels with top-left origin to CSS pixels with bottom-left origin.
+        var coordsPx = vec2f(
+          input.position.x,
+          uniforms.viewportSizePx.y * uniforms.pixelRatio - input.position.y,
+        ) / uniforms.pixelRatio - input.centerPx;
+
+        let c = cos(input.angle);
+        let s = sin(input.angle);
+        coordsPx = vec2f(c * coordsPx.x - s * coordsPx.y, s * coordsPx.x + c * coordsPx.y);
+
+        let safeScale = max(input.scale, vec2f(1.17549435e-38));
+        // Match WebGL: radius is expanded by half the stroke width.
+        let df = circleDistanceField(
+          coordsPx / safeScale,
+          input.radius + input.strokeWidth * 0.5,
+        );
+
+        var color = colorFromDistanceField(df, input.fillColor, input.strokeColor, input.strokeWidth);
+        color.a = color.a * input.opacity;
+        return vec4f(color.rgb * color.a, color.a);
+      }
+    `;
+  }
+
+  /**
+   * Returns an icon symbol shader (vertex + fragment in same module).
+   * @return {string} WGSL code.
+   */
+  getIconSymbolShader() {
+    return `
+      struct VertexOutput {
+        @builtin(position) position : vec4f,
+        @location(0) texCoord : vec2f,
+        @location(1) @interpolate(flat) tint : vec4f,
+        @location(2) @interpolate(flat) opacity : f32,
+      };
+
+      struct Style {
+        tint : vec4f,
+        uvOrigin : vec2f,
+        uvSize : vec2f,
+        sizePx : vec2f,
+        scale : vec2f,
+        rotation : f32,
+        opacity : f32,
+        rotateWithView : f32,
+        _pad0 : f32,
+        offsetPx : vec2f,
+        _pad1 : vec2f,
+      };
+
+      struct Uniforms {
+        transform : mat4x4<f32>,
+        resolution : f32,
+        pixelRatio : f32,
+        viewportSizePx : vec2f,
+        rotation : f32,
+        zoom : f32,
+        padding : vec2f,
+      };
+
+      @group(0) @binding(0) var<storage, read> styles : array<Style>;
+      @group(0) @binding(1) var<uniform> uniforms : Uniforms;
+      @group(0) @binding(2) var iconSampler : sampler;
+      @group(0) @binding(3) var iconTexture : texture_2d<f32>;
+
+      fn localPosition(vertexIndex : u32) -> vec2f {
+        if (vertexIndex == 0u) { return vec2f(-1.0, -1.0); }
+        if (vertexIndex == 1u) { return vec2f(1.0, -1.0); }
+        if (vertexIndex == 2u) { return vec2f(-1.0, 1.0); }
+        return vec2f(1.0, 1.0);
+      }
+
+      fn pxToScreen(offsetPx : vec2f) -> vec2f {
+        return offsetPx / uniforms.viewportSizePx * 2.0;
+      }
+
+      @vertex
+      fn vs_main(
+        @builtin(vertex_index) vertexIndex : u32,
+        @location(0) position : vec2f,
+        @location(1) featureIndex : f32,
+      ) -> VertexOutput {
+        var output : VertexOutput;
+        let style = styles[u32(featureIndex)];
+
+        let quadSizePx = style.sizePx * style.scale;
+        let halfSizePx = quadSizePx * 0.5;
+        var offsetPx = style.offsetPx + localPosition(vertexIndex) * halfSizePx * vec2f(1.0, -1.0);
+        let angle = style.rotation + select(0.0, uniforms.rotation, style.rotateWithView > 0.5);
+        let c = cos(-angle);
+        let s = sin(-angle);
+        offsetPx = vec2f(c * offsetPx.x - s * offsetPx.y, s * offsetPx.x + c * offsetPx.y);
+
+        let center = uniforms.transform * vec4f(position, 0.5, 1.0);
+        output.position = center + vec4f(pxToScreen(offsetPx), 0.0, 0.0);
+
+        let l = localPosition(vertexIndex) * 0.5 + vec2f(0.5, 0.5);
+        let u = style.uvOrigin.x + l.x * style.uvSize.x;
+        // WebGPU texture coordinates use a top-left origin, matching DOM image sources.
+        let v = style.uvOrigin.y + l.y * style.uvSize.y;
+        output.texCoord = vec2f(u, v);
+        output.tint = style.tint;
+        output.opacity = style.opacity;
+        return output;
+      }
+
+      @fragment
+      fn fs_main(input : VertexOutput) -> @location(0) vec4f {
+        var color = input.tint * textureSampleLevel(iconTexture, iconSampler, input.texCoord, 0.0);
+        color.a = color.a * input.opacity;
+        return vec4f(color.rgb * color.a, color.a);
+      }
+    `;
+  }
+
+  /**
+   * Returns a regular shape / star symbol shader (vertex + fragment in same module).
+   * @return {string} WGSL code.
+   */
+  getShapeSymbolShader() {
+    return `
+      struct VertexOutput {
+        @builtin(position) position : vec4f,
+        @location(0) @interpolate(flat) featureIndex : f32,
+        @location(1) @interpolate(flat) angle : f32,
+        @location(2) @interpolate(flat) radius : f32,
+        @location(3) @interpolate(flat) radius2 : f32,
+        @location(4) @interpolate(flat) strokeWidth : f32,
+        @location(5) @interpolate(flat) opacity : f32,
+        @location(6) @interpolate(flat) points : f32,
+        @location(7) @interpolate(flat) shapeAngle : f32,
+        @location(8) @interpolate(flat) scale : vec2f,
+        @location(9) @interpolate(flat) fillColor : vec4f,
+        @location(10) @interpolate(flat) strokeColor : vec4f,
+        @location(11) @interpolate(flat) centerPx : vec2f,
+      };
+
+      struct Style {
+        fillColor : vec4f,
+        strokeColor : vec4f,
+        radius : f32,
+        radius2 : f32,
+        strokeWidth : f32,
+        opacity : f32,
+        points : f32,
+        shapeAngle : f32,
+        rotateWithView : f32,
+        rotation : f32,
+        scale : vec2f,
+        displacement : vec2f,
+      };
+
+      struct Uniforms {
+        transform : mat4x4<f32>,
+        resolution : f32,
+        pixelRatio : f32,
+        viewportSizePx : vec2f,
+        rotation : f32,
+        zoom : f32,
+        padding : vec2f,
+      };
+
+      @group(0) @binding(0) var<storage, read> styles : array<Style>;
+      @group(0) @binding(1) var<uniform> uniforms : Uniforms;
+
+      fn localPosition(vertexIndex : u32) -> vec2f {
+        if (vertexIndex == 0u) { return vec2f(-1.0, -1.0); }
+        if (vertexIndex == 1u) { return vec2f(1.0, -1.0); }
+        if (vertexIndex == 2u) { return vec2f(-1.0, 1.0); }
+        return vec2f(1.0, 1.0);
+      }
+
+      fn pxToScreen(offsetPx : vec2f) -> vec2f {
+        return offsetPx / uniforms.viewportSizePx * 2.0;
+      }
+
+      fn screenToPx(coordScreen : vec2f) -> vec2f {
+        return (coordScreen * 0.5 + 0.5) * uniforms.viewportSizePx;
+      }
+
+      fn roundf(v : f32) -> f32 {
+        return sign(v) * floor(abs(v) + 0.5);
+      }
+
+      fn starDistanceField(point : vec2f, numPoints : f32, radius : f32, radius2 : f32, angle : f32) -> f32 {
+        let startAngle = -3.141592653589793 * 0.5 + angle;
+        var c = cos(startAngle);
+        var s = sin(startAngle);
+        let pointRotated = vec2f(c * point.x - s * point.y, s * point.x + c * point.y);
+        let alpha = 6.283185307179586 / numPoints;
+        let beta = atan2(pointRotated.y, pointRotated.x);
+        let gamma = roundf(beta / alpha) * alpha;
+        c = cos(-gamma);
+        s = sin(-gamma);
+        let inSector = vec2f(c * pointRotated.x - s * pointRotated.y, abs(s * pointRotated.x + c * pointRotated.y));
+        let tipToPoint = inSector + vec2f(-radius, 0.0);
+        let edgeNormal = vec2f(radius2 * sin(alpha * 0.5), -radius2 * cos(alpha * 0.5) + radius);
+        return dot(normalize(edgeNormal), tipToPoint);
+      }
+
+      fn regularDistanceField(point : vec2f, numPoints : f32, radius : f32, angle : f32) -> f32 {
+        let startAngle = -3.141592653589793 * 0.5 + angle;
+        var c = cos(startAngle);
+        var s = sin(startAngle);
+        let pointRotated = vec2f(c * point.x - s * point.y, s * point.x + c * point.y);
+        let alpha = 6.283185307179586 / numPoints;
+        let radiusIn = radius * cos(3.141592653589793 / numPoints);
+        let beta = atan2(pointRotated.y, pointRotated.x);
+        let gamma = roundf((beta - alpha * 0.5) / alpha) * alpha + alpha * 0.5;
+        c = cos(-gamma);
+        s = sin(-gamma);
+        let inSector = vec2f(c * pointRotated.x - s * pointRotated.y, abs(s * pointRotated.x + c * pointRotated.y));
+        return inSector.x - radiusIn;
+      }
+
+      fn colorFromDistanceField(distanceField : f32, fillColor : vec4f, strokeColor : vec4f, strokeWidth : f32) -> vec4f {
+        var color = fillColor;
+        if (strokeWidth > 0.0) {
+          let strokeFillRatio = smoothstep(-strokeWidth + 0.63, -strokeWidth - 0.58, distanceField);
+          color = mix(strokeColor, color, strokeFillRatio);
+        }
+        let shapeOpacity = 1.0 - smoothstep(-0.63, 0.58, distanceField);
+        return color * vec4f(1.0, 1.0, 1.0, shapeOpacity);
+      }
+
+      @vertex
+      fn vs_main(
+        @builtin(vertex_index) vertexIndex : u32,
+        @location(0) position : vec2f,
+        @location(1) featureIndex : f32,
+      ) -> VertexOutput {
+        var output : VertexOutput;
+        let style = styles[u32(featureIndex)];
+
+        let maxR = max(style.radius, select(style.radius, style.radius2, style.radius2 > 0.0));
+        let quadSizePx = vec2f(maxR * 2.0 + 0.5) * style.scale;
+        let halfSizePx = quadSizePx * 0.5;
+
+        var offsetPx = style.displacement + localPosition(vertexIndex) * halfSizePx * vec2f(1.0, -1.0);
+        let angle = style.rotation + select(0.0, uniforms.rotation, style.rotateWithView > 0.5);
+        let c = cos(-angle);
+        let s = sin(-angle);
+        offsetPx = vec2f(c * offsetPx.x - s * offsetPx.y, s * offsetPx.x + c * offsetPx.y);
+
+        let center = uniforms.transform * vec4f(position, 0.5, 1.0);
+        output.position = center + vec4f(pxToScreen(offsetPx), 0.0, 0.0);
+        output.featureIndex = featureIndex;
+        output.angle = angle;
+        output.radius = style.radius;
+        output.radius2 = style.radius2;
+        output.strokeWidth = style.strokeWidth;
+        output.opacity = style.opacity;
+        output.points = style.points;
+        output.shapeAngle = style.shapeAngle;
+        output.scale = style.scale;
+        output.fillColor = style.fillColor;
+        output.strokeColor = style.strokeColor;
+
+        var centerOffsetPx = style.displacement;
+        let c2 = cos(-angle);
+        let s2 = sin(-angle);
+        centerOffsetPx = vec2f(c2 * centerOffsetPx.x - s2 * centerOffsetPx.y, s2 * centerOffsetPx.x + c2 * centerOffsetPx.y);
+        output.centerPx = screenToPx(center.xy) + centerOffsetPx;
+        return output;
+      }
+
+      @fragment
+      fn fs_main(input : VertexOutput) -> @location(0) vec4f {
+        var coordsPx = vec2f(
+          input.position.x,
+          uniforms.viewportSizePx.y * uniforms.pixelRatio - input.position.y,
+        ) / uniforms.pixelRatio - input.centerPx;
+
+        let c = cos(input.angle);
+        let s = sin(input.angle);
+        coordsPx = vec2f(c * coordsPx.x - s * coordsPx.y, s * coordsPx.x + c * coordsPx.y);
+
+        let safeScale = max(input.scale, vec2f(1.17549435e-38));
+        let p = coordsPx / safeScale;
+
+        let df = select(
+          regularDistanceField(p, input.points, input.radius, input.shapeAngle),
+          starDistanceField(p, input.points, input.radius, input.radius2, input.shapeAngle),
+          input.radius2 > 0.0,
+        );
+
+        var color = colorFromDistanceField(df, input.fillColor, input.strokeColor, input.strokeWidth);
+        color.a = color.a * input.opacity;
+        return vec4f(color.rgb * color.a, color.a);
+      }
+    `;
   }
 }

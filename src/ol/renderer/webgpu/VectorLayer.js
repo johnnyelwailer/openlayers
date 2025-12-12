@@ -260,7 +260,8 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
 
     const size = frameState.size;
     const pixelRatio = frameState.pixelRatio;
-    this.helper.configureContext(
+    this.helper.configureContextForFrame(
+      frameState.index,
       size[0] * pixelRatio,
       size[1] * pixelRatio,
       pixelRatio,

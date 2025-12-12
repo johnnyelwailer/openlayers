@@ -27,6 +27,22 @@ import {collectGetProperties, compileWgslExpression} from './expr.js';
  */
 
 /**
+ * @typedef {Object} PolygonBufferSet
+ * @property {WebGPUBuffer} vertex Vertex buffer.
+ * @property {WebGPUBuffer} style Style buffer.
+ * @property {string} [fillShader] Optional WGSL shader override.
+ * @property {StrokePatternTexture} [pattern] Optional fill pattern resources.
+ */
+
+/**
+ * @typedef {Object} PointBufferSet
+ * @property {WebGPUBuffer} vertex Vertex buffer (instanced: position + featureIndex).
+ * @property {WebGPUBuffer} style Style buffer.
+ * @property {string} [symbolShader] Optional WGSL shader override.
+ * @property {StrokePatternTexture} [pattern] Optional symbol texture resources.
+ */
+
+/**
  * @typedef {Object} LineStringBufferSet
  * @property {WebGPUBuffer} vertex Vertex buffer.
  * @property {WebGPUBuffer} style Style buffer.
@@ -169,7 +185,7 @@ class VectorStyleRenderer {
     /** @type {Map<string, GPURenderPipeline>} */
     this.strokePipelineCache_ = new Map();
     /** @type {Map<string, Promise<StrokePatternTexture>>} */
-    this.strokePatternCache_ = new Map();
+    this.patternTextureCache_ = new Map();
 
     // TODO: Phase 2 - Implement proper style parsing
     // For now, we manually create a single builder/shader pair
@@ -192,20 +208,36 @@ class VectorStyleRenderer {
    * @return {Promise<{sampler: GPUSampler, view: GPUTextureView, size: [number, number]}>} Texture resources.
    * @private
    */
-  async getStrokePatternTexture_(src) {
-    const cached = this.strokePatternCache_.get(src);
+  async getPatternTexture_(src) {
+    const cached = this.patternTextureCache_.get(src);
     if (cached) {
       return cached;
     }
 
     const device = this.helper_.getDevice();
     const loadPromise = (async () => {
-      const response = await fetch(src);
-      const blob = await response.blob();
-      const bitmap = await createImageBitmap(blob);
-
-      const width = bitmap.width;
-      const height = bitmap.height;
+      /** @type {ImageBitmap|HTMLImageElement} */
+      let imageSource;
+      let width;
+      let height;
+      try {
+        const response = await fetch(src);
+        const blob = await response.blob();
+        const bitmap = await createImageBitmap(blob);
+        imageSource = bitmap;
+        width = bitmap.width;
+        height = bitmap.height;
+      } catch {
+        // Some image types (notably SVG in headless Chromium) are not reliably supported by createImageBitmap().
+        // Fallback to HTMLImageElement decoding.
+        const image = new Image();
+        image.crossOrigin = 'anonymous';
+        image.src = src;
+        await image.decode();
+        imageSource = image;
+        width = image.naturalWidth;
+        height = image.naturalHeight;
+      }
 
       const TEXTURE_BINDING = 0x04;
       const COPY_DST = 0x02;
@@ -216,7 +248,7 @@ class VectorStyleRenderer {
         usage: TEXTURE_BINDING | COPY_DST | RENDER_ATTACHMENT,
       });
       device.queue.copyExternalImageToTexture(
-        {source: bitmap},
+        {source: imageSource},
         {texture},
         {width, height},
       );
@@ -235,7 +267,7 @@ class VectorStyleRenderer {
       };
     })();
 
-    this.strokePatternCache_.set(src, loadPromise);
+    this.patternTextureCache_.set(src, loadPromise);
     return loadPromise;
   }
 
@@ -252,7 +284,6 @@ class VectorStyleRenderer {
     // --- 1. Generate Point Buffers ---
     const pointBatch = geometryBatch.pointBatch;
     const pointEntries = Object.values(pointBatch.entries);
-
     // Calculate total vertices for points
     let pointVertexCount = 0;
     for (const entry of pointEntries) {
@@ -264,40 +295,10 @@ class VectorStyleRenderer {
 
     // 3 floats per vertex: x, y, featureIndex
     const pointData = new Float32Array(pointVertexCount * 3);
-    const pointStyleData = new Float32Array(pointEntries.length * 4); // 4 floats (RGBA) per feature
-
-    // Resolve Point Color (only if a literal color is provided in any rule).
-    let pointColor = [1, 0, 0, 1]; // Default Red
-    const pointStyleRule = rules.find((r) => {
-      const s = r.style;
-      return (
-        s &&
-        (typeof s['circle-fill-color'] === 'string' ||
-          typeof s['fill-color'] === 'string')
-      );
-    });
-    if (pointStyleRule) {
-      const style = pointStyleRule.style;
-      const colorStr = style['circle-fill-color'] || style['fill-color'];
-      if (colorStr) {
-        try {
-          const c = asArray(colorStr);
-          pointColor = [c[0] / 255, c[1] / 255, c[2] / 255, c[3]];
-        } catch {
-          // Ignore parsing errors (e.g. expressions)
-        }
-      }
-    }
 
     let cursor = 0;
     for (let i = 0; i < pointEntries.length; i++) {
       const entry = pointEntries[i];
-      // Fill Style Buffer (1 entry per feature)
-      pointStyleData[i * 4 + 0] = pointColor[0];
-      pointStyleData[i * 4 + 1] = pointColor[1];
-      pointStyleData[i * 4 + 2] = pointColor[2];
-      pointStyleData[i * 4 + 3] = pointColor[3];
-
       // Fill Vertex Buffer
       for (const flatCoordPoints of entry.flatCoordss) {
         for (let j = 0; j < flatCoordPoints.length; j += 2) {
@@ -308,10 +309,18 @@ class VectorStyleRenderer {
       }
     }
 
+    /** @type {Array<PointBufferSet>} */
+    const pointBuffers = [];
     let pointBuffer = null;
-    let pointStyleBuffer = null;
 
-    if (pointVertexCount > 0 && pointStyleRule) {
+    const hasAnyPointSymbol = rules.some((r) => {
+      const s = r.style;
+      return (
+        s && ('icon-src' in s || 'shape-points' in s || 'circle-radius' in s)
+      );
+    });
+
+    if (pointVertexCount > 0 && hasAnyPointSymbol) {
       pointBuffer = new WebGPUBuffer({
         size: pointData.byteLength,
         usage: 0x0020 | 0x0008, // VERTEX | COPY_DST
@@ -320,17 +329,426 @@ class VectorStyleRenderer {
       pointBuffer.create(this.helper_);
       new Float32Array(pointBuffer.getBuffer().getMappedRange()).set(pointData);
       pointBuffer.getBuffer().unmap();
+    }
 
-      pointStyleBuffer = new WebGPUBuffer({
-        size: pointStyleData.byteLength,
-        usage: 0x0080 | 0x0008, // STORAGE | COPY_DST
-        mappedAtCreation: true,
-      });
-      pointStyleBuffer.create(this.helper_);
-      new Float32Array(pointStyleBuffer.getBuffer().getMappedRange()).set(
-        pointStyleData,
-      );
-      pointStyleBuffer.getBuffer().unmap();
+    if (pointBuffer) {
+      const STYLE_STRIDE = 20;
+      const circleShader =
+        this.styleShaders_[0].builder.getCircleSymbolShader();
+      const iconShader = this.styleShaders_[0].builder.getIconSymbolShader();
+      const shapeShader = this.styleShaders_[0].builder.getShapeSymbolShader();
+
+      for (const rule of rules) {
+        const style = rule.style;
+        if (!style) {
+          continue;
+        }
+
+        // --- Icons ---
+        const iconSrc = style['icon-src'];
+        if (typeof iconSrc === 'string') {
+          const texture = await this.getPatternTexture_(iconSrc);
+          const textureSize = texture.size;
+          const sampleSize = Array.isArray(style['icon-size'])
+            ? style['icon-size']
+            : textureSize;
+          const baseOffset = Array.isArray(style['icon-offset'])
+            ? style['icon-offset']
+            : [0, 0];
+          const origin = style['icon-offset-origin'] || 'top-left';
+          let offsetX = baseOffset[0] || 0;
+          let offsetY = baseOffset[1] || 0;
+          if (origin === 'top-right') {
+            offsetX = textureSize[0] - sampleSize[0] - offsetX;
+          } else if (origin === 'bottom-left') {
+            offsetY = textureSize[1] - sampleSize[1] - offsetY;
+          } else if (origin === 'bottom-right') {
+            offsetX = textureSize[0] - sampleSize[0] - offsetX;
+            offsetY = textureSize[1] - sampleSize[1] - offsetY;
+          }
+
+          const uvOrigin = [offsetX / textureSize[0], offsetY / textureSize[1]];
+          const uvSize = [
+            sampleSize[0] / textureSize[0],
+            sampleSize[1] / textureSize[1],
+          ];
+
+          const styleData = new Float32Array(
+            pointEntries.length * STYLE_STRIDE,
+          );
+          for (let i = 0; i < pointEntries.length; i++) {
+            const feature = pointEntries[i].feature;
+            const sIdx = i * STYLE_STRIDE;
+
+            const tint = resolveColor(
+              style['icon-color'],
+              feature,
+              [1, 1, 1, 1],
+            );
+            const opacity = resolveNumber(style['icon-opacity'], feature, 1.0);
+            const rotation = resolveNumber(
+              style['icon-rotation'],
+              feature,
+              0.0,
+            );
+            const rotateWithView = style['icon-rotate-with-view'] ? 1 : 0;
+
+            const scaleValue = resolveExpression(style['icon-scale'], feature);
+            const scale =
+              typeof scaleValue === 'number'
+                ? [scaleValue, scaleValue]
+                : Array.isArray(scaleValue)
+                  ? scaleValue
+                  : [1, 1];
+            const scaleVec = [Number(scale[0]) || 1, Number(scale[1]) || 1];
+
+            const displacement = resolveExpression(
+              style['icon-displacement'],
+              feature,
+            );
+            const displacementVec = Array.isArray(displacement)
+              ? displacement
+              : [0, 0];
+
+            let centerOffset = [
+              Number(displacementVec[0]) || 0,
+              Number(displacementVec[1]) || 0,
+            ];
+
+            if ('icon-anchor' in style) {
+              const anchorValue = resolveExpression(
+                style['icon-anchor'],
+                feature,
+              );
+              const anchor = Array.isArray(anchorValue)
+                ? anchorValue
+                : [0.5, 0.5];
+              const quadSizePx = [
+                sampleSize[0] * scaleVec[0],
+                sampleSize[1] * scaleVec[1],
+              ];
+              const scaleScalar = scaleVec[0];
+              const xUnits = style['icon-anchor-x-units'] || 'fraction';
+              const yUnits = style['icon-anchor-y-units'] || 'fraction';
+
+              let shiftX;
+              let shiftY;
+              if (xUnits === 'pixels' && yUnits === 'pixels') {
+                shiftX = anchor[0] * scaleScalar;
+                shiftY = anchor[1] * scaleScalar;
+              } else if (xUnits === 'pixels') {
+                shiftX = anchor[0] * scaleScalar;
+                shiftY = anchor[1] * quadSizePx[1];
+              } else if (yUnits === 'pixels') {
+                shiftX = anchor[0] * quadSizePx[0];
+                shiftY = anchor[1] * scaleScalar;
+              } else {
+                shiftX = anchor[0] * quadSizePx[0];
+                shiftY = anchor[1] * quadSizePx[1];
+              }
+
+              let offsetPxX = quadSizePx[0] * 0.5 - shiftX;
+              let offsetPxY = -quadSizePx[1] * 0.5 + shiftY;
+              const anchorOrigin = style['icon-anchor-origin'] || 'top-left';
+              if (anchorOrigin === 'top-right') {
+                offsetPxX = -quadSizePx[0] * 0.5 + shiftX;
+                offsetPxY = -quadSizePx[1] * 0.5 + shiftY;
+              } else if (anchorOrigin === 'bottom-left') {
+                offsetPxX = quadSizePx[0] * 0.5 - shiftX;
+                offsetPxY = quadSizePx[1] * 0.5 - shiftY;
+              } else if (anchorOrigin === 'bottom-right') {
+                offsetPxX = -quadSizePx[0] * 0.5 + shiftX;
+                offsetPxY = quadSizePx[1] * 0.5 - shiftY;
+              }
+
+              centerOffset = [
+                centerOffset[0] + offsetPxX,
+                centerOffset[1] + offsetPxY,
+              ];
+            }
+
+            // tint (vec4)
+            styleData[sIdx + 0] = tint[0];
+            styleData[sIdx + 1] = tint[1];
+            styleData[sIdx + 2] = tint[2];
+            styleData[sIdx + 3] = tint[3];
+            // uvOrigin (vec2)
+            styleData[sIdx + 4] = uvOrigin[0];
+            styleData[sIdx + 5] = uvOrigin[1];
+            // uvSize (vec2)
+            styleData[sIdx + 6] = uvSize[0];
+            styleData[sIdx + 7] = uvSize[1];
+            // sizePx (vec2)
+            styleData[sIdx + 8] = sampleSize[0];
+            styleData[sIdx + 9] = sampleSize[1];
+            // scale (vec2)
+            styleData[sIdx + 10] = scaleVec[0];
+            styleData[sIdx + 11] = scaleVec[1];
+            // rotation, opacity, rotateWithView, pad
+            styleData[sIdx + 12] = rotation;
+            styleData[sIdx + 13] = opacity;
+            styleData[sIdx + 14] = rotateWithView;
+            styleData[sIdx + 15] = 0;
+            // offsetPx (vec2) + pad
+            styleData[sIdx + 16] = centerOffset[0];
+            styleData[sIdx + 17] = centerOffset[1];
+            styleData[sIdx + 18] = 0;
+            styleData[sIdx + 19] = 0;
+          }
+
+          const styleBuffer = new WebGPUBuffer({
+            size: styleData.byteLength,
+            usage: 0x0080 | 0x0008,
+            mappedAtCreation: true,
+          });
+          styleBuffer.create(this.helper_);
+          new Float32Array(styleBuffer.getBuffer().getMappedRange()).set(
+            styleData,
+          );
+          styleBuffer.getBuffer().unmap();
+
+          pointBuffers.push({
+            vertex: pointBuffer,
+            style: styleBuffer,
+            symbolShader: iconShader,
+            pattern: texture,
+          });
+          continue;
+        }
+
+        // --- Shapes ---
+        if ('shape-points' in style) {
+          const styleData = new Float32Array(
+            pointEntries.length * STYLE_STRIDE,
+          );
+          for (let i = 0; i < pointEntries.length; i++) {
+            const feature = pointEntries[i].feature;
+            const sIdx = i * STYLE_STRIDE;
+
+            const points = resolveNumber(style['shape-points'], feature, 3.0);
+            const strokeWidth = resolveNumber(
+              style['shape-stroke-width'],
+              feature,
+              0.0,
+            );
+            const opacity = resolveNumber(style['shape-opacity'], feature, 1.0);
+            const shapeAngle = resolveNumber(
+              style['shape-angle'],
+              feature,
+              0.0,
+            );
+
+            const fillColor = resolveColor(
+              style['shape-fill-color'],
+              feature,
+              [1, 1, 1, 1],
+            );
+            let strokeColor = resolveColor(
+              style['shape-stroke-color'],
+              feature,
+              [0, 0, 0, 0],
+            );
+            const strokeExpr = style['shape-stroke-color'];
+            if (Array.isArray(strokeExpr) && strokeExpr[0] === '*') {
+              const a = resolveColor(strokeExpr[1], feature, strokeColor);
+              const b = resolveColor(strokeExpr[2], feature, [1, 1, 1, 1]);
+              strokeColor = [
+                a[0] * b[0],
+                a[1] * b[1],
+                a[2] * b[2],
+                a[3] * b[3],
+              ];
+            }
+
+            const baseRadius = resolveNumber(
+              style['shape-radius'],
+              feature,
+              5.0,
+            );
+            const baseRadius2 =
+              'shape-radius2' in style
+                ? resolveNumber(style['shape-radius2'], feature, 0.0)
+                : 0.0;
+            const radius = baseRadius + strokeWidth * 0.5;
+            const radius2 =
+              baseRadius2 > 0 ? baseRadius2 + strokeWidth * 0.5 : 0.0;
+
+            const displacement = resolveExpression(
+              style['shape-displacement'],
+              feature,
+            );
+            const displacementVec = Array.isArray(displacement)
+              ? displacement
+              : [0, 0];
+            const rotation = resolveNumber(
+              style['shape-rotation'],
+              feature,
+              0.0,
+            );
+            const rotateWithView = style['shape-rotate-with-view'] ? 1 : 0;
+
+            const scaleValue = resolveExpression(style['shape-scale'], feature);
+            const scale =
+              typeof scaleValue === 'number'
+                ? [scaleValue, scaleValue]
+                : Array.isArray(scaleValue)
+                  ? scaleValue
+                  : [1, 1];
+
+            // fillColor (vec4)
+            styleData[sIdx + 0] = fillColor[0];
+            styleData[sIdx + 1] = fillColor[1];
+            styleData[sIdx + 2] = fillColor[2];
+            styleData[sIdx + 3] = fillColor[3];
+            // strokeColor (vec4)
+            styleData[sIdx + 4] = strokeColor[0];
+            styleData[sIdx + 5] = strokeColor[1];
+            styleData[sIdx + 6] = strokeColor[2];
+            styleData[sIdx + 7] = strokeColor[3];
+            // radius, radius2, strokeWidth, opacity
+            styleData[sIdx + 8] = radius;
+            styleData[sIdx + 9] = radius2;
+            styleData[sIdx + 10] = strokeWidth;
+            styleData[sIdx + 11] = opacity;
+            // points, shapeAngle, rotateWithView, rotation
+            styleData[sIdx + 12] = points;
+            styleData[sIdx + 13] = shapeAngle;
+            styleData[sIdx + 14] = rotateWithView;
+            styleData[sIdx + 15] = rotation;
+            // scale (vec2)
+            styleData[sIdx + 16] = Number(scale[0]) || 1;
+            styleData[sIdx + 17] = Number(scale[1]) || 1;
+            // displacement (vec2)
+            styleData[sIdx + 18] = Number(displacementVec[0]) || 0;
+            styleData[sIdx + 19] = Number(displacementVec[1]) || 0;
+          }
+
+          const styleBuffer = new WebGPUBuffer({
+            size: styleData.byteLength,
+            usage: 0x0080 | 0x0008,
+            mappedAtCreation: true,
+          });
+          styleBuffer.create(this.helper_);
+          new Float32Array(styleBuffer.getBuffer().getMappedRange()).set(
+            styleData,
+          );
+          styleBuffer.getBuffer().unmap();
+
+          pointBuffers.push({
+            vertex: pointBuffer,
+            style: styleBuffer,
+            symbolShader: shapeShader,
+          });
+          continue;
+        }
+
+        // --- Circles ---
+        if ('circle-radius' in style) {
+          const styleData = new Float32Array(
+            pointEntries.length * STYLE_STRIDE,
+          );
+          for (let i = 0; i < pointEntries.length; i++) {
+            const feature = pointEntries[i].feature;
+            const sIdx = i * STYLE_STRIDE;
+
+            const radius = resolveNumber(style['circle-radius'], feature, 5.0);
+            const strokeWidth = resolveNumber(
+              style['circle-stroke-width'],
+              feature,
+              0.0,
+            );
+            const opacity = resolveNumber(
+              style['circle-opacity'],
+              feature,
+              1.0,
+            );
+
+            const fillColor = resolveColor(
+              style['circle-fill-color'],
+              feature,
+              [1, 1, 1, 1],
+            );
+            let strokeColor = resolveColor(
+              style['circle-stroke-color'],
+              feature,
+              [0, 0, 0, 0],
+            );
+            const strokeExpr = style['circle-stroke-color'];
+            if (Array.isArray(strokeExpr) && strokeExpr[0] === '*') {
+              const a = resolveColor(strokeExpr[1], feature, strokeColor);
+              const b = resolveColor(strokeExpr[2], feature, [1, 1, 1, 1]);
+              strokeColor = [
+                a[0] * b[0],
+                a[1] * b[1],
+                a[2] * b[2],
+                a[3] * b[3],
+              ];
+            }
+
+            const displacement = resolveExpression(
+              style['circle-displacement'],
+              feature,
+            );
+            const displacementVec = Array.isArray(displacement)
+              ? displacement
+              : [0, 0];
+            const rotation = resolveNumber(
+              style['circle-rotation'],
+              feature,
+              0.0,
+            );
+            const scaleValue = resolveExpression(
+              style['circle-scale'],
+              feature,
+            );
+            const scale =
+              typeof scaleValue === 'number'
+                ? [scaleValue, scaleValue]
+                : Array.isArray(scaleValue)
+                  ? scaleValue
+                  : [1, 1];
+            const rotateWithView = style['circle-rotate-with-view'] ? 1 : 0;
+
+            styleData[sIdx + 0] = fillColor[0];
+            styleData[sIdx + 1] = fillColor[1];
+            styleData[sIdx + 2] = fillColor[2];
+            styleData[sIdx + 3] = fillColor[3];
+            styleData[sIdx + 4] = strokeColor[0];
+            styleData[sIdx + 5] = strokeColor[1];
+            styleData[sIdx + 6] = strokeColor[2];
+            styleData[sIdx + 7] = strokeColor[3];
+            styleData[sIdx + 8] = radius;
+            styleData[sIdx + 9] = strokeWidth;
+            styleData[sIdx + 10] = opacity;
+            styleData[sIdx + 11] = rotateWithView;
+            styleData[sIdx + 12] = Number(scale[0]) || 1;
+            styleData[sIdx + 13] = Number(scale[1]) || 1;
+            styleData[sIdx + 14] = rotation;
+            styleData[sIdx + 15] = 0;
+            styleData[sIdx + 16] = Number(displacementVec[0]) || 0;
+            styleData[sIdx + 17] = Number(displacementVec[1]) || 0;
+            styleData[sIdx + 18] = 0;
+            styleData[sIdx + 19] = 0;
+          }
+
+          const styleBuffer = new WebGPUBuffer({
+            size: styleData.byteLength,
+            usage: 0x0080 | 0x0008,
+            mappedAtCreation: true,
+          });
+          styleBuffer.create(this.helper_);
+          new Float32Array(styleBuffer.getBuffer().getMappedRange()).set(
+            styleData,
+          );
+          styleBuffer.getBuffer().unmap();
+
+          pointBuffers.push({
+            vertex: pointBuffer,
+            style: styleBuffer,
+            symbolShader: circleShader,
+          });
+        }
+      }
     }
 
     // --- 2. Generate LineString Buffers ---
@@ -453,7 +871,7 @@ class VectorStyleRenderer {
         let patternTexture;
         let patternOptions;
         if (hasStrokePattern) {
-          patternTexture = await this.getStrokePatternTexture_(patternSrc);
+          patternTexture = await this.getPatternTexture_(patternSrc);
           const textureSize = patternTexture.size;
           const sampleSize = Array.isArray(style['stroke-pattern-size'])
             ? style['stroke-pattern-size']
@@ -622,20 +1040,18 @@ class VectorStyleRenderer {
     const polyBatch = geometryBatch.polygonBatch;
     const polyEntries = Object.values(polyBatch.entries);
 
-    const polyStyleRule = rules.find(
-      (r) => r.style && typeof r.style['fill-color'] === 'string',
-    );
+    const polyStyleRule = rules.find((r) => {
+      const s = r.style;
+      return (
+        s &&
+        (typeof s['fill-color'] === 'string' ||
+          typeof s['fill-pattern-src'] === 'string')
+      );
+    });
     if (!polyStyleRule) {
       // No literal fill style: don't render polygons (prevents wrong default fills).
       return {
-        pointBuffers: pointBuffer
-          ? [
-              {
-                vertex: pointBuffer,
-                style: pointStyleBuffer,
-              },
-            ]
-          : [],
+        pointBuffers,
         lineStringBuffers,
         polygonBuffers: [],
       };
@@ -647,9 +1063,13 @@ class VectorStyleRenderer {
     const polyVertices = []; // [x, y, featureIndex, x, y, featureIndex]
     const polyStyleDataArray = []; // [r, g, b, a, ...]
 
-    // Resolve Poly Color
-    let polyColor = [0, 0, 1, 1]; // Default Blue
-    const colorStr = polyStyleRule.style['fill-color'];
+    const polyStyle = polyStyleRule.style;
+    const fillPatternSrc = polyStyle['fill-pattern-src'];
+    const hasFillPattern = typeof fillPatternSrc === 'string';
+
+    // Resolve Poly Color (used as tint for patterns when fill-color is provided)
+    let polyColor = hasFillPattern ? [1, 1, 1, 1] : [0, 0, 1, 1];
+    const colorStr = polyStyle['fill-color'];
     if (colorStr) {
       try {
         const c = asArray(colorStr);
@@ -657,6 +1077,39 @@ class VectorStyleRenderer {
       } catch {
         // Ignore
       }
+    }
+
+    /** @type {StrokePatternTexture|undefined} */
+    let fillPatternTexture;
+    /** @type {import("./WGSLBuilder.js").FillPatternShaderOptions|undefined} */
+    let fillPatternOptions;
+    if (hasFillPattern) {
+      fillPatternTexture = await this.getPatternTexture_(fillPatternSrc);
+      const textureSize = fillPatternTexture.size;
+      const sampleSize = Array.isArray(polyStyle['fill-pattern-size'])
+        ? polyStyle['fill-pattern-size']
+        : textureSize;
+      const baseOffset = Array.isArray(polyStyle['fill-pattern-offset'])
+        ? polyStyle['fill-pattern-offset']
+        : [0, 0];
+      const origin = polyStyle['fill-pattern-offset-origin'] || 'top-left';
+      let offsetX = baseOffset[0] || 0;
+      let offsetY = baseOffset[1] || 0;
+      if (origin === 'top-right') {
+        offsetX = textureSize[0] - sampleSize[0] - offsetX;
+      } else if (origin === 'bottom-left') {
+        offsetY = textureSize[1] - sampleSize[1] - offsetY;
+      } else if (origin === 'bottom-right') {
+        offsetX = textureSize[0] - sampleSize[0] - offsetX;
+        offsetY = textureSize[1] - sampleSize[1] - offsetY;
+      }
+
+      fillPatternOptions = {
+        textureSize: `vec2f(${textureSize[0]}, ${textureSize[1]})`,
+        textureOffset: `vec2f(${offsetX}, ${offsetY})`,
+        sampleSize: `vec2f(${sampleSize[0]}, ${sampleSize[1]})`,
+        tint: 'input.color',
+      };
     }
 
     const POLY_STRIDE = 2; // MixedGeometryBatch usually 2 unless M/Z
@@ -738,22 +1191,21 @@ class VectorStyleRenderer {
       polyStyleBuffer.getBuffer().unmap();
     }
 
-    // TODO: We should return binding info too
     return {
-      pointBuffers: pointBuffer
-        ? [
-            {
-              vertex: pointBuffer,
-              style: pointStyleBuffer,
-            },
-          ]
-        : [],
+      pointBuffers,
       lineStringBuffers,
+      /** @type {Array<PolygonBufferSet>} */
       polygonBuffers: polyBuffer
         ? [
             {
               vertex: polyBuffer,
               style: polyStyleBuffer,
+              fillShader: hasFillPattern
+                ? this.styleShaders_[0].builder.getFillShader({
+                    pattern: fillPatternOptions,
+                  })
+                : undefined,
+              pattern: fillPatternTexture,
             },
           ]
         : [],
@@ -783,6 +1235,7 @@ class VectorStyleRenderer {
     const pixelRatio = frameState.pixelRatio;
     const rotation = frameState.viewState.rotation;
     const resolution = frameState.viewState.resolution;
+    const zoom = frameState.viewState.zoom;
     const center = frameState.viewState.center;
 
     // 1. World -> Pixel
@@ -808,7 +1261,7 @@ class VectorStyleRenderer {
     // 5. Update Uniform Buffer (re-done inside render to include resolution)
     if (!this.uniformBuffer_) {
       this.uniformBuffer_ = device.createBuffer({
-        size: 80, // mat4x4<f32> (64) + f32 (4) + padding
+        size: 96, // mat4x4<f32> (64) + remaining uniforms (32)
         usage: 0x0040 | 0x0008, // UNIFORM | COPY_DST
       });
     }
@@ -818,12 +1271,13 @@ class VectorStyleRenderer {
 
     const format = navigator.gpu.getPreferredCanvasFormat();
 
+    const isFirstPass = this.helper_.isFirstPass(frameState.index);
     const renderPassDescriptor = {
       colorAttachments: [
         {
           view: textureView,
           clearValue: {r: 0.0, g: 0.0, b: 0.0, a: 0.0},
-          loadOp: 'clear',
+          loadOp: isFirstPass ? 'clear' : 'load',
           storeOp: 'store',
         },
       ],
@@ -831,7 +1285,7 @@ class VectorStyleRenderer {
 
     // Update Uniform Buffer with resolution
     if (this.uniformBuffer_) {
-      const uniformData = new Float32Array(20); // 80 bytes (64 mat + 4 res + padding)
+      const uniformData = new Float32Array(24); // 96 bytes
       const mat4Data = createMat4();
       mat4FromTransform(mat4Data, clipTransform);
       uniformData.set(mat4Data);
@@ -839,6 +1293,10 @@ class VectorStyleRenderer {
       uniformData[17] = pixelRatio;
       uniformData[18] = width;
       uniformData[19] = height;
+      uniformData[20] = rotation;
+      uniformData[21] = zoom;
+      uniformData[22] = 0;
+      uniformData[23] = 0;
       device.queue.writeBuffer(this.uniformBuffer_, 0, uniformData);
     }
 
@@ -852,7 +1310,9 @@ class VectorStyleRenderer {
         const count = vertexBuffer.size / 12;
 
         const shaderModule = device.createShaderModule({
-          code: this.styleShaders_[0].builder.getFillVertexShader(),
+          code:
+            bufferSet.fillShader ||
+            this.styleShaders_[0].builder.getFillShader(),
         });
 
         const pipeline = device.createRenderPipeline({
@@ -886,7 +1346,7 @@ class VectorStyleRenderer {
                 format,
                 blend: {
                   color: {
-                    srcFactor: 'src-alpha',
+                    srcFactor: 'one',
                     dstFactor: 'one-minus-src-alpha',
                     operation: 'add',
                   },
@@ -919,6 +1379,18 @@ class VectorStyleRenderer {
                 buffer: this.uniformBuffer_,
               },
             },
+            ...(bufferSet.pattern
+              ? [
+                  {
+                    binding: 2,
+                    resource: bufferSet.pattern.sampler,
+                  },
+                  {
+                    binding: 3,
+                    resource: bufferSet.pattern.view,
+                  },
+                ]
+              : []),
           ],
         });
 
@@ -1011,7 +1483,7 @@ class VectorStyleRenderer {
                   format,
                   blend: {
                     color: {
-                      srcFactor: 'src-alpha',
+                      srcFactor: 'one',
                       dstFactor: 'one-minus-src-alpha',
                       operation: 'add',
                     },
@@ -1073,10 +1545,12 @@ class VectorStyleRenderer {
       for (const bufferSet of buffers.pointBuffers) {
         const vertexBuffer = bufferSet.vertex.getBuffer();
         const styleBuffer = bufferSet.style.getBuffer();
-        const count = vertexBuffer.size / 12;
+        const instanceCount = vertexBuffer.size / 12;
 
         const shaderModule = device.createShaderModule({
-          code: this.styleShaders_[0].builder.getFillVertexShader(),
+          code:
+            bufferSet.symbolShader ||
+            this.styleShaders_[0].builder.getCircleSymbolShader(),
         });
 
         const pipeline = device.createRenderPipeline({
@@ -1087,6 +1561,7 @@ class VectorStyleRenderer {
             buffers: [
               {
                 arrayStride: 12,
+                stepMode: 'instance',
                 attributes: [
                   {
                     shaderLocation: 0,
@@ -1110,7 +1585,7 @@ class VectorStyleRenderer {
                 format,
                 blend: {
                   color: {
-                    srcFactor: 'src-alpha',
+                    srcFactor: 'one',
                     dstFactor: 'one-minus-src-alpha',
                     operation: 'add',
                   },
@@ -1124,7 +1599,7 @@ class VectorStyleRenderer {
             ],
           },
           primitive: {
-            topology: 'point-list',
+            topology: 'triangle-strip',
           },
         });
 
@@ -1143,13 +1618,25 @@ class VectorStyleRenderer {
                 buffer: this.uniformBuffer_,
               },
             },
+            ...(bufferSet.pattern
+              ? [
+                  {
+                    binding: 2,
+                    resource: bufferSet.pattern.sampler,
+                  },
+                  {
+                    binding: 3,
+                    resource: bufferSet.pattern.view,
+                  },
+                ]
+              : []),
           ],
         });
 
         passEncoder.setPipeline(pipeline);
         passEncoder.setBindGroup(0, bindGroup);
         passEncoder.setVertexBuffer(0, vertexBuffer);
-        passEncoder.draw(count);
+        passEncoder.draw(4, instanceCount);
       }
     }
 

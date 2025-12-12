@@ -7,6 +7,14 @@ import Disposable from '../Disposable.js';
  * @typedef {Object} CanvasCacheItem
  * @property {GPUCanvasContext} context The context of this canvas.
  * @property {number} users The count of users of this canvas.
+ * @property {number} lastFrameIndex The last rendered frame index.
+ * @property {GPUDevice|null} device The shared device (per canvas).
+ * @property {GPUAdapter|null} adapter The shared adapter (per canvas).
+ * @property {Promise<void>|null} readyPromise Device init promise.
+ * @property {number} configuredFrameIndex The last frame index used to configure the context.
+ * @property {number} configuredWidth The last configured canvas width.
+ * @property {number} configuredHeight The last configured canvas height.
+ * @property {number} configuredPixelRatio The last configured pixel ratio.
  */
 
 /**
@@ -35,23 +43,32 @@ function getUniqueCanvasCacheKey() {
 
 /**
  * @param {string} key The cache key for the canvas.
- * @return {GPUCanvasContext} The canvas.
+ * @return {CanvasCacheItem} The cache item.
  */
-function getOrCreateContext(key) {
+function getOrCreateCanvasCacheItem(key) {
   let cacheItem = canvasCache[key];
   if (!cacheItem) {
     const canvas = document.createElement('canvas');
     canvas.style.position = 'absolute';
     canvas.style.left = '0';
-    canvas.style.top = '0';
-    canvas.style.display = 'block';
     const context = canvas.getContext('webgpu');
-    cacheItem = {users: 0, context};
+    cacheItem = {
+      users: 0,
+      context,
+      lastFrameIndex: -1,
+      device: null,
+      adapter: null,
+      readyPromise: null,
+      configuredFrameIndex: -1,
+      configuredWidth: 0,
+      configuredHeight: 0,
+      configuredPixelRatio: 0,
+    };
     canvasCache[key] = cacheItem;
   }
 
   cacheItem.users += 1;
-  return cacheItem.context;
+  return cacheItem;
 }
 
 /**
@@ -66,6 +83,10 @@ function releaseCanvas(key) {
   cacheItem.users -= 1;
   if (cacheItem.users > 0) {
     return;
+  }
+
+  if (cacheItem.device) {
+    cacheItem.device.destroy();
   }
 
   // WebGPU doesn't have a direct "loseContext" extension equivalent that is standard/required here,
@@ -136,7 +157,13 @@ class WebGPUHelper extends Disposable {
      * @private
      * @type {GPUCanvasContext}
      */
-    this.context_ = getOrCreateContext(this.canvasCacheKey_);
+    this.cacheItem_ = getOrCreateCanvasCacheItem(this.canvasCacheKey_);
+
+    /**
+     * @private
+     * @type {GPUCanvasContext}
+     */
+    this.context_ = this.cacheItem_.context;
 
     /**
      * @private
@@ -162,16 +189,31 @@ class WebGPUHelper extends Disposable {
    * @return {Promise<void>} Promise that resolves when the device is ready.
    */
   async init_() {
-    if (!navigator.gpu) {
-      throw new Error('WebGPU not supported');
+    if (this.cacheItem_.readyPromise) {
+      await this.cacheItem_.readyPromise;
+      this.device_ = this.cacheItem_.device;
+      this.adapter_ = this.cacheItem_.adapter;
+      return;
     }
 
-    this.adapter_ = await navigator.gpu.requestAdapter();
-    if (!this.adapter_) {
-      throw new Error('No WebGPU adapter found');
-    }
+    this.cacheItem_.readyPromise = (async () => {
+      if (!navigator.gpu) {
+        throw new Error('WebGPU not supported');
+      }
 
-    this.device_ = await this.adapter_.requestDevice();
+      const adapter = await navigator.gpu.requestAdapter();
+      if (!adapter) {
+        throw new Error('No WebGPU adapter found');
+      }
+
+      const device = await adapter.requestDevice();
+      this.cacheItem_.adapter = adapter;
+      this.cacheItem_.device = device;
+    })();
+
+    await this.cacheItem_.readyPromise;
+    this.device_ = this.cacheItem_.device;
+    this.adapter_ = this.cacheItem_.adapter;
   }
 
   /**
@@ -210,6 +252,58 @@ class WebGPUHelper extends Disposable {
   }
 
   /**
+   * Returns true if this is the first WebGPU render pass for the given frame.
+   * This is used to decide whether the shared canvas should be cleared or loaded.
+   * @param {number} frameIndex Frame index.
+   * @return {boolean} Whether this is the first pass.
+   */
+  isFirstPass(frameIndex) {
+    const cacheItem = canvasCache[this.canvasCacheKey_];
+    if (!cacheItem) {
+      return true;
+    }
+    if (cacheItem.lastFrameIndex !== frameIndex) {
+      cacheItem.lastFrameIndex = frameIndex;
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Configures the canvas context once per frame for shared canvases.
+   * This avoids resetting the swap chain multiple times when several WebGPU layers
+   * share the same canvas.
+   * @param {number} frameIndex Frame index.
+   * @param {number} width Width.
+   * @param {number} height Height.
+   * @param {number} [pixelRatio] Pixel ratio.
+   */
+  configureContextForFrame(frameIndex, width, height, pixelRatio) {
+    const cacheItem = canvasCache[this.canvasCacheKey_];
+    if (!cacheItem) {
+      this.configureContext(width, height, pixelRatio);
+      return;
+    }
+
+    const dpr = pixelRatio || window.devicePixelRatio || 1;
+    const alreadyConfigured =
+      cacheItem.configuredFrameIndex === frameIndex &&
+      cacheItem.configuredWidth === width &&
+      cacheItem.configuredHeight === height &&
+      cacheItem.configuredPixelRatio === dpr;
+
+    if (alreadyConfigured) {
+      return;
+    }
+
+    cacheItem.configuredFrameIndex = frameIndex;
+    cacheItem.configuredWidth = width;
+    cacheItem.configuredHeight = height;
+    cacheItem.configuredPixelRatio = dpr;
+    this.configureContext(width, height, dpr);
+  }
+
+  /**
    * Configures the canvas context.
    * @param {number} width Width.
    * @param {number} height Height.
@@ -242,9 +336,6 @@ class WebGPUHelper extends Disposable {
    * @override
    */
   disposeInternal() {
-    if (this.device_) {
-      this.device_.destroy();
-    }
     releaseCanvas(this.canvasCacheKey_);
     super.disposeInternal();
   }
