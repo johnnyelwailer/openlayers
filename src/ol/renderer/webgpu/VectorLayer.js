@@ -9,11 +9,23 @@ import WebGPULayerRenderer from './Layer.js';
 /**
  * @classdesc
  * WebGPU vector renderer.
- * @extends {WebGPULayerRenderer<import("../../layer/Vector.js").default>}
+ * @extends {WebGPULayerRenderer<import("../../layer/Layer.js").default>}
+ */
+import {listen, unlistenByKey} from '../../events.js';
+import {getTransformFromProjections, getUserProjection, toUserExtent, toUserResolution} from '../../proj.js';
+import VectorEventType from '../../source/VectorEventType.js';
+import ViewHint from '../../ViewHint.js';
+import {buffer, createEmpty, equals} from '../../extent.js';
+import BaseVector from '../../layer/BaseVector.js';
+
+/**
+ * @classdesc
+ * WebGPU vector renderer.
+ * @extends {WebGPULayerRenderer<import("../../layer/Layer.js").default>}
  */
 class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
   /**
-   * @param {import("../../layer/Vector.js").default} layer Layer.
+   * @param {import("../../layer/Layer.js").default} layer Layer.
    * @param {Object} options Options.
    */
   constructor(layer, options) {
@@ -35,17 +47,42 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
      * @private
      * @type {Object}
      */
-    this.styles_ = options.style;
+    this.styles_ = Array.isArray(options.style)
+      ? options.style
+      : [options.style];
 
     /**
      * @private
      * @type {Object}
      */
     this.currentBuffers_ = null;
+
+    /**
+     * @private
+     * @type {boolean}
+     */
+    this.initialFeaturesAdded_ = false;
+
+    /**
+     * @private
+     * @type {Array<import("../../events.js").EventsKey|null>}
+     */
+    this.sourceListenKeys_ = null;
+    
+    /**
+     * @private
+     */
+    this.sourceRevision_ = -1;
+
+    /**
+     * @private
+     */
+    this.previousExtent_ = createEmpty();
   }
 
   /**
    * @inheritDoc
+   * @override
    */
   afterHelperCreated() {
     this.styleRenderer_ = new VectorStyleRenderer(
@@ -56,51 +93,177 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
   }
 
   /**
+   * @private
+   * @param {import("../../Map.js").FrameState} frameState Frame state.
+   */
+  addInitialFeatures_(frameState) {
+    const source = this.getLayer().getSource();
+    const userProjection = getUserProjection();
+    let projectionTransform;
+    if (userProjection) {
+      projectionTransform = getTransformFromProjections(
+        userProjection,
+        frameState.viewState.projection,
+      );
+    }
+    this.batch_.addFeatures(source.getFeatures(), projectionTransform);
+    this.sourceListenKeys_ = [
+      listen(
+        source,
+        VectorEventType.ADDFEATURE,
+        this.handleSourceFeatureAdded_.bind(this, projectionTransform),
+      ),
+      listen(
+        source,
+        VectorEventType.CHANGEFEATURE,
+        this.handleSourceFeatureChanged_.bind(this, projectionTransform),
+        this,
+      ),
+      listen(
+        source,
+        VectorEventType.REMOVEFEATURE,
+        this.handleSourceFeatureDelete_,
+        this,
+      ),
+      listen(
+        source,
+        VectorEventType.CLEAR,
+        this.handleSourceFeatureClear_,
+        this,
+      ),
+    ];
+  }
+
+  /**
+   * @param {import("../../proj.js").TransformFunction} projectionTransform Transform function.
+   * @param {import("../../source/Vector.js").VectorSourceEvent} event Event.
+   * @private
+   */
+  handleSourceFeatureAdded_(projectionTransform, event) {
+    const feature = event.feature;
+    this.batch_.addFeature(feature, projectionTransform);
+  }
+
+  /**
+   * @param {import("../../proj.js").TransformFunction} projectionTransform Transform function.
+   * @param {import("../../source/Vector.js").VectorSourceEvent} event Event.
+   * @private
+   */
+  handleSourceFeatureChanged_(projectionTransform, event) {
+    const feature = event.feature;
+    this.batch_.changeFeature(feature, projectionTransform);
+  }
+
+  /**
+   * @param {import("../../source/Vector.js").VectorSourceEvent} event Event.
+   * @private
+   */
+  handleSourceFeatureDelete_(event) {
+    const feature = event.feature;
+    this.batch_.removeFeature(feature);
+  }
+
+  /**
+   * @private
+   */
+  handleSourceFeatureClear_() {
+    this.batch_.clear();
+  }
+
+  /**
    * @inheritDoc
+   * @override
    */
   prepareFrameInternal(frameState) {
     if (!this.styleRenderer_) {
       return false;
     }
-    // TODO: Load features from source and update batch
-    // For now, we assume batch is populated or empty
 
-    // Trigger buffer generation
-    // In real implementation, we would check for changes
-    const transform = createTransform(); // Placeholder transform
+    if (!this.initialFeaturesAdded_) {
+      this.addInitialFeatures_(frameState);
+      this.initialFeaturesAdded_ = true;
+    }
 
-    // Optimization: Don't regenerate if not needed (TODO)
-    this.styleRenderer_
-      .generateBuffers(this.batch_, transform)
-      .then((buffers) => {
-        this.currentBuffers_ = buffers;
-        // Trigger re-render if needed? Only if frame is still valid?
-        // For now, simple storage.
-      });
+    const layer = this.getLayer();
+    const vectorSource = layer.getSource();
+    const viewState = frameState.viewState;
+    const viewNotMoving =
+      !frameState.viewHints[ViewHint.ANIMATING] &&
+      !frameState.viewHints[ViewHint.INTERACTING];
+    const extentChanged = !equals(this.previousExtent_, frameState.extent);
+    const sourceChanged = this.sourceRevision_ < vectorSource.getRevision();
+
+    if (sourceChanged) {
+      this.sourceRevision_ = vectorSource.getRevision();
+    }
+
+    if (viewNotMoving && (extentChanged || sourceChanged)) {
+      const projection = viewState.projection;
+      const resolution = viewState.resolution;
+
+      const renderBuffer =
+        layer instanceof BaseVector ? layer.getRenderBuffer() : 0;
+      const extent = buffer(frameState.extent, renderBuffer * resolution);
+
+      const userProjection = getUserProjection();
+      if (userProjection) {
+        vectorSource.loadFeatures(
+          toUserExtent(extent, userProjection),
+          toUserResolution(resolution, projection),
+          userProjection,
+        );
+      } else {
+        vectorSource.loadFeatures(extent, resolution, projection);
+      }
+      
+      this.ready = false;
+      const transform = createTransform(); // Placeholder, logic moves to shader mainly, or batch transform.
+      
+      this.styleRenderer_
+        .generateBuffers(this.batch_, transform)
+        .then((buffers) => {
+          this.currentBuffers_ = buffers;
+          this.ready = true;
+          this.getLayer().changed();
+        });
+
+      this.previousExtent_ = frameState.extent.slice();
+    }
 
     return true;
   }
 
   /**
    * @inheritDoc
+   * @override
    */
   renderFrame(frameState) {
-    if (!this.styleRenderer_) {
-      return;
+    if (!this.helper || !this.styleRenderer_) {
+      return null;
     }
 
     const size = frameState.size;
     this.helper.configureContext(size[0], size[1]);
 
-    // In a real implementation we would have logic to determine if buffers need regeneration
-    // For this prototype, we'll assume they are ready or generated in prepareFrame
-    // But since generateBuffers is async, we need to handle that.
-    // For now, let's assume prepareFrame has triggered it and we have access to buffers.
-    // We need to store buffers in the class.
-
     if (this.currentBuffers_) {
       this.styleRenderer_.render(this.currentBuffers_, frameState);
     }
+
+    return this.helper.getCanvas();
+  }
+  
+  /**
+   * Clean up.
+   * @override
+   */
+  disposeInternal() {
+    if (this.sourceListenKeys_) {
+      this.sourceListenKeys_.forEach(function (key) {
+        unlistenByKey(key);
+      });
+      this.sourceListenKeys_ = null;
+    }
+    super.disposeInternal();
   }
 }
 

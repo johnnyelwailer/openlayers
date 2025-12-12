@@ -396,8 +396,9 @@ if (esMain(import.meta)) {
             '--no-sandbox',
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
+            '--enable-unsafe-webgpu',
           ]
-        : [],
+        : ['--enable-unsafe-webgpu'],
     })
     .parse();
 

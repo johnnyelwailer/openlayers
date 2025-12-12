@@ -5,6 +5,17 @@ import earcut from 'earcut';
 import {asArray} from '../../color.js';
 import WebGPUBuffer from '../../webgpu/Buffer.js';
 import {WGSLBuilder} from './WGSLBuilder.js';
+import {
+  create as createTransform,
+  scale as scaleTransform,
+  translate as translateTransform,
+  rotate as rotateTransform,
+  multiply as multiplyTransform,
+} from '../../transform.js';
+import {
+  create as createMat4,
+  fromTransform as mat4FromTransform,
+} from '../../vec/mat4.js';
 
 /**
  * @typedef {Object} StyleShaders
@@ -108,25 +119,30 @@ class VectorStyleRenderer {
     // In my replacement: I must use pointData!
     // I will fix 'data' to 'pointData' in the loop below.
 
-    const pointBuffer = new WebGPUBuffer({
-      size: pointData.byteLength,
-      usage: 0x0020 | 0x0008, // VERTEX | COPY_DST
-      mappedAtCreation: true,
-    });
-    pointBuffer.create(this.helper_);
-    new Float32Array(pointBuffer.getBuffer().getMappedRange()).set(pointData);
-    pointBuffer.getBuffer().unmap();
+    let pointBuffer = null;
+    let pointStyleBuffer = null;
 
-    const pointStyleBuffer = new WebGPUBuffer({
-      size: pointStyleData.byteLength,
-      usage: 0x0080 | 0x0008, // STORAGE | COPY_DST
-      mappedAtCreation: true,
-    });
-    pointStyleBuffer.create(this.helper_);
-    new Float32Array(pointStyleBuffer.getBuffer().getMappedRange()).set(
-      pointStyleData,
-    );
-    pointStyleBuffer.getBuffer().unmap();
+    if (pointVertexCount > 0) {
+      pointBuffer = new WebGPUBuffer({
+        size: pointData.byteLength,
+        usage: 0x0020 | 0x0008, // VERTEX | COPY_DST
+        mappedAtCreation: true,
+      });
+      pointBuffer.create(this.helper_);
+      new Float32Array(pointBuffer.getBuffer().getMappedRange()).set(pointData);
+      pointBuffer.getBuffer().unmap();
+
+      pointStyleBuffer = new WebGPUBuffer({
+        size: pointStyleData.byteLength,
+        usage: 0x0080 | 0x0008, // STORAGE | COPY_DST
+        mappedAtCreation: true,
+      });
+      pointStyleBuffer.create(this.helper_);
+      new Float32Array(pointStyleBuffer.getBuffer().getMappedRange()).set(
+        pointStyleData,
+      );
+      pointStyleBuffer.getBuffer().unmap();
+    }
 
     // --- 2. Generate LineString Buffers ---
     const lineBatch = geometryBatch.lineStringBatch;
@@ -232,6 +248,7 @@ class VectorStyleRenderer {
     if (this.styles_ && this.styles_[0]) {
       const style = this.styles_[0];
       const colorStr = style['fill-color'];
+      // TODO: Parse color string
       if (colorStr) {
         try {
           const c = asArray(colorStr);
@@ -323,12 +340,14 @@ class VectorStyleRenderer {
 
     // TODO: We should return binding info too
     return {
-      pointBuffers: [
-        {
-          vertex: pointBuffer,
-          style: pointStyleBuffer,
-        },
-      ],
+      pointBuffers: pointBuffer
+        ? [
+            {
+              vertex: pointBuffer,
+              style: pointStyleBuffer,
+            },
+          ]
+        : [],
       lineStringBuffers: lineBuffer
         ? [
             {
@@ -352,6 +371,10 @@ class VectorStyleRenderer {
    * @param {Object} buffers Buffers.
    * @param {import("../../Map.js").FrameState} frameState Frame state.
    */
+  /**
+   * @param {Object} buffers Buffers.
+   * @param {import("../../Map.js").FrameState} frameState Frame state.
+   */
   render(buffers, frameState) {
     const device = this.helper_.getDevice();
     const context = this.helper_.getContext();
@@ -360,12 +383,65 @@ class VectorStyleRenderer {
       return;
     }
 
-    // Render Points
-    if (buffers.pointBuffers) {
-      for (const bufferSet of buffers.pointBuffers) {
+    // --- Uniforms Calculation (World -> Clip) ---
+    const size = frameState.size;
+    const width = size[0];
+    const height = size[1];
+    const rotation = frameState.viewState.rotation;
+    const resolution = frameState.viewState.resolution;
+    const center = frameState.viewState.center;
+
+    // 1. World -> Pixel
+    const renderTransform = createTransform();
+    translateTransform(renderTransform, width / 2, height / 2);
+    scaleTransform(renderTransform, 1 / resolution, -1 / resolution);
+    rotateTransform(renderTransform, -rotation);
+    translateTransform(renderTransform, -center[0], -center[1]);
+
+    // 2. Pixel -> Clip
+    // Scale (2/w, -2/h), Translate (-1, 1)
+    const clipTransform = createTransform();
+    translateTransform(clipTransform, -1, 1);
+    scaleTransform(clipTransform, 2 / width, -2 / height);
+
+    // 3. Combine: Clip * Render
+    multiplyTransform(clipTransform, renderTransform);
+
+    // 4. Convert to mat4
+    const mat4Data = createMat4();
+    mat4FromTransform(mat4Data, clipTransform);
+
+    // 5. Update Uniform Buffer
+    if (!this.uniformBuffer_) {
+      this.uniformBuffer_ = device.createBuffer({
+        size: 64, // mat4x4<f32>
+        usage: 0x0040 | 0x0008, // UNIFORM | COPY_DST
+      });
+    }
+    device.queue.writeBuffer(this.uniformBuffer_, 0, new Float32Array(mat4Data));
+
+    const commandEncoder = device.createCommandEncoder();
+    const textureView = context.getCurrentTexture().createView();
+
+    const renderPassDescriptor = {
+      colorAttachments: [
+        {
+          view: textureView,
+          clearValue: {r: 0.0, g: 0.0, b: 0.0, a: 0.0},
+          loadOp: 'clear',
+          storeOp: 'store',
+        },
+      ],
+    };
+
+    const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
+
+    // 1. Render Polygons (Draw first to be underneath)
+    if (buffers.polygonBuffers) {
+      for (const bufferSet of buffers.polygonBuffers) {
         const vertexBuffer = bufferSet.vertex.getBuffer();
         const styleBuffer = bufferSet.style.getBuffer();
-        const count = vertexBuffer.size / 12; // 3 floats * 4 bytes = 12 bytes per vertex
+        const count = vertexBuffer.size / 12;
 
         const shaderModule = device.createShaderModule({
           code: this.styleShaders_[0].builder.getFillVertexShader(),
@@ -378,7 +454,7 @@ class VectorStyleRenderer {
             entryPoint: 'vs_main',
             buffers: [
               {
-                arrayStride: 12, // 3 floats (x, y, featureIndex)
+                arrayStride: 12, // 3 floats
                 attributes: [
                   {
                     shaderLocation: 0,
@@ -388,7 +464,7 @@ class VectorStyleRenderer {
                   {
                     shaderLocation: 1,
                     offset: 8,
-                    format: 'float32', // featureIndex (as float for now)
+                    format: 'float32', // featureIndex
                   },
                 ],
               },
@@ -400,11 +476,23 @@ class VectorStyleRenderer {
             targets: [
               {
                 format: navigator.gpu.getPreferredCanvasFormat(),
+                blend: {
+                  color: {
+                    srcFactor: 'src-alpha',
+                    dstFactor: 'one-minus-src-alpha',
+                    operation: 'add',
+                  },
+                  alpha: {
+                    srcFactor: 'one',
+                    dstFactor: 'one-minus-src-alpha',
+                    operation: 'add',
+                  },
+                },
               },
             ],
           },
           primitive: {
-            topology: 'point-list',
+            topology: 'triangle-list',
           },
         });
 
@@ -417,36 +505,23 @@ class VectorStyleRenderer {
                 buffer: styleBuffer,
               },
             },
+            {
+              binding: 1,
+              resource: {
+                buffer: this.uniformBuffer_,
+              },
+            },
           ],
         });
 
-        const commandEncoder = device.createCommandEncoder();
-        const textureView = context.getCurrentTexture().createView();
-
-        const renderPassDescriptor = {
-          colorAttachments: [
-            {
-              view: textureView,
-              clearValue: {r: 0.0, g: 0.0, b: 0.0, a: 0.0},
-              loadOp: 'clear',
-              storeOp: 'store',
-            },
-          ],
-        };
-
-        const passEncoder =
-          commandEncoder.beginRenderPass(renderPassDescriptor);
         passEncoder.setPipeline(pipeline);
         passEncoder.setBindGroup(0, bindGroup);
         passEncoder.setVertexBuffer(0, vertexBuffer);
         passEncoder.draw(count);
-        passEncoder.end();
-
-        device.queue.submit([commandEncoder.finish()]);
       }
     }
 
-    // Render Lines
+    // 2. Render Lines
     if (buffers.lineStringBuffers) {
       for (const bufferSet of buffers.lineStringBuffers) {
         const vertexBuffer = bufferSet.vertex.getBuffer();
@@ -464,17 +539,17 @@ class VectorStyleRenderer {
             entryPoint: 'vs_main',
             buffers: [
               {
-                arrayStride: 12, // 3 floats
+                arrayStride: 12,
                 attributes: [
                   {
                     shaderLocation: 0,
                     offset: 0,
-                    format: 'float32x2', // position
+                    format: 'float32x2',
                   },
                   {
                     shaderLocation: 1,
                     offset: 8,
-                    format: 'float32', // featureIndex
+                    format: 'float32',
                   },
                 ],
               },
@@ -482,10 +557,22 @@ class VectorStyleRenderer {
           },
           fragment: {
             module: shaderModule,
-            entryPoint: 'fs_main', // stroke fragment
+            entryPoint: 'fs_main',
             targets: [
               {
                 format: navigator.gpu.getPreferredCanvasFormat(),
+                blend: {
+                  color: {
+                    srcFactor: 'src-alpha',
+                    dstFactor: 'one-minus-src-alpha',
+                    operation: 'add',
+                  },
+                  alpha: {
+                    srcFactor: 'one',
+                    dstFactor: 'one-minus-src-alpha',
+                    operation: 'add',
+                  },
+                },
               },
             ],
           },
@@ -503,44 +590,31 @@ class VectorStyleRenderer {
                 buffer: styleBuffer,
               },
             },
+            {
+              binding: 1,
+              resource: {
+                buffer: this.uniformBuffer_,
+              },
+            },
           ],
         });
 
-        const commandEncoder = device.createCommandEncoder();
-
-        const textureView = context.getCurrentTexture().createView();
-
-        const renderPassDescriptor = {
-          colorAttachments: [
-            {
-              view: textureView,
-              loadOp: 'load',
-              storeOp: 'store',
-            },
-          ],
-        };
-
-        const passEncoder =
-          commandEncoder.beginRenderPass(renderPassDescriptor);
         passEncoder.setPipeline(pipeline);
         passEncoder.setBindGroup(0, bindGroup);
         passEncoder.setVertexBuffer(0, vertexBuffer);
         passEncoder.draw(count);
-        passEncoder.end();
-
-        device.queue.submit([commandEncoder.finish()]);
       }
     }
 
-    // Render Polygons
-    if (buffers.polygonBuffers) {
-      for (const bufferSet of buffers.polygonBuffers) {
+    // 3. Render Points (Draw last to be on top)
+    if (buffers.pointBuffers) {
+      for (const bufferSet of buffers.pointBuffers) {
         const vertexBuffer = bufferSet.vertex.getBuffer();
         const styleBuffer = bufferSet.style.getBuffer();
         const count = vertexBuffer.size / 12;
 
         const shaderModule = device.createShaderModule({
-          code: this.styleShaders_[0].builder.getFillVertexShader(), // Use fill shader
+          code: this.styleShaders_[0].builder.getFillVertexShader(),
         });
 
         const pipeline = device.createRenderPipeline({
@@ -550,17 +624,17 @@ class VectorStyleRenderer {
             entryPoint: 'vs_main',
             buffers: [
               {
-                arrayStride: 12, // 3 floats
+                arrayStride: 12,
                 attributes: [
                   {
                     shaderLocation: 0,
                     offset: 0,
-                    format: 'float32x2', // position
+                    format: 'float32x2',
                   },
                   {
                     shaderLocation: 1,
                     offset: 8,
-                    format: 'float32', // featureIndex
+                    format: 'float32',
                   },
                 ],
               },
@@ -572,11 +646,23 @@ class VectorStyleRenderer {
             targets: [
               {
                 format: navigator.gpu.getPreferredCanvasFormat(),
+                blend: {
+                  color: {
+                    srcFactor: 'src-alpha',
+                    dstFactor: 'one-minus-src-alpha',
+                    operation: 'add',
+                  },
+                  alpha: {
+                    srcFactor: 'one',
+                    dstFactor: 'one-minus-src-alpha',
+                    operation: 'add',
+                  },
+                },
               },
             ],
           },
           primitive: {
-            topology: 'triangle-list', // Polygons
+            topology: 'point-list',
           },
         });
 
@@ -589,33 +675,24 @@ class VectorStyleRenderer {
                 buffer: styleBuffer,
               },
             },
+            {
+              binding: 1,
+              resource: {
+                buffer: this.uniformBuffer_,
+              },
+            },
           ],
         });
 
-        const commandEncoder = device.createCommandEncoder();
-        const textureView = context.getCurrentTexture().createView();
-
-        const renderPassDescriptor = {
-          colorAttachments: [
-            {
-              view: textureView,
-              loadOp: 'load',
-              storeOp: 'store',
-            },
-          ],
-        };
-
-        const passEncoder =
-          commandEncoder.beginRenderPass(renderPassDescriptor);
         passEncoder.setPipeline(pipeline);
         passEncoder.setBindGroup(0, bindGroup);
         passEncoder.setVertexBuffer(0, vertexBuffer);
         passEncoder.draw(count);
-        passEncoder.end();
-
-        device.queue.submit([commandEncoder.finish()]);
       }
     }
+
+    passEncoder.end();
+    device.queue.submit([commandEncoder.finish()]);
   }
 }
 

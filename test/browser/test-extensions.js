@@ -60,6 +60,7 @@ setLogLevel('error');
    * @param {number} tol Tolerance.
    * @return {expect.Assertion} The assertion.
    */
+
   expect.Assertion.prototype.roughlyEqual = function (n, tol) {
     this.assert(
       Math.abs(this.obj - n) <= tol,

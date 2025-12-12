@@ -77,7 +77,12 @@ export class WGSLBuilder {
         fillColor : vec4f,
       };
 
+      struct Uniforms {
+        transform : mat4x4<f32>,
+      };
+
       @group(0) @binding(0) var<storage, read> styles : array<Style>;
+      @group(0) @binding(1) var<uniform> uniforms : Uniforms;
 
       @vertex
       fn vs_main(
@@ -85,7 +90,7 @@ export class WGSLBuilder {
         @location(1) featureIndex : f32 // WebGPU usually wants f32 for attributes unless specified as uint/sint format
       ) -> VertexOutput {
         var output : VertexOutput;
-        output.position = vec4f(position, 0.0, 1.0);
+        output.position = uniforms.transform * vec4f(position, 0.5, 1.0);
         
         let index = u32(featureIndex);
         let style = styles[index];
@@ -117,19 +122,25 @@ export class WGSLBuilder {
     return this.getShader();
   }
 
-  getStrokeVertexShader() {
-      return `
+  getStrokeShader() {
+    return `
       struct VertexOutput {
         @builtin(position) position : vec4f,
         @location(0) color : vec4f,
       };
 
       struct Style {
-        fillColor : vec4f, // Using same struct for now, assuming index 0 aligns
         // TODO: distinct structs for fill vs stroke
+        // For now, assuming standard color at location 0
+        color : vec4f, 
+      };
+
+      struct Uniforms {
+        transform : mat4x4<f32>,
       };
 
       @group(0) @binding(0) var<storage, read> styles : array<Style>;
+      @group(0) @binding(1) var<uniform> uniforms : Uniforms;
 
       @vertex
       fn vs_main(
@@ -137,25 +148,28 @@ export class WGSLBuilder {
         @location(1) featureIndex : f32
       ) -> VertexOutput {
         var output : VertexOutput;
-        output.position = vec4f(position, 0.0, 1.0);
+        output.position = uniforms.transform * vec4f(position, 0.5, 1.0);
         
         let index = u32(featureIndex);
         let style = styles[index];
-        output.color = vec4f(0.0, 0.0, 0.0, 1.0); // Simple black stroke for now
-        // output.color = style.strokeColor; // Needs structure update
+        output.color = style.color;
         
         return output;
+      }
+
+      @fragment
+      fn fs_main(input : VertexOutput) -> @location(0) vec4f {
+        return input.color;
       }
       `;
   }
 
+  getStrokeVertexShader() {
+    return this.getStrokeShader();
+  }
+
   getStrokeFragmentShader() {
-      return `
-      @fragment
-      fn fs_main(@location(0) color : vec4f) -> @location(0) vec4f {
-        return color;
-      }
-      `;
+    return this.getStrokeShader();
   }
 
   getSymbolVertexShader() {

@@ -38,7 +38,7 @@ describe('ol/render/webgpu/VectorStyleRenderer', function () {
               unmap: () => {},
               getBuffer: () => ({}),
               // helper for testing to access the buffer content if needed differently
-              _content: buffer
+              _content: buffer,
             };
           },
           queue: {writeBuffer: () => {}, submit: () => {}},
@@ -101,30 +101,30 @@ describe('ol/render/webgpu/VectorStyleRenderer', function () {
 
   it('generates buffers for LineString and calls render', async function () {
     const geometryBatch = {
-        pointBatch: { entries: {} },
-        lineStringBatch: {
-            entries: {
-                '1': {
-                    flatCoordss: [[0, 0, 10, 10, 20, 20]],
-                    verticesCount: 6
-                }
-            }
+      pointBatch: {entries: {}},
+      lineStringBatch: {
+        entries: {
+          '1': {
+            flatCoordss: [[0, 0, 10, 10, 20, 20]],
+            verticesCount: 6,
+          },
         },
-        polygonBatch: { entries: {} }
+      },
+      polygonBatch: {entries: {}},
     };
 
     const buffers = await renderer.generateBuffers(geometryBatch, null);
-    
+
     expect(buffers.lineStringBuffers).to.not.be.empty();
     const vBuffer = buffers.lineStringBuffers[0].vertex.getBuffer();
     // vBuffer._content is the persistent buffer we mocked
     const data = new Float32Array(vBuffer._content);
-    
+
     // Check first segment
     expect(data[0]).to.be(0);
     expect(data[1]).to.be(0);
     expect(data[2]).to.be(0); // featureIndex
-    
+
     expect(data[3]).to.be(10);
     expect(data[4]).to.be(10);
     expect(data[5]).to.be(0); // featureIndex
@@ -140,40 +140,40 @@ describe('ol/render/webgpu/VectorStyleRenderer', function () {
 
   it('generates buffers for Polygon and calls render', async function () {
     const renderer = new VectorStyleRenderer(
-        [{ 'fill-color': 'blue' }],
-        {},
-        helper
+      [{'fill-color': 'blue'}],
+      {},
+      helper,
     );
 
     const geometryBatch = {
-      pointBatch: { entries: {} },
-      lineStringBatch: { entries: {} },
-      polygonBatch: { 
-          entries: {
-              '1': {
-                  flatCoordss: [[0, 0, 10, 0, 10, 10, 0, 10, 0, 0]], // Square (closed)
-                  ringsVerticesCounts: [[5]] // 5 vertices
-              }
-          }
-       }
+      pointBatch: {entries: {}},
+      lineStringBatch: {entries: {}},
+      polygonBatch: {
+        entries: {
+          '1': {
+            flatCoordss: [[0, 0, 10, 0, 10, 10, 0, 10, 0, 0]], // Square (closed)
+            ringsVerticesCounts: [[5]], // 5 vertices
+          },
+        },
+      },
     };
 
     const buffers = await renderer.generateBuffers(geometryBatch, null);
-    
+
     expect(buffers.polygonBuffers).to.not.be.empty();
     const vBuffer = buffers.polygonBuffers[0].vertex.getBuffer();
     const data = new Float32Array(vBuffer._content);
-    
+
     // Square -> 2 triangles -> 6 vertices * 3 floats = 18 floats
     expect(data.length).to.be.greaterThan(0);
     expect(data[0]).to.be.a('number');
-    
+
     renderer.helper_.getContext = () => ({
       getCurrentTexture: () => ({
         createView: () => ({}),
       }),
     });
-    
+
     renderer.render(buffers, {});
   });
 });
