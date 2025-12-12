@@ -5,8 +5,6 @@ import {inflateEnds} from '../../geom/flat/orient.js';
 import RenderFeature from '../../render/Feature.js';
 import {getUid} from '../../util.js';
 
-console.log('[MODULE] MixedGeometryBatch.js LOADED');
-
 /**
  * @typedef {import("../../Feature.js").default} Feature
  */
@@ -143,11 +141,6 @@ class MixedGeometryBatch {
    * @param {import("../../proj.js").TransformFunction} [projectionTransform] Projection transform.
    */
   addFeature(feature, projectionTransform) {
-    if (projectionTransform) {
-      console.error(`[MixedGeometryBatch] addFeature: transforming feature ${getUid(feature)}`);
-    } else {
-      console.error(`[MixedGeometryBatch] addFeature: no transform for feature ${getUid(feature)}`);
-    }
     let geometry = feature.getGeometry();
     if (!geometry) {
       return;

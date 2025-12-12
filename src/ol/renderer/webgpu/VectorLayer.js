@@ -106,14 +106,12 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
     const source = this.getLayer().getSource();
     const features = source.getFeatures();
     const userProjection = getUserProjection();
-    console.error(`[WebGPUVectorLayer] addInitialFeatures. Count: ${features.length}. UserProj: ${userProjection ? userProjection.getCode() : 'null'}`);
     let projectionTransform;
     if (userProjection) {
       projectionTransform = getTransformFromProjections(
         userProjection,
         frameState.viewState.projection,
       );
-      console.error('WebGPUVectorLayer transform:', !!projectionTransform);
     }
     this.batch_.addFeatures(source.getFeatures(), projectionTransform);
     this.sourceListenKeys_ = [

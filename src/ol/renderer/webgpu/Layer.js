@@ -35,6 +35,18 @@ class WebGPULayerRenderer extends LayerRenderer {
      */
     this.helper;
 
+    /**
+     * @private
+     * @type {boolean}
+     */
+    this.helperReady_ = false;
+
+    /**
+     * @private
+     * @type {Promise<void>|null}
+     */
+    this.helperReadyPromise_ = null;
+
     this.onMapChanged_ = () => {
       this.removeHelper();
     };
@@ -50,6 +62,8 @@ class WebGPULayerRenderer extends LayerRenderer {
       this.helper.dispose();
       delete this.helper;
     }
+    this.helperReady_ = false;
+    this.helperReadyPromise_ = null;
   }
 
   /**
@@ -67,17 +81,21 @@ class WebGPULayerRenderer extends LayerRenderer {
         canvasCacheKey: canvasCacheKey,
       });
 
-      // Wait for device ready
-      if (this.helper.ready) {
-        this.helper
-          .ready()
-          .then(() => {
-            this.afterHelperCreated();
-          })
-          .catch((err) => {
-            // console.error('WebGPU Init Failed', err);
-          });
-      }
+      this.helperReadyPromise_ = this.helper
+        .ready()
+        .then(() => {
+          this.helperReady_ = true;
+          this.afterHelperCreated();
+          // Make sure we render again once WebGPU is ready.
+          this.getLayer().changed();
+        })
+        .catch(() => {
+          // WebGPU init errors are handled by consumers (or fallbacks).
+        });
+    }
+    if (!this.helperReady_) {
+      frameState.animate = true;
+      return true;
     }
     return this.prepareFrameInternal(frameState);
   }

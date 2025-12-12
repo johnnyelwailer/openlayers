@@ -147,13 +147,6 @@ class VectorStyleRenderer {
     // --- 2. Generate LineString Buffers ---
     const lineBatch = geometryBatch.lineStringBatch;
     const lineEntries = Object.values(lineBatch.entries);
-    const polygonEntries = Object.values(geometryBatch.polygonBatch.entries); // Added for logging
-    console.error(`[VectorStyleRenderer] GenerateBuffers. Polys: ${polygonEntries ? polygonEntries.length : 0}, Lines: ${lineEntries ? lineEntries.length : 0}, Points: ${pointEntries ? pointEntries.length : 0}`);
-    if (this.styles_ && this.styles_.length > 0) {
-       console.error('[VectorStyleRenderer] Style[0]:', JSON.stringify(this.styles_[0]));
-    } else {
-       console.error('[VectorStyleRenderer] Style empty');
-    }
 
     // stride is 3 (XYM) for lines in MixedGeometryBatch
     const LINE_STRIDE = 3; 
