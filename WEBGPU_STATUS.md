@@ -19,6 +19,10 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 *   **Stroke Patterns**: Added `stroke-pattern-src` sampling, including spacing/start-offset + sprite sub-rect offset/origin/size, with optional tint via `stroke-color`.
 *   **Rule/Expression Subset**: Implemented minimal `line-metric` and `get(limit)` support for `webgpu-line-metric` (filter discard, dynamic width/color).
 *   **Rendering Tests**: `webgpu-line`, `webgpu-line-metric`, `webgpu-line-pattern`, and `webgpu-line-zoomed-in` passing locally.
+*   **Unit Tests**: Added a small node test for the current WGSL expression subset (`test/node/ol/render/webgpu/expr.test.js`).
+*   **WGSL Expression Backend (WIP)**: Added `src/ol/expr/wgsl.js` and wired `src/ol/render/webgpu/expr.js` to use shared parsing/typing (`src/ol/expr/expression.js`) for the supported subset.
+*   **Icon Y Orientation**: Fixed `icon-src` sampling orientation for WebGPU point/icon pipeline (removes vertical flip in `webgpu-points-geographic`).
+*   **Next Debug Focus**: Remaining failures are limited to `webgpu-points` and `webgpu-points-rotation` (likely point coordinate stride / draw order vs expected).
 
 ## 2. Components Implemented
 
@@ -49,13 +53,18 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 
 | Test Case | Mismatch | Notes |
 |-----------|----------|-------|
-| `webgpu-vector` | n/a | ✅ Passing locally (recent runs). |
-| `webgpu-vector-geographic` | n/a | ✅ Passing locally. |
-| `webgpu-line` | n/a | ✅ Passing locally. |
-| `webgpu-line-metric` | n/a | ✅ Passing locally. |
-| `webgpu-line-pattern` | n/a | ✅ Passing locally. |
-| `webgpu-line-zoomed-in` | n/a | ✅ Passing locally. |
-| `webgpu-shapes` | ~2% | Still needs investigation. |
+| `webgpu-vector-geographic` | 0.0 | ✅ Passing locally. |
+| `webgpu-line` | 0.0 | ✅ Passing locally. |
+| `webgpu-line-metric` | 0.0 | ✅ Passing locally. |
+| `webgpu-line-pattern` | 0.0 | ✅ Passing locally. |
+| `webgpu-line-zoomed-in` | 0.0 | ✅ Passing locally. |
+| `webgpu-circles` | ~2.6% | ❌ Missing circle symbol rendering parity. |
+| `webgpu-icons` | 0.0 | ✅ Passing locally (after icon Y fix). |
+| `webgpu-points-geographic` | 0.0 | ✅ Passing locally (after icon Y fix). |
+| `webgpu-points` | ~7.1% | ❌ Points still differ; likely ordering/stride issues. |
+| `webgpu-points-rotation` | ~15.6% | ❌ Rotated icon case still differs; likely ordering/stride issues. |
+| `webgpu-fill-pattern` | ~37.7% | ❌ `fill-pattern-src` not implemented. |
+| `webgpu-shapes` | ~2.1% | ❌ Shape symbol rendering parity gaps. |
 
 ## 4. Open Issues
 
@@ -69,11 +78,19 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 - [x] **Pixelated/Jagged Lines**: Fixed for strokes via distance-field AA (WebGL-equivalent approach).
 - [x] **Caps/Joins Options**: Implemented and aligned with WebGL defaults.
 
+### Known Failures / Investigation
+- [ ] **`webgpu-points` / `webgpu-points-rotation` mismatch**:
+    - Symptoms: points appear “shifted” or “stacked differently”; likely a draw order mismatch (overdraw changes) and/or point coordinate layout mismatch for KML sources (XYZ vs XY).
+    - Recent change (pending verification): WebGPU point buffer generation now treats each point entry as a single point and uses only XY, to avoid misreading XYZ/XYZM flat coordinates.
+    - Next steps: re-run rendering tests for these cases and compare; if still failing, align point ordering with WebGL (iterate `pointBatch.entries` in insertion order / feature uid order consistently).
+
 ### Features (Pending)
 - [ ] **Complex Styling**: Full rule support and broader expression coverage (beyond current `webgpu-line-metric` subset).
+- [ ] **Shared Expression Compiler**: Replace `src/ol/render/webgpu/expr.js` with a WGSL backend that reuses `src/ol/expr` parsing/typing (like WebGL’s `expressionToGlsl` path).
 - [ ] **Hit Detection**: `forEachFeatureAtPixel` implementation.
-- [ ] **Texture/Icon Support**: Atlas textures for Point styles.
+- [ ] **Texture/Icon Support**: Atlas textures for icons + point styles.
 - [ ] **Fill Patterns**: `fill-pattern-src` (parity with WebGL style parsing).
+- [ ] **Symbol Rendering**: Circles/shapes parity for `webgpu-circles` / `webgpu-shapes`.
 
 ## 5. Files Modified (Debug Logging)
 The following files contain temporary debug logging that should be removed before merge:
