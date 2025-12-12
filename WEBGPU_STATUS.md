@@ -22,7 +22,9 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 *   **Unit Tests**: Added a small node test for the current WGSL expression subset (`test/node/ol/render/webgpu/expr.test.js`).
 *   **WGSL Expression Backend (WIP)**: Added `src/ol/expr/wgsl.js` and wired `src/ol/render/webgpu/expr.js` to use shared parsing/typing (`src/ol/expr/expression.js`) for the supported subset.
 *   **Icon Y Orientation**: Fixed `icon-src` sampling orientation for WebGPU point/icon pipeline (removes vertical flip in `webgpu-points-geographic`).
-*   **Next Debug Focus**: Remaining failures are limited to `webgpu-points` and `webgpu-points-rotation` (likely point coordinate stride / draw order vs expected).
+*   **KML XYZ Point Coordinates**: Fixed WebGPU point buffer generation to handle `Point` flat coords that include altitude (XYZ/XYZM) by consuming only XY per point (fixes missing points / bad ordering in `webgpu-points`).
+*   **wrapX / Multi-World Rendering**: Added a multi-world render loop (mirrors WebGL’s world rendering approach) and plumbed `worldOffsetX` through the WebGPU style renderer.
+*   **Current Focus**: Only remaining rendering-test mismatch is `webgpu-points-rotation` (very small pixel diff; visually indistinguishable so we keep baseline unchanged for now).
 
 ## 2. Components Implemented
 
@@ -58,13 +60,14 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 | `webgpu-line-metric` | 0.0 | ✅ Passing locally. |
 | `webgpu-line-pattern` | 0.0 | ✅ Passing locally. |
 | `webgpu-line-zoomed-in` | 0.0 | ✅ Passing locally. |
-| `webgpu-circles` | ~2.6% | ❌ Missing circle symbol rendering parity. |
+| `webgpu-circles` | 0.0 | ✅ Passing locally. |
 | `webgpu-icons` | 0.0 | ✅ Passing locally (after icon Y fix). |
 | `webgpu-points-geographic` | 0.0 | ✅ Passing locally (after icon Y fix). |
-| `webgpu-points` | ~7.1% | ❌ Points still differ; likely ordering/stride issues. |
-| `webgpu-points-rotation` | ~15.6% | ❌ Rotated icon case still differs; likely ordering/stride issues. |
-| `webgpu-fill-pattern` | ~37.7% | ❌ `fill-pattern-src` not implemented. |
-| `webgpu-shapes` | ~2.1% | ❌ Shape symbol rendering parity gaps. |
+| `webgpu-points` | 0.0 | ✅ Passing locally (after XYZ point coordinate handling). |
+| `webgpu-points-rotation` | 0.00984 | ❌ Slight pixel mismatch above tolerance (0.005); visually indistinguishable. |
+| `webgpu-fill-pattern` | 0.0 | ✅ Passing locally. |
+| `webgpu-holes` | 0.0 | ✅ Passing locally. |
+| `webgpu-shapes` | 0.0 | ✅ Passing locally. |
 
 ## 4. Open Issues
 
@@ -79,10 +82,10 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 - [x] **Caps/Joins Options**: Implemented and aligned with WebGL defaults.
 
 ### Known Failures / Investigation
-- [ ] **`webgpu-points` / `webgpu-points-rotation` mismatch**:
-    - Symptoms: points appear “shifted” or “stacked differently”; likely a draw order mismatch (overdraw changes) and/or point coordinate layout mismatch for KML sources (XYZ vs XY).
-    - Recent change (pending verification): WebGPU point buffer generation now treats each point entry as a single point and uses only XY, to avoid misreading XYZ/XYZM flat coordinates.
-    - Next steps: re-run rendering tests for these cases and compare; if still failing, align point ordering with WebGL (iterate `pointBatch.entries` in insertion order / feature uid order consistently).
+- [ ] **`webgpu-points-rotation` small pixel mismatch**:
+    - Rendering tests report a mismatch of `0.00984` (tolerance is `0.005`).
+    - Visually indistinguishable; likely minor AA / rasterization differences.
+    - Next steps: only adjust tolerance/baseline once feature-parity work stabilizes.
 
 ### Features (Pending)
 - [ ] **Complex Styling**: Full rule support and broader expression coverage (beyond current `webgpu-line-metric` subset).

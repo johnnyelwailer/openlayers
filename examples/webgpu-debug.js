@@ -3,9 +3,9 @@ import View from '../src/ol/View.js';
 import GeoJSON from '../src/ol/format/GeoJSON.js';
 import TileLayer from '../src/ol/layer/Tile.js';
 import WebGPUVectorLayer from '../src/ol/layer/WebGPUVector.js';
+import {useGeographic} from '../src/ol/proj.js';
 import VectorSource from '../src/ol/source/Vector.js';
 import XYZ from '../src/ol/source/XYZ.js';
-import {useGeographic} from '../src/ol/proj.js';
 
 useGeographic();
 
@@ -37,5 +37,3 @@ const map = new Map({
     zoom: 7,
   }),
 });
-
-

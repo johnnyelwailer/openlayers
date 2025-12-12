@@ -288,11 +288,9 @@ class VectorStyleRenderer {
     let pointVertexCount = 0;
     for (const entry of pointEntries) {
       // Each entry can have multiple points (MultiPoint)
-      for (const flatCoordPoints of entry.flatCoordss) {
-        // Point geometries can be XYZ/XYZM (e.g. KML coordinates with altitude).
-        // Only the first two components are used for rendering.
-        pointVertexCount += 1;
-      }
+      // Point geometries can be XYZ/XYZM (e.g. KML coordinates with altitude).
+      // Only the first two components are used for rendering.
+      pointVertexCount += entry.flatCoordss.length;
     }
 
     // 3 floats per vertex: x, y, featureIndex
@@ -1215,10 +1213,7 @@ class VectorStyleRenderer {
   /**
    * @param {Object} buffers Buffers.
    * @param {import("../../Map.js").FrameState} frameState Frame state.
-   */
-  /**
-   * @param {Object} buffers Buffers.
-   * @param {import("../../Map.js").FrameState} frameState Frame state.
+   * @param {number} [worldOffsetX] World offset in map units (defaults to 0).
    */
   render(buffers, frameState, worldOffsetX = 0) {
     const device = this.helper_.getDevice();
