@@ -19,6 +19,49 @@ import {
 } from '../../vec/mat4.js';
 
 /**
+ * @param {*} value Expression or literal.
+ * @param {import("../../Feature.js").default|import("../../render/Feature.js").default} feature Feature.
+ * @return {*}
+ */
+function resolveExpression(value, feature) {
+  if (Array.isArray(value) && value.length === 2 && value[0] === 'get') {
+    return feature.get(value[1]);
+  }
+  return value;
+}
+
+/**
+ * @param {*} value Expression or literal.
+ * @param {import("../../Feature.js").default|import("../../render/Feature.js").default} feature Feature.
+ * @param {number} fallback Fallback.
+ * @return {number}
+ */
+function resolveNumber(value, feature, fallback) {
+  const resolved = resolveExpression(value, feature);
+  const num = Number(resolved);
+  return Number.isFinite(num) ? num : fallback;
+}
+
+/**
+ * @param {*} value Expression or literal.
+ * @param {import("../../Feature.js").default|import("../../render/Feature.js").default} feature Feature.
+ * @param {Array<number>} fallback Fallback RGBA (0..1).
+ * @return {Array<number>}
+ */
+function resolveColor(value, feature, fallback) {
+  const resolved = resolveExpression(value, feature);
+  if (!resolved) {
+    return fallback;
+  }
+  try {
+    const c = asArray(resolved);
+    return [c[0] / 255, c[1] / 255, c[2] / 255, c[3]];
+  } catch {
+    return fallback;
+  }
+}
+
+/**
  * @typedef {Object} StyleShaders
  * @property {WGSLBuilder} builder Helper class to build the shaders
  * @property {import("../webgl/VectorStyleRenderer.js").UniformDefinitions} uniforms Uniform definitions
@@ -152,67 +195,8 @@ class VectorStyleRenderer {
     /** @type {Array<number>} */
     const lineInstanceAttributes = [];
 
-    // Style struct is aligned to 16 bytes; 12 floats = 48 bytes per feature:
-    // color(4) + width + cap + join + miterLimit + offset + padding(3)
-    const lineStyleData = new Float32Array(lineEntries.length * 12);
-
-    // Resolve Line Style
-    let lineColor = [0, 0, 0, 1];
-    let lineWidth = 1.0;
-    let lineCapType = 0; // 0=butt, 1=square, 2=round
-    let lineJoinType = 0; // 0=miter, 1=bevel, 2=round
-    let lineMiterLimit = 10.0;
-    let lineOffset = 0.0;
-    if (this.styles_ && this.styles_[0]) {
-      const style = this.styles_[0];
-      const colorStr = style['stroke-color'];
-      if (colorStr) {
-        try {
-          const c = asArray(colorStr);
-          lineColor = [c[0] / 255, c[1] / 255, c[2] / 255, c[3]];
-        } catch {
-          // Ignore
-        }
-      }
-      if (style['stroke-width'] !== undefined) {
-        lineWidth = Number(style['stroke-width']);
-      }
-      if (style['stroke-line-cap']) {
-        const cap = String(style['stroke-line-cap']);
-        lineCapType = cap === 'square' ? 1 : cap === 'round' ? 2 : 0;
-      }
-      if (style['stroke-line-join']) {
-        const join = String(style['stroke-line-join']);
-        lineJoinType = join === 'bevel' ? 1 : join === 'round' ? 2 : 0;
-      }
-      if (style['stroke-miter-limit'] !== undefined) {
-        const limit = Number(style['stroke-miter-limit']);
-        if (Number.isFinite(limit) && limit > 0) {
-          lineMiterLimit = limit;
-        }
-      }
-      if (style['stroke-offset'] !== undefined) {
-        const offset = Number(style['stroke-offset']);
-        if (Number.isFinite(offset)) {
-          lineOffset = offset;
-        }
-      }
-    }
-
-    // Fill the per-feature style buffer (one style per feature in the batch)
-    for (let i = 0; i < lineEntries.length; i++) {
-      // Style
-      const sIdx = i * 12;
-      lineStyleData[sIdx + 0] = lineColor[0];
-      lineStyleData[sIdx + 1] = lineColor[1];
-      lineStyleData[sIdx + 2] = lineColor[2];
-      lineStyleData[sIdx + 3] = lineColor[3];
-      lineStyleData[sIdx + 4] = lineWidth;
-      lineStyleData[sIdx + 5] = lineCapType;
-      lineStyleData[sIdx + 6] = lineJoinType;
-      lineStyleData[sIdx + 7] = lineMiterLimit;
-      lineStyleData[sIdx + 8] = lineOffset;
-    }
+    const stylePasses = Array.isArray(this.styles_) ? this.styles_ : [];
+    const hasAnyStroke = stylePasses.some((s) => s && 'stroke-color' in s);
 
     const identityTransform = createTransform();
     // Generate segment instances per feature/linestring
@@ -270,8 +254,9 @@ class VectorStyleRenderer {
     }
 
     let lineBuffer = null;
-    let lineStyleBuffer = null;
-    if (lineInstanceAttributes.length > 0) {
+    /** @type {Array<{vertex: WebGPUBuffer, style: WebGPUBuffer}>} */
+    const lineStringBuffers = [];
+    if (lineInstanceAttributes.length > 0 && hasAnyStroke) {
       const lineData = new Float32Array(lineInstanceAttributes);
       lineBuffer = new WebGPUBuffer({
         size: lineData.byteLength,
@@ -281,17 +266,88 @@ class VectorStyleRenderer {
       lineBuffer.create(this.helper_);
       new Float32Array(lineBuffer.getBuffer().getMappedRange()).set(lineData);
       lineBuffer.getBuffer().unmap();
+    }
 
-      lineStyleBuffer = new WebGPUBuffer({
-        size: lineStyleData.byteLength,
-        usage: 0x0080 | 0x0008, // STORAGE
-        mappedAtCreation: true,
-      });
-      lineStyleBuffer.create(this.helper_);
-      new Float32Array(lineStyleBuffer.getBuffer().getMappedRange()).set(
-        lineStyleData,
-      );
-      lineStyleBuffer.getBuffer().unmap();
+    if (lineBuffer) {
+      // Style struct is aligned to 16 bytes; 24 floats = 96 bytes per feature:
+      // color(4), width, cap, join, miterLimit, offset, dashCount, dashOffset, dashTotal, pad(4),
+      // dash0(4), dash1(4), pad(4) => 28 floats (112 bytes) per feature
+      const STYLE_STRIDE = 28;
+      const DASH_MAX = 8;
+      const defaultColor = [0, 0, 0, 1];
+
+      for (const style of stylePasses) {
+        if (!style || !('stroke-color' in style)) {
+          continue;
+        }
+        const lineStyleData = new Float32Array(lineEntries.length * STYLE_STRIDE);
+        for (let i = 0; i < lineEntries.length; i++) {
+          const feature = lineEntries[i].feature;
+          const sIdx = i * STYLE_STRIDE;
+
+          const color = resolveColor(style['stroke-color'], feature, defaultColor);
+          const width = resolveNumber(style['stroke-width'], feature, 1.0);
+          const offsetPx = resolveNumber(style['stroke-offset'], feature, 0.0);
+          const miterLimit = resolveNumber(style['stroke-miter-limit'], feature, 10.0);
+
+          let capType = 2; // match WebGL default
+          if ('stroke-line-cap' in style) {
+            const cap = String(resolveExpression(style['stroke-line-cap'], feature));
+            capType = cap === 'square' ? 1 : cap === 'butt' ? 0 : 2;
+          }
+          let joinType = 0;
+          if ('stroke-line-join' in style) {
+            const join = String(resolveExpression(style['stroke-line-join'], feature));
+            joinType = join === 'bevel' ? 1 : join === 'round' ? 2 : 0;
+          }
+
+          const dash = resolveExpression(style['stroke-line-dash'], feature);
+          const dashOffset = resolveNumber(style['stroke-line-dash-offset'], feature, 0.0);
+          let dashValues = Array.isArray(dash) ? dash : null;
+          if (dashValues && dashValues.length % 2 === 1) {
+            dashValues = dashValues.concat(dashValues);
+          }
+          const dashCount = dashValues
+            ? Math.min(DASH_MAX, dashValues.length)
+            : 0;
+          let dashTotal = 0.0;
+          for (let d = 0; d < dashCount; d++) {
+            dashTotal += resolveNumber(dashValues[d], feature, 0.0);
+          }
+
+          lineStyleData[sIdx + 0] = color[0];
+          lineStyleData[sIdx + 1] = color[1];
+          lineStyleData[sIdx + 2] = color[2];
+          lineStyleData[sIdx + 3] = color[3];
+          lineStyleData[sIdx + 4] = width;
+          lineStyleData[sIdx + 5] = capType;
+          lineStyleData[sIdx + 6] = joinType;
+          lineStyleData[sIdx + 7] = Number.isFinite(miterLimit) && miterLimit > 0 ? miterLimit : 10.0;
+          lineStyleData[sIdx + 8] = offsetPx;
+          lineStyleData[sIdx + 9] = dashCount;
+          lineStyleData[sIdx + 10] = dashOffset;
+          lineStyleData[sIdx + 11] = dashTotal;
+
+          for (let d = 0; d < dashCount; d++) {
+            const len = resolveNumber(dashValues[d], feature, 0.0);
+            const vecBase = d < 4 ? sIdx + 16 : sIdx + 20;
+            lineStyleData[vecBase + (d % 4)] = len;
+          }
+        }
+
+        const lineStyleBuffer = new WebGPUBuffer({
+          size: lineStyleData.byteLength,
+          usage: 0x0080 | 0x0008, // STORAGE
+          mappedAtCreation: true,
+        });
+        lineStyleBuffer.create(this.helper_);
+        new Float32Array(lineStyleBuffer.getBuffer().getMappedRange()).set(
+          lineStyleData,
+        );
+        lineStyleBuffer.getBuffer().unmap();
+
+        lineStringBuffers.push({vertex: lineBuffer, style: lineStyleBuffer});
+      }
     }
 
     // --- 3. Generate Polygon Buffers ---
@@ -409,14 +465,7 @@ class VectorStyleRenderer {
             },
           ]
         : [],
-      lineStringBuffers: lineBuffer
-        ? [
-            {
-              vertex: lineBuffer,
-              style: lineStyleBuffer,
-            },
-          ]
-        : [],
+      lineStringBuffers,
       polygonBuffers: polyBuffer
         ? [
             {
