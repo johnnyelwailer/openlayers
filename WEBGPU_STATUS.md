@@ -25,6 +25,7 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 *   **KML XYZ Point Coordinates**: Fixed WebGPU point buffer generation to handle `Point` flat coords that include altitude (XYZ/XYZM) by consuming only XY per point (fixes missing points / bad ordering in `webgpu-points`).
 *   **wrapX / Multi-World Rendering**: Added a multi-world render loop (mirrors WebGL’s world rendering approach) and plumbed `worldOffsetX` through the WebGPU style renderer.
 *   **Layer Opacity (WebGPU)**: Added per-layer opacity as a uniform (`uniforms.opacity`) and applied it in all WebGPU vector fragment shaders. This is required for correct compositing because WebGPU layers share a single canvas/context per map.
+*   **New Hardening Rendering Cases**: Added `webgpu-vector-opacity` and `webgpu-vector-multiple-layers` to cover compositing/ordering behavior with multiple WebGPU vector layers.
 *   **Current Focus**: Only remaining rendering-test mismatch is `webgpu-points-rotation` (very small pixel diff; visually indistinguishable so we keep baseline unchanged for now).
 
 ## 2. Components Implemented
@@ -112,9 +113,13 @@ The following files contain temporary debug logging that should be removed befor
 
 **Counts (as of 2025-12-13):**
 - WebGL rendering cases: **55**
-- WebGPU rendering cases: **14**
+- WebGPU rendering cases: **16**
 - WebGL cases with a WebGPU equivalent: **14**
 - WebGL cases missing a WebGPU equivalent: **41**
+
+**WebGPU-only cases (no WebGL equivalent):**
+- `webgpu-vector-opacity`
+- `webgpu-vector-multiple-layers`
 
 **Equivalent cases (WebGL ↔ WebGPU):**
 - [x] `webgl-circles` -> `webgpu-circles`
