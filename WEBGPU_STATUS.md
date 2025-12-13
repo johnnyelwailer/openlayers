@@ -280,6 +280,7 @@ The following files contain temporary debug logging that should be removed befor
 ### Auto-generated comparison table (Canvas vs WebGL vs WebGPU)
 - Add an E2E style/expression conformance suite that:
   - Renders the same fixture set under Canvas, WebGL, and WebGPU.
-  - Captures images + records which style properties and expression ops compiled/executed without fallback.
+  - Captures images + records which style properties and expression ops compiled/executed without fallback/errors.
+  - Multiple expression syntax variations per property (as exhaustive as possbible)
   - Generates `docs/` (or `WEBGPU_STATUS.md`) tables from the results (pass/fail + mismatch metric + notes).
 - Start with operator-level tests (one operator per fixture), then style-property fixtures (circle/icon/stroke/fill/pattern).
