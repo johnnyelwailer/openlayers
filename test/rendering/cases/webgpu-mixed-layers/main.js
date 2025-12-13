@@ -32,7 +32,7 @@ const vector = new WebGPUVectorLayer({
   },
 });
 
-const map = new Map({
+new Map({
   layers: [
     new TileLayer({
       source: new XYZ({
@@ -90,34 +90,24 @@ function renderWhenReady() {
   const checkReady = () => {
     attempts += 1;
     const renderer = vector.getRenderer();
-    if (
-      renderer &&
-      renderer.helper &&
-      renderer.helper.getDevice() &&
-      hasPointBuffers(renderer)
-    ) {
-      map.once('rendercomplete', () => {
-        const device = renderer.helper.getDevice();
-        device.queue.onSubmittedWorkDone().then(() => {
-          render({
-            message: 'a mix of WebGL and WebGPU layers are rendered',
-          });
+    const device = renderer?.helper?.getDevice?.();
+    if (device && hasPointBuffers(renderer)) {
+      device.queue.onSubmittedWorkDone().then(() => {
+        render({
+          message: 'a mix of WebGL and WebGPU layers are rendered',
         });
       });
-      map.renderSync();
       return;
     }
-    if (attempts > 60) {
+    if (attempts > 200) {
       render({
         message: 'timed out waiting for WebGPU points to render',
       });
       return;
     }
-    map.once('rendercomplete', checkReady);
-    map.renderSync();
+    setTimeout(checkReady, 50);
   };
-  map.once('rendercomplete', checkReady);
-  map.renderSync();
+  checkReady();
 }
 
 const source = vector.getSource();
