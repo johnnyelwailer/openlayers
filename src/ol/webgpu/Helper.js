@@ -15,6 +15,12 @@ import Disposable from '../Disposable.js';
  * @property {number} configuredWidth The last configured canvas width.
  * @property {number} configuredHeight The last configured canvas height.
  * @property {number} configuredPixelRatio The last configured pixel ratio.
+ * @property {number} currentTextureFrameIndex The frame index of the cached current texture view.
+ * @property {GPUTextureView|null} currentTextureView Cached current texture view.
+ * @property {GPUTexture|null} frameTexture Persistent per-canvas render target.
+ * @property {GPUTextureFormat|null} frameTextureFormat Format for frameTexture.
+ * @property {number} frameTextureWidth Width in pixels.
+ * @property {number} frameTextureHeight Height in pixels.
  */
 
 /**
@@ -63,6 +69,12 @@ function getOrCreateCanvasCacheItem(key) {
       configuredWidth: 0,
       configuredHeight: 0,
       configuredPixelRatio: 0,
+      currentTextureFrameIndex: -1,
+      currentTextureView: null,
+      frameTexture: null,
+      frameTextureFormat: null,
+      frameTextureWidth: 0,
+      frameTextureHeight: 0,
     };
     canvasCache[key] = cacheItem;
   }
@@ -86,6 +98,10 @@ function releaseCanvas(key) {
   }
 
   if (cacheItem.device) {
+    if (cacheItem.frameTexture) {
+      cacheItem.frameTexture.destroy();
+      cacheItem.frameTexture = null;
+    }
     cacheItem.device.destroy();
   }
 
@@ -252,6 +268,64 @@ class WebGPUHelper extends Disposable {
   }
 
   /**
+   * Returns the current swap chain texture view for a given frame.
+   * Ensures that `getCurrentTexture()` is called once per frame for shared canvases.
+   * @param {number} frameIndex Frame index.
+   * @return {GPUTextureView} Texture view.
+   */
+  getCurrentTextureView(frameIndex) {
+    const cacheItem = canvasCache[this.canvasCacheKey_];
+    if (!cacheItem) {
+      return this.context_.getCurrentTexture().createView();
+    }
+    if (
+      cacheItem.currentTextureFrameIndex !== frameIndex ||
+      !cacheItem.currentTextureView
+    ) {
+      cacheItem.currentTextureFrameIndex = frameIndex;
+      cacheItem.currentTextureView = this.context_
+        .getCurrentTexture()
+        .createView();
+    }
+    return cacheItem.currentTextureView;
+  }
+
+  /**
+   * Returns a persistent per-canvas render target view that can be used across multiple
+   * submissions in the same frame (unlike the swap chain texture).
+   * @param {number} frameIndex Frame index (unused but kept for symmetry with other helpers).
+   * @param {GPUTextureFormat} format Texture format.
+   * @param {number} widthPx Width in physical pixels.
+   * @param {number} heightPx Height in physical pixels.
+   * @return {GPUTextureView} Texture view.
+   */
+  getFrameTextureView(frameIndex, format, widthPx, heightPx) {
+    const cacheItem = canvasCache[this.canvasCacheKey_];
+    if (!cacheItem) {
+      throw new Error('Missing canvas cache item');
+    }
+    const needsRecreate =
+      !cacheItem.frameTexture ||
+      cacheItem.frameTextureFormat !== format ||
+      cacheItem.frameTextureWidth !== widthPx ||
+      cacheItem.frameTextureHeight !== heightPx;
+    if (needsRecreate) {
+      if (cacheItem.frameTexture) {
+        cacheItem.frameTexture.destroy();
+      }
+      cacheItem.frameTexture = this.device_.createTexture({
+        size: {width: widthPx, height: heightPx},
+        format,
+        usage: 0x10 | 0x04, // RENDER_ATTACHMENT | TEXTURE_BINDING
+      });
+      cacheItem.frameTextureFormat = format;
+      cacheItem.frameTextureWidth = widthPx;
+      cacheItem.frameTextureHeight = heightPx;
+    }
+    return cacheItem.frameTexture.createView();
+  }
+
+  /**
    * Returns true if this is the first WebGPU render pass for the given frame.
    * This is used to decide whether the shared canvas should be cleared or loaded.
    * @param {number} frameIndex Frame index.
@@ -264,6 +338,8 @@ class WebGPUHelper extends Disposable {
     }
     if (cacheItem.lastFrameIndex !== frameIndex) {
       cacheItem.lastFrameIndex = frameIndex;
+      cacheItem.currentTextureFrameIndex = -1;
+      cacheItem.currentTextureView = null;
       return true;
     }
     return false;

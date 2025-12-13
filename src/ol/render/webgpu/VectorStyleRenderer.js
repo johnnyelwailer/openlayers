@@ -201,6 +201,42 @@ class VectorStyleRenderer {
         uniforms: {},
       },
     ];
+
+    /**
+     * @private
+     * @type {GPUTexture|null}
+     */
+    this.offscreenTexture_ = null;
+
+    /**
+     * @private
+     * @type {[number, number]}
+     */
+    this.offscreenTextureSize_ = [0, 0];
+
+    /**
+     * @private
+     * @type {GPUSampler|null}
+     */
+    this.compositeSampler_ = null;
+
+    /**
+     * @private
+     * @type {GPUBuffer|null}
+     */
+    this.compositeUniformBufferOpacity_ = null;
+
+    /**
+     * @private
+     * @type {GPUBuffer|null}
+     */
+    this.compositeUniformBufferOne_ = null;
+
+    /**
+     * @private
+     * @type {GPURenderPipeline|null}
+     */
+    this.compositePipeline_ = null;
   }
 
   /**
@@ -1211,12 +1247,223 @@ class VectorStyleRenderer {
   }
 
   /**
+   * @param {GPUDevice} device Device.
+   * @param {GPUTextureFormat} format Color format.
+   * @param {number} widthPx Physical pixel width.
+   * @param {number} heightPx Physical pixel height.
+   * @return {GPUTextureView} Texture view.
+   * @private
+   */
+  getOffscreenView_(device, format, widthPx, heightPx) {
+    if (
+      !this.offscreenTexture_ ||
+      this.offscreenTextureSize_[0] !== widthPx ||
+      this.offscreenTextureSize_[1] !== heightPx
+    ) {
+      if (this.offscreenTexture_) {
+        this.offscreenTexture_.destroy();
+      }
+      this.offscreenTexture_ = device.createTexture({
+        size: {width: widthPx, height: heightPx},
+        format,
+        usage: 0x10 | 0x04, // RENDER_ATTACHMENT | TEXTURE_BINDING
+      });
+      this.offscreenTextureSize_ = [widthPx, heightPx];
+    }
+    return this.offscreenTexture_.createView();
+  }
+
+  /**
+   * Composite an offscreen texture onto the swap chain with a single layer opacity.
+   * This matches WebGL's layer opacity semantics (opacity applied after all layer draws).
+   * @param {GPUDevice} device Device.
+   * @param {GPUTextureView} srcView Source view.
+   * @param {GPUTextureView} dstView Destination view.
+   * @param {GPUTextureFormat} format Format.
+   * @param {number} opacity Opacity in [0..1].
+   * @param {GPUCommandEncoder} commandEncoder Encoder.
+   * @param {boolean} [clearDst] Whether to clear the destination.
+   * @private
+   */
+  compositeToView_(
+    device,
+    srcView,
+    dstView,
+    format,
+    opacity,
+    commandEncoder,
+    clearDst = false,
+  ) {
+    if (!this.compositeSampler_) {
+      this.compositeSampler_ = device.createSampler({
+        addressModeU: 'clamp-to-edge',
+        addressModeV: 'clamp-to-edge',
+        magFilter: 'nearest',
+        minFilter: 'nearest',
+      });
+    }
+
+    const uniformBuffer = this.getCompositeUniformBuffer_(device, opacity);
+
+    if (!this.compositePipeline_) {
+      const shader = `
+        struct VertexOutput {
+          @builtin(position) position : vec4f,
+          @location(0) texCoord : vec2f,
+        };
+
+        struct Uniforms {
+          opacity : f32,
+          _pad0 : vec3f,
+        };
+
+        @group(0) @binding(0) var texSampler : sampler;
+        @group(0) @binding(1) var tex : texture_2d<f32>;
+        @group(0) @binding(2) var<uniform> uniforms : Uniforms;
+
+        @vertex
+        fn vs_main(@builtin(vertex_index) vertexIndex : u32) -> VertexOutput {
+          var output : VertexOutput;
+          var positions = array<vec2f, 4>(
+            vec2f(-1.0, -1.0),
+            vec2f(1.0, -1.0),
+            vec2f(-1.0, 1.0),
+            vec2f(1.0, 1.0),
+          );
+          var uvs = array<vec2f, 4>(
+            vec2f(0.0, 1.0),
+            vec2f(1.0, 1.0),
+            vec2f(0.0, 0.0),
+            vec2f(1.0, 0.0),
+          );
+          output.position = vec4f(positions[vertexIndex], 0.0, 1.0);
+          output.texCoord = uvs[vertexIndex];
+          return output;
+        }
+
+        @fragment
+        fn fs_main(input : VertexOutput) -> @location(0) vec4f {
+          let c = textureSampleLevel(tex, texSampler, input.texCoord, 0.0);
+          return c * uniforms.opacity;
+        }
+      `;
+      const module = device.createShaderModule({code: shader});
+      this.compositePipeline_ = device.createRenderPipeline({
+        layout: 'auto',
+        vertex: {
+          module,
+          entryPoint: 'vs_main',
+        },
+        fragment: {
+          module,
+          entryPoint: 'fs_main',
+          targets: [
+            {
+              format,
+              blend: {
+                color: {
+                  srcFactor: 'one',
+                  dstFactor: 'one-minus-src-alpha',
+                  operation: 'add',
+                },
+                alpha: {
+                  srcFactor: 'one',
+                  dstFactor: 'one-minus-src-alpha',
+                  operation: 'add',
+                },
+              },
+            },
+          ],
+        },
+        primitive: {
+          topology: 'triangle-strip',
+        },
+      });
+    }
+
+    const bindGroup = device.createBindGroup({
+      layout: this.compositePipeline_.getBindGroupLayout(0),
+      entries: [
+        {binding: 0, resource: this.compositeSampler_},
+        {binding: 1, resource: srcView},
+        {binding: 2, resource: {buffer: uniformBuffer}},
+      ],
+    });
+
+    const pass = commandEncoder.beginRenderPass({
+      colorAttachments: [
+        {
+          view: dstView,
+          clearValue: {r: 0.0, g: 0.0, b: 0.0, a: 0.0},
+          loadOp: clearDst ? 'clear' : 'load',
+          storeOp: 'store',
+        },
+      ],
+    });
+    pass.setPipeline(this.compositePipeline_);
+    pass.setBindGroup(0, bindGroup);
+    pass.draw(4);
+    pass.end();
+  }
+
+  /**
+   * @param {GPUDevice} device Device.
+   * @param {number} opacity Opacity.
+   * @return {GPUBuffer} Uniform buffer for composite pass.
+   * @private
+   */
+  getCompositeUniformBuffer_(device, opacity) {
+    // Uniform layout rules make the struct size 32 bytes:
+    // opacity (4) + padding to 16 + vec3 (12) + struct padding to 32.
+    const byteSize = 32;
+
+    if (opacity === 1) {
+      if (!this.compositeUniformBufferOne_) {
+        this.compositeUniformBufferOne_ = device.createBuffer({
+          size: byteSize,
+          usage: 0x0040 | 0x0008, // UNIFORM | COPY_DST
+        });
+        device.queue.writeBuffer(
+          this.compositeUniformBufferOne_,
+          0,
+          new Float32Array([1, 0, 0, 0, 0, 0, 0, 0]),
+        );
+      }
+      return this.compositeUniformBufferOne_;
+    }
+
+    if (!this.compositeUniformBufferOpacity_) {
+      this.compositeUniformBufferOpacity_ = device.createBuffer({
+        size: byteSize,
+        usage: 0x0040 | 0x0008, // UNIFORM | COPY_DST
+      });
+    }
+    device.queue.writeBuffer(
+      this.compositeUniformBufferOpacity_,
+      0,
+      new Float32Array([opacity, 0, 0, 0, 0, 0, 0, 0]),
+    );
+    return this.compositeUniformBufferOpacity_;
+  }
+
+  /**
    * @param {Object} buffers Buffers.
    * @param {import("../../Map.js").FrameState} frameState Frame state.
    * @param {number} [worldOffsetX] World offset in map units (defaults to 0).
    * @param {number} [opacity] Layer opacity (defaults to 1).
+   * @param {boolean} [isFirstWorld] Whether this is the first world pass.
+   * @param {boolean} [isLastWorld] Whether this is the last world pass.
+   * @param {boolean} [isFirstPass] Whether this is the first pass for the shared canvas.
    */
-  render(buffers, frameState, worldOffsetX = 0, opacity = 1) {
+  render(
+    buffers,
+    frameState,
+    worldOffsetX = 0,
+    opacity = 1,
+    isFirstWorld = true,
+    isLastWorld = true,
+    isFirstPass = false,
+  ) {
     const device = this.helper_.getDevice();
     const context = this.helper_.getContext();
 
@@ -1263,17 +1510,51 @@ class VectorStyleRenderer {
     }
 
     const commandEncoder = device.createCommandEncoder();
-    const textureView = context.getCurrentTexture().createView();
 
     const format = navigator.gpu.getPreferredCanvasFormat();
+    const widthPx = Math.round(width * pixelRatio);
+    const heightPx = Math.round(height * pixelRatio);
+    const frameView = this.helper_.getFrameTextureView(
+      frameState.index,
+      format,
+      widthPx,
+      heightPx,
+    );
 
-    const isFirstPass = this.helper_.isFirstPass(frameState.index);
+    const useOffscreenComposite =
+      Number.isFinite(opacity) && opacity >= 0 && opacity < 1;
+    const geometryTargetView = useOffscreenComposite
+      ? this.getOffscreenView_(device, format, widthPx, heightPx)
+      : frameView;
+
+    // If we are the first WebGPU layer in the frame, clear the persistent frame target.
+    // This is needed even when the layer uses offscreen compositing (opacity < 1), because
+    // the frame target will only be written to on the last world pass.
+    if (useOffscreenComposite && isFirstPass && isFirstWorld) {
+      const clearPass = commandEncoder.beginRenderPass({
+        colorAttachments: [
+          {
+            view: frameView,
+            clearValue: {r: 0.0, g: 0.0, b: 0.0, a: 0.0},
+            loadOp: 'clear',
+            storeOp: 'store',
+          },
+        ],
+      });
+      clearPass.end();
+    }
     const renderPassDescriptor = {
       colorAttachments: [
         {
-          view: textureView,
+          view: geometryTargetView,
           clearValue: {r: 0.0, g: 0.0, b: 0.0, a: 0.0},
-          loadOp: isFirstPass ? 'clear' : 'load',
+          loadOp: useOffscreenComposite
+            ? isFirstWorld
+              ? 'clear'
+              : 'load'
+            : isFirstPass && isFirstWorld
+              ? 'clear'
+              : 'load',
           storeOp: 'store',
         },
       ],
@@ -1291,7 +1572,7 @@ class VectorStyleRenderer {
       uniformData[19] = height;
       uniformData[20] = rotation;
       uniformData[21] = zoom;
-      uniformData[22] = opacity;
+      uniformData[22] = 0;
       uniformData[23] = 0;
       device.queue.writeBuffer(this.uniformBuffer_, 0, uniformData);
     }
@@ -1637,6 +1918,38 @@ class VectorStyleRenderer {
     }
 
     passEncoder.end();
+
+    if (useOffscreenComposite && isLastWorld) {
+      // Composite pass applies layer opacity once, like WebGL.
+      // Composite the layer's offscreen texture into the persistent frame texture.
+      this.compositeToView_(
+        device,
+        geometryTargetView,
+        frameView,
+        format,
+        opacity,
+        commandEncoder,
+        false,
+      );
+    }
+
+    if (isLastWorld) {
+      // Always blit the persistent frame texture to the swap chain so we don't
+      // depend on swap chain content preservation across multiple layer submits.
+      const swapChainView = this.helper_.getCurrentTextureView(
+        frameState.index,
+      );
+      this.compositeToView_(
+        device,
+        frameView,
+        swapChainView,
+        format,
+        1,
+        commandEncoder,
+        true,
+      );
+    }
+
     device.queue.submit([commandEncoder.finish()]);
   }
 }

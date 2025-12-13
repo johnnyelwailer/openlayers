@@ -3,8 +3,8 @@ import expect from '../../../expect.js';
 
 describe('ol/render/webgpu/VectorStyleRenderer', () => {
   it('writes layer opacity to uniform buffer', () => {
-    /** @type {Float32Array|null} */
-    let lastUniformData = null;
+    /** @type {number|null} */
+    let compositeOpacity = null;
 
     if (typeof navigator === 'undefined' || !navigator) {
       Object.defineProperty(globalThis, 'navigator', {
@@ -18,15 +18,31 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
 
     const device = {
       createBuffer: () => ({}),
+      createTexture: () => ({
+        createView: () => ({}),
+        destroy: () => {},
+      }),
+      createSampler: () => ({}),
+      createShaderModule: () => ({}),
+      createRenderPipeline: () => ({
+        getBindGroupLayout: () => ({}),
+      }),
+      createBindGroup: () => ({}),
       createCommandEncoder: () => ({
         beginRenderPass: () => ({
+          setPipeline: () => {},
+          setBindGroup: () => {},
+          draw: () => {},
           end: () => {},
         }),
         finish: () => ({}),
       }),
       queue: {
         writeBuffer: (buffer, offset, data) => {
-          lastUniformData = new Float32Array(data);
+          const floats = new Float32Array(data);
+          if (floats.length === 8 && floats[0] !== 1) {
+            compositeOpacity = floats[0];
+          }
         },
         submit: () => {},
       },
@@ -34,11 +50,9 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
 
     const helper = {
       getDevice: () => device,
-      getContext: () => ({
-        getCurrentTexture: () => ({
-          createView: () => ({}),
-        }),
-      }),
+      getContext: () => ({getCurrentTexture: () => ({createView: () => ({})})}),
+      getCurrentTextureView: () => ({}),
+      getFrameTextureView: () => ({}),
       isFirstPass: () => true,
     };
 
@@ -64,7 +78,6 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
       0.25,
     );
 
-    expect(lastUniformData).to.be.ok();
-    expect(lastUniformData[22]).to.be(0.25);
+    expect(compositeOpacity).to.be(0.25);
   });
 });

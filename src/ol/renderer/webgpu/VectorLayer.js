@@ -294,6 +294,7 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
     );
 
     if (this.currentBuffers_) {
+      const isFirstPass = this.helper.isFirstPass(frameState.index);
       const [startWorld, endWorld, worldWidth] = getWorldParameters(
         frameState,
         this.getLayer(),
@@ -305,6 +306,9 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
           frameState,
           world * worldWidth,
           opacity,
+          world === startWorld,
+          world === endWorld - 1,
+          isFirstPass,
         );
       }
     }

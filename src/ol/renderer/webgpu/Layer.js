@@ -47,6 +47,12 @@ class WebGPULayerRenderer extends LayerRenderer {
      */
     this.helperReadyPromise_ = null;
 
+    /**
+     * @private
+     * @type {string|null}
+     */
+    this.canvasCacheKey_ = null;
+
     this.onMapChanged_ = () => {
       this.removeHelper();
     };
@@ -73,13 +79,51 @@ class WebGPULayerRenderer extends LayerRenderer {
    * @override
    */
   prepareFrame(frameState) {
-    // Simplified cache key logic for prototype
-    const canvasCacheKey = 'map/' + frameState.mapId;
+    // Use the same grouping logic as WebGL: consecutive WebGPU layers share a canvas,
+    // but groups are split by non-WebGPU layers and by className changes.
+    let groupNumber = 0;
+    if (
+      frameState &&
+      Array.isArray(frameState.layerStatesArray) &&
+      Number.isInteger(frameState.layerIndex)
+    ) {
+      let currentGroup = -1;
+      let inGroup = false;
+      let lastClassName = '';
+      for (let i = 0; i < frameState.layerStatesArray.length; i++) {
+        const layerState = frameState.layerStatesArray[i];
+        const layer = layerState.layer;
+        const renderer = layer.getRenderer();
+        if (!(renderer instanceof WebGPULayerRenderer)) {
+          inGroup = false;
+          lastClassName = '';
+        } else {
+          const className = layer.getClassName();
+          if (!inGroup || className !== lastClassName) {
+            currentGroup += 1;
+            inGroup = true;
+            lastClassName = className;
+          }
+          if (renderer === this) {
+            break;
+          }
+        }
+      }
+      groupNumber = Math.max(0, currentGroup);
+    }
 
-    if (!this.helper) {
+    const canvasCacheKey = 'map/' + frameState.mapId + '/group/' + groupNumber;
+
+    if (!this.helper || this.canvasCacheKey_ !== canvasCacheKey) {
+      this.removeHelper();
+      this.canvasCacheKey_ = canvasCacheKey;
       this.helper = new WebGPUHelper({
         canvasCacheKey: canvasCacheKey,
       });
+      const className = this.getLayer().getClassName();
+      if (className) {
+        this.helper.getCanvas().className = className;
+      }
 
       this.helperReadyPromise_ = this.helper
         .ready()

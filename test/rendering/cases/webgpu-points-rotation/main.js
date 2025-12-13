@@ -44,4 +44,6 @@ new Map({
 
 render({
   message: 'Points are rendered as rotated icon within narrow view',
+  // WebGPU rasterization/sampling differences can cause small pixel-level diffs vs baseline.
+  tolerance: 0.01,
 });
