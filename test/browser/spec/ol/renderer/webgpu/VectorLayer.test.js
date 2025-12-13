@@ -1,7 +1,10 @@
 import expect from 'expect.js';
+import Feature from '../../../../../../src/ol/Feature.js';
+import Point from '../../../../../../src/ol/geom/Point.js';
 import VectorLayer from '../../../../../../src/ol/layer/Vector.js';
 import WebGPUVectorLayerRenderer from '../../../../../../src/ol/renderer/webgpu/VectorLayer.js';
 import VectorSource from '../../../../../../src/ol/source/Vector.js';
+import {getUid} from '../../../../../../src/ol/util.js';
 
 // Mock globals for Node environment
 if (typeof navigator === 'undefined') {
@@ -108,5 +111,125 @@ describe('ol/renderer/webgpu/VectorLayer', function () {
     renderer.renderFrame(frameState);
 
     expect(renderCalled).to.be(true);
+  });
+
+  it('updates styles without regenerating geometry buffers', function () {
+    const feature = new Feature({geometry: new Point([0, 0])});
+    layer.getSource().addFeature(feature);
+
+    renderer.initialFeaturesAdded_ = true;
+    renderer.batch_.addFeature(feature);
+    const uid = getUid(feature);
+    const ref = renderer.batch_.pointBatch.entries[uid].ref;
+    renderer.geometryRevisionByUid_.set(
+      uid,
+      feature.getGeometry().getRevision(),
+    );
+    renderer.geometryDirty_ = false;
+
+    renderer.currentBuffers_ = {
+      pointBuffers: [],
+      lineStringBuffers: [],
+      polygonBuffers: [],
+    };
+
+    let updateCalled = null;
+    renderer.styleRenderer_ = {
+      updateFeatureStyles: (buffers, dirtyRef, dirtyFeature) => {
+        updateCalled = {buffers, dirtyRef, dirtyFeature};
+      },
+      render: () => {},
+    };
+
+    renderer.helper = {
+      configureContextForFrame: () => {},
+      isFirstPass: () => true,
+      getCanvas: () => ({}),
+    };
+
+    // Property-only change: geometry revision remains unchanged.
+    feature.set('color', 'red');
+    renderer.handleSourceFeatureChanged_(null, {feature});
+
+    expect(renderer.geometryDirty_).to.be(false);
+    expect(renderer.styleDirtyRefs_.has(ref)).to.be(true);
+
+    const frameState = {
+      index: 0,
+      size: [100, 100],
+      pixelRatio: 1,
+      extent: [-1, -1, 1, 1],
+      viewState: {
+        center: [0, 0],
+        resolution: 1,
+        rotation: 0,
+        zoom: 0,
+        projection: {canWrapX: () => false, getExtent: () => [0, 0, 0, 0]},
+      },
+    };
+    renderer.renderFrame(frameState);
+
+    expect(updateCalled).to.be.ok();
+    expect(updateCalled.dirtyRef).to.be(ref);
+    expect(updateCalled.dirtyFeature).to.be(feature);
+    expect(renderer.styleDirtyRefs_.size).to.be(0);
+  });
+
+  it('marks geometry dirty on geometry changes', function () {
+    const feature = new Feature({geometry: new Point([0, 0])});
+    layer.getSource().addFeature(feature);
+
+    renderer.initialFeaturesAdded_ = true;
+    renderer.batch_.addFeature(feature);
+    const uid = getUid(feature);
+    const ref = renderer.batch_.pointBatch.entries[uid].ref;
+    renderer.geometryRevisionByUid_.set(
+      uid,
+      feature.getGeometry().getRevision(),
+    );
+    renderer.geometryDirty_ = false;
+
+    renderer.currentBuffers_ = {
+      pointBuffers: [],
+      lineStringBuffers: [],
+      polygonBuffers: [],
+    };
+
+    let updateCalled = false;
+    renderer.styleRenderer_ = {
+      updateFeatureStyles: () => {
+        updateCalled = true;
+      },
+      render: () => {},
+    };
+
+    renderer.helper = {
+      configureContextForFrame: () => {},
+      isFirstPass: () => true,
+      getCanvas: () => ({}),
+    };
+
+    // Geometry change: revision changes, should trigger geometry rebuild path.
+    feature.getGeometry().setCoordinates([1, 1]);
+    renderer.handleSourceFeatureChanged_(null, {feature});
+
+    expect(renderer.geometryDirty_).to.be(true);
+    expect(renderer.styleDirtyRefs_.has(ref)).to.be(false);
+
+    const frameState = {
+      index: 0,
+      size: [100, 100],
+      pixelRatio: 1,
+      extent: [-1, -1, 1, 1],
+      viewState: {
+        center: [0, 0],
+        resolution: 1,
+        rotation: 0,
+        zoom: 0,
+        projection: {canWrapX: () => false, getExtent: () => [0, 0, 0, 0]},
+      },
+    };
+    renderer.renderFrame(frameState);
+    expect(updateCalled).to.be(false);
   });
 });

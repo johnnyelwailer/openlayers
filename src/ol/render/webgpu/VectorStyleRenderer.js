@@ -536,7 +536,11 @@ class VectorStyleRenderer {
           const styleData = new Float32Array((pointMaxRef + 1) * STYLE_STRIDE);
           for (let i = 0; i < pointEntries.length; i++) {
             const entry = pointEntries[i];
-            writeStyle(styleData, (entry.ref || 0) * STYLE_STRIDE, entry.feature);
+            writeStyle(
+              styleData,
+              (entry.ref || 0) * STYLE_STRIDE,
+              entry.feature,
+            );
           }
 
           const styleBuffer = new WebGPUBuffer({
@@ -676,7 +680,11 @@ class VectorStyleRenderer {
           const styleData = new Float32Array((pointMaxRef + 1) * STYLE_STRIDE);
           for (let i = 0; i < pointEntries.length; i++) {
             const entry = pointEntries[i];
-            writeStyle(styleData, (entry.ref || 0) * STYLE_STRIDE, entry.feature);
+            writeStyle(
+              styleData,
+              (entry.ref || 0) * STYLE_STRIDE,
+              entry.feature,
+            );
           }
 
           const styleBuffer = new WebGPUBuffer({
@@ -797,7 +805,11 @@ class VectorStyleRenderer {
           const styleData = new Float32Array((pointMaxRef + 1) * STYLE_STRIDE);
           for (let i = 0; i < pointEntries.length; i++) {
             const entry = pointEntries[i];
-            writeStyle(styleData, (entry.ref || 0) * STYLE_STRIDE, entry.feature);
+            writeStyle(
+              styleData,
+              (entry.ref || 0) * STYLE_STRIDE,
+              entry.feature,
+            );
           }
 
           const styleBuffer = new WebGPUBuffer({
@@ -1071,7 +1083,11 @@ class VectorStyleRenderer {
 
         for (let i = 0; i < lineEntries.length; i++) {
           const entry = lineEntries[i];
-          writeStyle(lineStyleData, (entry.ref || 0) * STYLE_STRIDE, entry.feature);
+          writeStyle(
+            lineStyleData,
+            (entry.ref || 0) * STYLE_STRIDE,
+            entry.feature,
+          );
         }
 
         const lineStyleBuffer = new WebGPUBuffer({

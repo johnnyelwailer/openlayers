@@ -80,4 +80,46 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
 
     expect(compositeOpacity).to.be(0.25);
   });
+
+  it('updates feature styles for dirty refs', () => {
+    const device = {};
+    const helper = {
+      getDevice: () => device,
+    };
+
+    const renderer = new VectorStyleRenderer(
+      [{}],
+      {},
+      /** @type {*} */ (helper),
+    );
+
+    let pointCalled = null;
+    let lineCalled = null;
+    const buffers = {
+      pointBuffers: [
+        {
+          updateStyle: (dev, ref, feature) => {
+            pointCalled = {dev, ref, feature};
+          },
+        },
+      ],
+      lineStringBuffers: [
+        {
+          updateStyle: (dev, ref, feature) => {
+            lineCalled = {dev, ref, feature};
+          },
+        },
+      ],
+    };
+
+    const feature = {foo: 1};
+    renderer.updateFeatureStyles(buffers, 7, /** @type {*} */ (feature));
+
+    expect(pointCalled.dev).to.be(device);
+    expect(pointCalled.ref).to.be(7);
+    expect(pointCalled.feature).to.be(feature);
+    expect(lineCalled.dev).to.be(device);
+    expect(lineCalled.ref).to.be(7);
+    expect(lineCalled.feature).to.be(feature);
+  });
 });

@@ -15,6 +15,7 @@ import MixedGeometryBatch from '../../render/webgl/MixedGeometryBatch.js';
 import VectorStyleRenderer from '../../render/webgpu/VectorStyleRenderer.js';
 import VectorEventType from '../../source/VectorEventType.js';
 import {create as createTransform} from '../../transform.js';
+import {getUid} from '../../util.js';
 import WebGPULayerRenderer from './Layer.js';
 
 /**
@@ -103,12 +104,24 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
     /**
      * @private
      */
-    this.sourceRevision_ = -1;
+    this.geometryDirty_ = true;
 
     /**
      * @private
      */
     this.previousExtent_ = createEmpty();
+
+    /**
+     * @private
+     * @type {Map<string, number>}
+     */
+    this.geometryRevisionByUid_ = new Map();
+
+    /**
+     * @private
+     * @type {Map<number, import("../../Feature.js").default|import("../../render/Feature.js").default>}
+     */
+    this.styleDirtyRefs_ = new Map();
   }
 
   /**
@@ -138,6 +151,12 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
       );
     }
     this.batch_.addFeatures(source.getFeatures(), projectionTransform);
+    for (const feature of source.getFeatures()) {
+      this.geometryRevisionByUid_.set(
+        getUid(feature),
+        feature.getGeometry()?.getRevision?.() ?? -1,
+      );
+    }
     this.sourceListenKeys_ = [
       listen(
         source,
@@ -173,6 +192,11 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
   handleSourceFeatureAdded_(projectionTransform, event) {
     const feature = event.feature;
     this.batch_.addFeature(feature, projectionTransform);
+    this.geometryRevisionByUid_.set(
+      getUid(feature),
+      feature.getGeometry()?.getRevision?.() ?? -1,
+    );
+    this.geometryDirty_ = true;
   }
 
   /**
@@ -182,7 +206,25 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
    */
   handleSourceFeatureChanged_(projectionTransform, event) {
     const feature = event.feature;
-    this.batch_.changeFeature(feature, projectionTransform);
+    const uid = getUid(feature);
+    const revision = feature.getGeometry()?.getRevision?.() ?? -1;
+    const previousRevision = this.geometryRevisionByUid_.get(uid);
+    this.geometryRevisionByUid_.set(uid, revision);
+
+    if (previousRevision !== revision) {
+      this.batch_.changeFeature(feature, projectionTransform);
+      this.geometryDirty_ = true;
+      return;
+    }
+
+    const entry =
+      this.batch_.pointBatch.entries[uid] ||
+      this.batch_.lineStringBatch.entries[uid] ||
+      this.batch_.polygonBatch.entries[uid];
+    if (!entry || !entry.ref) {
+      return;
+    }
+    this.styleDirtyRefs_.set(entry.ref, feature);
   }
 
   /**
@@ -192,6 +234,8 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
   handleSourceFeatureDelete_(event) {
     const feature = event.feature;
     this.batch_.removeFeature(feature);
+    this.geometryRevisionByUid_.delete(getUid(feature));
+    this.geometryDirty_ = true;
   }
 
   /**
@@ -199,6 +243,9 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
    */
   handleSourceFeatureClear_() {
     this.batch_.clear();
+    this.geometryRevisionByUid_.clear();
+    this.styleDirtyRefs_.clear();
+    this.geometryDirty_ = true;
   }
 
   /**
@@ -227,13 +274,8 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
       !frameState.viewHints[ViewHint.ANIMATING] &&
       !frameState.viewHints[ViewHint.INTERACTING];
     const extentChanged = !equals(this.previousExtent_, frameState.extent);
-    const sourceChanged = this.sourceRevision_ < vectorSource.getRevision();
 
-    if (sourceChanged) {
-      this.sourceRevision_ = vectorSource.getRevision();
-    }
-
-    if (viewNotMoving && (extentChanged || sourceChanged)) {
+    if (viewNotMoving && extentChanged) {
       const projection = viewState.projection;
       const resolution = viewState.resolution;
 
@@ -251,7 +293,9 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
       } else {
         vectorSource.loadFeatures(extent, resolution, projection);
       }
+    }
 
+    if (viewNotMoving && (extentChanged || this.geometryDirty_)) {
       this.ready = false;
       this.generatingBuffers_ = true;
       const transform = createTransform(); // Placeholder, logic moves to shader mainly, or batch transform.
@@ -262,13 +306,15 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
           this.currentBuffers_ = buffers;
           this.ready = true;
           this.generatingBuffers_ = false;
+          this.geometryDirty_ = false;
+          this.styleDirtyRefs_.clear();
           this.getLayer().changed();
         });
 
       this.previousExtent_ = frameState.extent.slice();
     }
 
-    if (sourceChanged || !this.currentBuffers_) {
+    if (this.geometryDirty_ || !this.currentBuffers_) {
       frameState.animate = true;
     }
 
@@ -294,6 +340,17 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
     );
 
     if (this.currentBuffers_) {
+      if (this.styleDirtyRefs_.size > 0) {
+        for (const [ref, feature] of this.styleDirtyRefs_) {
+          this.styleRenderer_.updateFeatureStyles(
+            this.currentBuffers_,
+            ref,
+            feature,
+          );
+        }
+        this.styleDirtyRefs_.clear();
+      }
+
       const isFirstPass = this.helper.isFirstPass(frameState.index);
       const [startWorld, endWorld, worldWidth] = getWorldParameters(
         frameState,
