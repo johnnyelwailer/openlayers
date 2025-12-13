@@ -104,3 +104,182 @@ The following files contain temporary debug logging that should be removed befor
 2. **Fill patterns + icons**: Port `fill-pattern-src` and icon/sprite logic to WebGPU (texture atlas, offsets, anchors).
 3. **Complex styling**: Expand rule handling (multiple rules + filters) and expressions (interpolate multi-stop, variables).
 4. **Hit detection**: Add `forEachFeatureAtPixel` support for WebGPU vector.
+
+## 7. WebGL → WebGPU Port Completeness Audit
+
+### Rendering cases
+
+**Counts (as of 2025-12-13):**
+- WebGL rendering cases: **55**
+- WebGPU rendering cases: **14**
+- WebGL cases with a WebGPU equivalent: **14**
+- WebGL cases missing a WebGPU equivalent: **41**
+
+**Equivalent cases (WebGL ↔ WebGPU):**
+- [x] `webgl-circles` -> `webgpu-circles`
+- [x] `webgl-fill-pattern` -> `webgpu-fill-pattern`
+- [x] `webgl-holes` -> `webgpu-holes`
+- [x] `webgl-icons` -> `webgpu-icons`
+- [x] `webgl-line` -> `webgpu-line`
+- [x] `webgl-line-metric` -> `webgpu-line-metric`
+- [x] `webgl-line-pattern` -> `webgpu-line-pattern`
+- [x] `webgl-line-zoomed-in` -> `webgpu-line-zoomed-in`
+- [x] `webgl-points` -> `webgpu-points`
+- [x] `webgl-points-geographic` -> `webgpu-points-geographic`
+- [x] `webgl-points-rotation` -> `webgpu-points-rotation`
+- [x] `webgl-shapes` -> `webgpu-shapes`
+- [x] `webgl-vector` -> `webgpu-vector`
+- [x] `webgl-vector-geographic` -> `webgpu-vector-geographic`
+
+**Missing WebGPU equivalents (WebGL-only today):**
+- [ ] `webgl-data-tile-3-band`
+- [ ] `webgl-data-tile-6-band`
+- [ ] `webgl-data-tile-8-band`
+- [ ] `webgl-data-tile-clip-extent`
+- [ ] `webgl-data-tile-clip-extent-reproj`
+- [ ] `webgl-data-tile-interpolate-false`
+- [ ] `webgl-data-tile-interpolate-gutter`
+- [ ] `webgl-data-tile-interpolate-true`
+- [ ] `webgl-data-tile-loosely-packed`
+- [ ] `webgl-data-tile-no-wrap`
+- [ ] `webgl-data-tile-reset-source`
+- [ ] `webgl-data-tile-tilepixelratio2`
+- [ ] `webgl-invisible-group`
+- [ ] `webgl-layer-canvas-group-changes-for-imagetile`
+- [ ] `webgl-layer-canvas-group-changes-for-points`
+- [ ] `webgl-layer-extent`
+- [ ] `webgl-mixed-layers`
+- [ ] `webgl-multiple-layers`
+- [ ] `webgl-opacity`
+- [ ] `webgl-palette`
+- [ ] `webgl-precompose-event`
+- [ ] `webgl-reproj`
+- [ ] `webgl-reproj-float`
+- [ ] `webgl-reproj-float-interpolate-false`
+- [ ] `webgl-reproj-interpolate-false`
+- [ ] `webgl-reproj-no-wrap`
+- [ ] `webgl-reproj-non-parallel`
+- [ ] `webgl-source-extent`
+- [ ] `webgl-tile-aspect-ratio`
+- [ ] `webgl-tile-layer-style-color-array`
+- [ ] `webgl-tile-layer-style-color-color`
+- [ ] `webgl-tile-multisource`
+- [ ] `webgl-tile-no-wrap`
+- [ ] `webgl-tile-non-square`
+- [ ] `webgl-tile-preload`
+- [ ] `webgl-tile-range`
+- [ ] `webgl-tile-reset-projection`
+- [ ] `webgl-tilewms-gutter20`
+- [ ] `webgl-vectortile`
+- [ ] `webgl-vectortile-masking`
+- [ ] `webgl-vectortile-pattern`
+
+### Examples
+
+**WebGPU examples:**
+- `examples/webgpu-debug.html`
+- `examples/webgpu-debug.js`
+
+**WebGL examples (no WebGPU equivalent yet):**
+- `examples/filter-points-webgl.html`
+- `examples/filter-points-webgl.js`
+- `examples/filter-webgl-line.html`
+- `examples/filter-webgl-line.js`
+- `examples/icon-sprite-webgl.html`
+- `examples/icon-sprite-webgl.js`
+- `examples/webgl-draw-line.css`
+- `examples/webgl-draw-line.html`
+- `examples/webgl-draw-line.js`
+- `examples/webgl-layer-swipe.html`
+- `examples/webgl-layer-swipe.js`
+- `examples/webgl-points-layer.html`
+- `examples/webgl-points-layer.js`
+- `examples/webgl-sea-level.css`
+- `examples/webgl-sea-level.html`
+- `examples/webgl-sea-level.js`
+- `examples/webgl-shaded-relief.css`
+- `examples/webgl-shaded-relief.html`
+- `examples/webgl-shaded-relief.js`
+- `examples/webgl-tile-style.css`
+- `examples/webgl-tile-style.html`
+- `examples/webgl-tile-style.js`
+- `examples/webgl-tiles.html`
+- `examples/webgl-tiles.js`
+- `examples/webgl-vector-layer.html`
+- `examples/webgl-vector-layer.js`
+- `examples/webgl-vector-tiles.html`
+- `examples/webgl-vector-tiles.js`
+
+### Unit/integration tests
+
+**WebGL browser spec tests:**
+- `test/browser/spec/ol/render/webgl/MixedGeometryBatch.test.js`
+- `test/browser/spec/ol/render/webgl/VectorStyleRenderer.test.js`
+- `test/browser/spec/ol/render/webgl/bufferUtil.test.js`
+- `test/browser/spec/ol/render/webgl/compileUtil.test.js`
+- `test/browser/spec/ol/render/webgl/encodeUtil.test.js`
+- `test/browser/spec/ol/render/webgl/renderinstructions.test.js`
+- `test/browser/spec/ol/render/webgl/shaderbuilder.test.js`
+- `test/browser/spec/ol/render/webgl/style.test.js`
+- `test/browser/spec/ol/renderer/webgl/Layer.test.js`
+- `test/browser/spec/ol/renderer/webgl/PointsLayer.test.js`
+- `test/browser/spec/ol/renderer/webgl/TileLayer.test.js`
+- `test/browser/spec/ol/renderer/webgl/VectorLayer.test.js`
+- `test/browser/spec/ol/renderer/webgl/VectorTileLayer.test.js`
+
+**WebGPU browser spec tests (currently minimal):**
+- `test/browser/spec/ol/render/webgpu/VectorStyleRenderer.test.js`
+- `test/browser/spec/ol/renderer/webgpu/VectorLayer.test.js`
+
+**Expression tests (shared parsing + GPU backends):**
+- `test/node/ol/expr/expression.test.js`
+- `test/node/ol/expr/gpu.test.js` (WebGL GLSL backend)
+- `test/node/ol/expr/wgsl.test.js` (WebGPU WGSL backend, WIP)
+
+### Feature inventory (what exists in WebGL today)
+
+**Layers/renderers:**
+- `src/ol/layer/WebGLVector.js` + `src/ol/renderer/webgl/VectorLayer.js` (vector rendering + hit detection)
+- `src/ol/layer/WebGLPoints.js` + `src/ol/renderer/webgl/PointsLayer.js` (points-only pipeline + hit detection)
+- `src/ol/layer/WebGLVectorTile.js` + `src/ol/renderer/webgl/VectorTileLayer.js` (vector tiles, masking, patterns)
+- `src/ol/layer/WebGLTile.js` + `src/ol/renderer/webgl/TileLayer.js` (raster/data tiles, reprojection, palette/band expressions)
+- `src/ol/renderer/webgl/FlowLayer.js` (particle/flow rendering)
+- `src/ol/layer/Heatmap.js` (uses WebGL vector renderer)
+
+**Core WebGL infra frequently relied on by tests/examples:**
+- `src/ol/webgl/Helper.js`, `src/ol/webgl/Buffer.js`, `src/ol/webgl/RenderTarget.js`, `src/ol/webgl/PostProcessingPass.js`
+- `src/ol/expr/gpu.js` + `src/ol/render/webgl/compileUtil.js` (expression compilation to GLSL + attribute/uniform plumbing)
+- `src/ol/render/webgl/style.js` (flat-style parsing → shader setup for circles/shapes/icons/lines/fills + patterns + filters)
+
+### WebGPU status vs WebGL scope
+
+**Implemented in WebGPU (vector only):**
+- `src/ol/layer/WebGPUVector.js` + `src/ol/renderer/webgpu/VectorLayer.js`
+- `src/ol/render/webgpu/VectorStyleRenderer.js`, `src/ol/render/webgpu/WGSLBuilder.js`
+- `src/ol/webgpu/Helper.js`, `src/ol/webgpu/Buffer.js`
+
+**Not started / missing equivalents (larger scope items):**
+- WebGPU tile rendering (`WebGLTile` parity): data tiles, reprojection, palette/band GPU expressions, tile-specific tests/examples.
+- WebGPU vector tiles (`WebGLVectorTile` parity): masking, patterns, tile lifecycle and cache integration.
+- WebGPU points-only layer (`WebGLPoints` parity): separate pipeline + hit detection.
+- Hit detection / `forEachFeatureAtPixel` parity for WebGPU vector (`WebGLVector` has this).
+- Post-processing / render targets parity where applicable.
+
+## 8. Port Goals & Test Strategy (proposed)
+
+### Performance (same or better)
+- Prefer *one pipeline per material* (symbol/line/fill/pattern) with stable bind group layouts.
+- Move per-feature data to GPU-friendly buffers (avoid re-uploading every frame; update on change).
+- Keep CPU cost predictable by sharing the parse/type-check phase across WebGL/WebGPU and emitting backend code (GLSL/WGSL) from the same IR.
+
+### Unlimited dynamic variables (not constrained by vertex attrib limits)
+- Replace per-feature vertex attributes with a *storage buffer* (or texture buffer) indexed by `featureIndex`.
+- Store variables/properties in a structured layout (e.g. SoA by type: numbers, vec2/size, vec4/color, strings-as-ids).
+- Keep `styleVariables` as a small uniform buffer (or also storage) and let expressions read from either source.
+
+### Auto-generated comparison table (Canvas vs WebGL vs WebGPU)
+- Add an E2E style/expression conformance suite that:
+  - Renders the same fixture set under Canvas, WebGL, and WebGPU.
+  - Captures images + records which style properties and expression ops compiled/executed without fallback.
+  - Generates `docs/` (or `WEBGPU_STATUS.md`) tables from the results (pass/fail + mismatch metric + notes).
+- Start with operator-level tests (one operator per fixture), then style-property fixtures (circle/icon/stroke/fill/pattern).
