@@ -172,7 +172,8 @@ export class WGSLBuilder {
         viewportSizePx : vec2f,
         rotation : f32,
         zoom : f32,
-        padding : vec2f,
+        opacity : f32,
+        _pad0 : f32,
       };
 
       @group(0) @binding(0) var<storage, read> styles : array<Style>;
@@ -216,11 +217,13 @@ export class WGSLBuilder {
           pxOrigin,
           pxPos,
         );
-        let outColor = ${pattern.tint} * c;
+        var outColor = ${pattern.tint} * c;
+        outColor.a = outColor.a * uniforms.opacity;
         return vec4f(outColor.rgb * outColor.a, outColor.a);
             `
             : `
-        let outColor = input.color;
+        var outColor = input.color;
+        outColor.a = outColor.a * uniforms.opacity;
         return vec4f(outColor.rgb * outColor.a, outColor.a);
             `
         }
@@ -316,7 +319,8 @@ export class WGSLBuilder {
         viewportSizePx : vec2f,
         rotation : f32,
         zoom : f32,
-        padding : vec2f,
+        opacity : f32,
+        _pad0 : f32,
       };
 
       struct Style {
@@ -664,7 +668,7 @@ export class WGSLBuilder {
           )`
             : strokeColorExpr
         };
-        color.a = color.a * smoothstep(0.5, -0.5, distanceField);
+        color.a = color.a * smoothstep(0.5, -0.5, distanceField) * uniforms.opacity;
         return vec4f(color.rgb * color.a, color.a);
       }
       `;
@@ -728,7 +732,8 @@ export class WGSLBuilder {
         viewportSizePx : vec2f,
         rotation : f32,
         zoom : f32,
-        padding : vec2f,
+        opacity : f32,
+        _pad0 : f32,
       };
 
       @group(0) @binding(0) var<storage, read> styles : array<Style>;
@@ -823,7 +828,7 @@ export class WGSLBuilder {
         );
 
         var color = colorFromDistanceField(df, input.fillColor, input.strokeColor, input.strokeWidth);
-        color.a = color.a * input.opacity;
+        color.a = color.a * input.opacity * uniforms.opacity;
         return vec4f(color.rgb * color.a, color.a);
       }
     `;
@@ -863,7 +868,8 @@ export class WGSLBuilder {
         viewportSizePx : vec2f,
         rotation : f32,
         zoom : f32,
-        padding : vec2f,
+        opacity : f32,
+        _pad0 : f32,
       };
 
       @group(0) @binding(0) var<storage, read> styles : array<Style>;
@@ -915,7 +921,7 @@ export class WGSLBuilder {
       @fragment
       fn fs_main(input : VertexOutput) -> @location(0) vec4f {
         var color = input.tint * textureSampleLevel(iconTexture, iconSampler, input.texCoord, 0.0);
-        color.a = color.a * input.opacity;
+        color.a = color.a * input.opacity * uniforms.opacity;
         return vec4f(color.rgb * color.a, color.a);
       }
     `;
@@ -965,7 +971,8 @@ export class WGSLBuilder {
         viewportSizePx : vec2f,
         rotation : f32,
         zoom : f32,
-        padding : vec2f,
+        opacity : f32,
+        _pad0 : f32,
       };
 
       @group(0) @binding(0) var<storage, read> styles : array<Style>;
@@ -1093,7 +1100,7 @@ export class WGSLBuilder {
         );
 
         var color = colorFromDistanceField(df, input.fillColor, input.strokeColor, input.strokeWidth);
-        color.a = color.a * input.opacity;
+        color.a = color.a * input.opacity * uniforms.opacity;
         return vec4f(color.rgb * color.a, color.a);
       }
     `;

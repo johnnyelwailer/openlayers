@@ -24,6 +24,7 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 *   **Icon Y Orientation**: Fixed `icon-src` sampling orientation for WebGPU point/icon pipeline (removes vertical flip in `webgpu-points-geographic`).
 *   **KML XYZ Point Coordinates**: Fixed WebGPU point buffer generation to handle `Point` flat coords that include altitude (XYZ/XYZM) by consuming only XY per point (fixes missing points / bad ordering in `webgpu-points`).
 *   **wrapX / Multi-World Rendering**: Added a multi-world render loop (mirrors WebGL’s world rendering approach) and plumbed `worldOffsetX` through the WebGPU style renderer.
+*   **Layer Opacity (WebGPU)**: Added per-layer opacity as a uniform (`uniforms.opacity`) and applied it in all WebGPU vector fragment shaders. This is required for correct compositing because WebGPU layers share a single canvas/context per map.
 *   **Current Focus**: Only remaining rendering-test mismatch is `webgpu-points-rotation` (very small pixel diff; visually indistinguishable so we keep baseline unchanged for now).
 
 ## 2. Components Implemented
@@ -235,6 +236,7 @@ The following files contain temporary debug logging that should be removed befor
 - `test/node/ol/expr/expression.test.js`
 - `test/node/ol/expr/gpu.test.js` (WebGL GLSL backend)
 - `test/node/ol/expr/wgsl.test.js` (WebGPU WGSL backend, WIP)
+- `test/node/ol/render/webgpu/VectorStyleRenderer.test.js` (WebGPU uniform/opacity plumbing)
 
 ### Feature inventory (what exists in WebGL today)
 

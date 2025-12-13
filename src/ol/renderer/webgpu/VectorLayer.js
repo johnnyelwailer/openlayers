@@ -298,11 +298,13 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
         frameState,
         this.getLayer(),
       );
+      const opacity = this.getLayer().getOpacity();
       for (let world = startWorld; world < endWorld; world++) {
         this.styleRenderer_.render(
           this.currentBuffers_,
           frameState,
           world * worldWidth,
+          opacity,
         );
       }
     }

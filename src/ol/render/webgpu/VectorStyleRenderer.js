@@ -1214,8 +1214,9 @@ class VectorStyleRenderer {
    * @param {Object} buffers Buffers.
    * @param {import("../../Map.js").FrameState} frameState Frame state.
    * @param {number} [worldOffsetX] World offset in map units (defaults to 0).
+   * @param {number} [opacity] Layer opacity (defaults to 1).
    */
-  render(buffers, frameState, worldOffsetX = 0) {
+  render(buffers, frameState, worldOffsetX = 0, opacity = 1) {
     const device = this.helper_.getDevice();
     const context = this.helper_.getContext();
 
@@ -1290,7 +1291,7 @@ class VectorStyleRenderer {
       uniformData[19] = height;
       uniformData[20] = rotation;
       uniformData[21] = zoom;
-      uniformData[22] = 0;
+      uniformData[22] = opacity;
       uniformData[23] = 0;
       device.queue.writeBuffer(this.uniformBuffer_, 0, uniformData);
     }
