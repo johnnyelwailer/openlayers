@@ -29,6 +29,7 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 *   **Composite Uniform Fix**: Fixed WebGPU minBindingSize/alignment issues (32-byte uniform) and avoided uniform buffer reuse across passes (opacity pass vs final blit).
 *   **New Hardening Rendering Cases**: Added `webgpu-mixed-layers` and `webgpu-multiple-layers` (plus existing `webgpu-vector-opacity` and `webgpu-vector-multiple-layers`) to cover compositing/ordering behavior across WebGL↔WebGPU and multiple WebGPU layers.
 *   **Rendering Tests**: ✅ All `webgpu-*` rendering cases pass locally (minor `webgpu-points-rotation` diffs tolerated at 0.01 due to rasterization/sampling differences).
+*   **Perf Hardening**: Cached polygon fill + symbol render pipelines to avoid per-frame `createRenderPipeline()` churn (stroke pipeline was already cached).
 
 ## 2. Components Implemented
 
