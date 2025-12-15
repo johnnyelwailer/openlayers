@@ -18,8 +18,10 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 *   **Dashes**: Added `stroke-line-dash` + `stroke-line-dash-offset` support (WebGL-equivalent distance-field approach).
 *   **Stroke Patterns**: Added `stroke-pattern-src` sampling, including spacing/start-offset + sprite sub-rect offset/origin/size, with optional tint via `stroke-color`.
 *   **Rule/Expression Subset**: Implemented minimal `line-metric` and `get(limit)` support for `webgpu-line-metric` (filter discard, dynamic width/color).
+*   **`var()` Expressions (WebGPU)**: Added WGSL backend support for `var('name')` and plumbed a layer-level style variables buffer (`vars`) through the WebGPU vector pipelines.
+*   **WebGPU Bind Group Hardening**: Fixed a validation regression caused by `layout: 'auto'` omitting unused bindings by only binding the variables buffer when the shader statically reads from `vars[...]`.
 *   **Rendering Tests**: `webgpu-line`, `webgpu-line-metric`, `webgpu-line-pattern`, and `webgpu-line-zoomed-in` passing locally.
-*   **Unit Tests**: Added a small node test for the current WGSL expression subset (`test/node/ol/render/webgpu/expr.test.js`).
+*   **Unit Tests**: Added/extended node tests for WGSL `var()` compilation and variable extraction/sync (`test/node/ol/expr/wgsl.test.js`, `test/node/ol/render/webgpu/expr.test.js`, `test/node/ol/render/webgpu/VectorStyleRenderer.test.js`).
 *   **WGSL Expression Backend (WIP)**: Added `src/ol/expr/wgsl.js` and wired `src/ol/render/webgpu/expr.js` to use shared parsing/typing (`src/ol/expr/expression.js`) for the supported subset.
 *   **Icon Y Orientation**: Fixed `icon-src` sampling orientation for WebGPU point/icon pipeline (removes vertical flip in `webgpu-points-geographic`).
 *   **KML XYZ Point Coordinates**: Fixed WebGPU point buffer generation to handle `Point` flat coords that include altitude (XYZ/XYZM) by consuming only XY per point (fixes missing points / bad ordering in `webgpu-points`).
@@ -89,18 +91,16 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 - [x] **Caps/Joins Options**: Implemented and aligned with WebGL defaults.
 
 ### Known Failures / Investigation
-- [ ] **`webgpu-points-rotation` small pixel mismatch**:
-    - Rendering tests report a mismatch of `0.00984` (tolerance is `0.005`).
-    - Visually indistinguishable; likely minor AA / rasterization differences.
-    - Next steps: only adjust tolerance/baseline once feature-parity work stabilizes.
+- None known (all `webgpu-*` rendering cases pass locally). Minor rasterization/AA differences across GPUs are expected; defer baseline updates until feature parity stabilizes.
 
 ### Features (Pending)
 - [ ] **Complex Styling**: Full rule support and broader expression coverage (beyond current `webgpu-line-metric` subset).
-- [ ] **Shared Expression Compiler**: Replace `src/ol/render/webgpu/expr.js` with a WGSL backend that reuses `src/ol/expr` parsing/typing (like WebGL’s `expressionToGlsl` path).
+- [ ] **Shared Expression Compiler**: Continue expanding the WGSL backend so WebGL/WebGPU share parsing + typing + operator semantics (only backend codegen differs).
+- [ ] **Style Variables (`var()`) Parity**: Extend `var()` usage beyond the current subset and add conformance tests (WebGL vs WebGPU) for operator/property parity.
 - [ ] **Hit Detection**: `forEachFeatureAtPixel` implementation.
-- [ ] **Texture/Icon Support**: Atlas textures for icons + point styles.
-- [ ] **Fill Patterns**: `fill-pattern-src` (parity with WebGL style parsing).
-- [ ] **Symbol Rendering**: Circles/shapes parity for `webgpu-circles` / `webgpu-shapes`.
+- [ ] **Texture/Icon Support**: Broaden sprite/atlas + anchor/rotation parity (baseline icon rendering works, but needs deeper style-property coverage).
+- [ ] **Fill Patterns**: Broaden `fill-pattern-src` support and parsing parity (baseline works for the rendering case; not feature-complete yet).
+- [ ] **Symbol Rendering**: Expand circles/shapes/icons parity (baseline cases pass; missing many style properties and rule combinations).
 
 ## 5. Files Modified (Debug Logging)
 The following files contain temporary debug logging that should be removed before merge:

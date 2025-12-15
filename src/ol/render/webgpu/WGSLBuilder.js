@@ -178,6 +178,7 @@ export class WGSLBuilder {
       @group(0) @binding(0) var<storage, read> styles : array<Style>;
       @group(0) @binding(1) var<uniform> uniforms : Uniforms;
       ${patternBindings}
+      @group(0) @binding(4) var<storage, read> vars : array<vec4f>;
       ${patternFns}
 
       @vertex
@@ -338,6 +339,7 @@ export class WGSLBuilder {
       @group(0) @binding(0) var<storage, read> styles : array<Style>;
       @group(0) @binding(1) var<uniform> uniforms : StrokeUniforms;
       ${patternBindings}
+      @group(0) @binding(4) var<storage, read> vars : array<vec4f>;
 
       const LINESTRING_ANGLE_COSINE_CUTOFF : f32 = 0.985;
 
@@ -733,6 +735,7 @@ export class WGSLBuilder {
 
       @group(0) @binding(0) var<storage, read> styles : array<Style>;
       @group(0) @binding(1) var<uniform> uniforms : Uniforms;
+      @group(0) @binding(4) var<storage, read> vars : array<vec4f>;
 
       fn localPosition(vertexIndex : u32) -> vec2f {
         // triangle-strip order: (-1,-1), (1,-1), (-1,1), (1,1)
@@ -870,6 +873,7 @@ export class WGSLBuilder {
       @group(0) @binding(1) var<uniform> uniforms : Uniforms;
       @group(0) @binding(2) var iconSampler : sampler;
       @group(0) @binding(3) var iconTexture : texture_2d<f32>;
+      @group(0) @binding(4) var<storage, read> vars : array<vec4f>;
 
       fn localPosition(vertexIndex : u32) -> vec2f {
         if (vertexIndex == 0u) { return vec2f(-1.0, -1.0); }
@@ -970,6 +974,7 @@ export class WGSLBuilder {
 
       @group(0) @binding(0) var<storage, read> styles : array<Style>;
       @group(0) @binding(1) var<uniform> uniforms : Uniforms;
+      @group(0) @binding(4) var<storage, read> vars : array<vec4f>;
 
       fn localPosition(vertexIndex : u32) -> vec2f {
         if (vertexIndex == 0u) { return vec2f(-1.0, -1.0); }

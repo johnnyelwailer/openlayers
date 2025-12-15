@@ -1,4 +1,5 @@
 import {
+  BooleanType,
   NumberType,
   newParsingContext,
   parse,
@@ -34,5 +35,22 @@ describe('ol/expr/wgsl', () => {
     expect(compileExpressionToWgsl(expr, ctx)).to.be(
       'mix(2.0, 4.0, (pow(2.0, clamp((lineMetric - 0.0) / (10.0 - 0.0), 0.0, 1.0)) - 1.0) / (2.0 - 1.0))',
     );
+  });
+
+  it('compiles var()', () => {
+    const parsingContext = newParsingContext();
+    const expr = parse(['var', 'foo'], NumberType, parsingContext);
+    const exprCtx = {
+      ...ctx,
+      var: (name) => `var_${name}`,
+    };
+    expect(compileExpressionToWgsl(expr, exprCtx)).to.be('var_foo');
+
+    const boolCtx = {
+      ...ctx,
+      var: (name) => `var_${name}`,
+    };
+    const boolExpr = parse(['var', 'enabled'], BooleanType, parsingContext);
+    expect(compileExpressionToWgsl(boolExpr, boolCtx)).to.be('var_enabled');
   });
 });

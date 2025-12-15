@@ -79,6 +79,12 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
 
     /**
      * @private
+     * @type {import("../../style/flat.js").StyleVariables}
+     */
+    this.styleVariables_ = options.variables || {};
+
+    /**
+     * @private
      * @type {Object}
      */
     this.currentBuffers_ = null;
@@ -131,7 +137,7 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
   afterHelperCreated() {
     this.styleRenderer_ = new VectorStyleRenderer(
       this.styles_,
-      {},
+      this.styleVariables_,
       this.helper,
     );
   }

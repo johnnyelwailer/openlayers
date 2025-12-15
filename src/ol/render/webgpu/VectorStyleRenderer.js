@@ -4,6 +4,12 @@
 import earcut from 'earcut';
 import {asArray} from '../../color.js';
 import {
+  BooleanType,
+  ColorType,
+  NumberType,
+  isType,
+} from '../../expr/expression.js';
+import {
   create as createTransform,
   multiply as multiplyTransform,
   rotate as rotateTransform,
@@ -17,7 +23,11 @@ import {
 import WebGPUBuffer from '../../webgpu/Buffer.js';
 import {writeLineSegmentToBuffers} from '../linestringUtil.js';
 import {WGSLBuilder} from './WGSLBuilder.js';
-import {collectGetProperties, compileWgslExpression} from './expr.js';
+import {
+  collectGetProperties,
+  collectVarNames,
+  compileWgslExpression,
+} from './expr.js';
 
 /**
  * @typedef {Object} StrokePatternTexture
@@ -184,6 +194,7 @@ class VectorStyleRenderer {
   constructor(styles, variables, helper) {
     this.helper_ = helper;
     this.styles_ = styles;
+    this.variables_ = variables || {};
     /** @type {Map<string, GPURenderPipeline>} */
     this.strokePipelineCache_ = new Map();
     /** @type {Map<string, GPURenderPipeline>} */
@@ -192,6 +203,36 @@ class VectorStyleRenderer {
     this.symbolPipelineCache_ = new Map();
     /** @type {Map<string, Promise<StrokePatternTexture>>} */
     this.patternTextureCache_ = new Map();
+
+    /**
+     * @private
+     * @type {Array<string>}
+     */
+    this.variableNames_ = [];
+
+    /**
+     * @private
+     * @type {Map<string, number>}
+     */
+    this.variableIndexByName_ = new Map();
+
+    /**
+     * @private
+     * @type {GPUBuffer|null}
+     */
+    this.variablesBuffer_ = null;
+
+    /**
+     * @private
+     * @type {number}
+     */
+    this.variablesBufferSize_ = 0;
+
+    /**
+     * @private
+     * @type {Float32Array|null}
+     */
+    this.variablesData_ = null;
 
     // TODO: Phase 2 - Implement proper style parsing
     // For now, we manually create a single builder/shader pair
@@ -243,6 +284,161 @@ class VectorStyleRenderer {
      * @type {GPURenderPipeline|null}
      */
     this.compositePipeline_ = null;
+  }
+
+  /**
+   * WebGPU pipelines created with `layout: 'auto'` only expose bindings that are
+   * statically used by the shader. We therefore must only add the `vars` bind
+   * group entry when the shader actually reads from `vars[...]`.
+   * @param {string} code WGSL shader code.
+   * @return {boolean} Whether the shader reads from the `vars` buffer.
+   * @private
+   */
+  shaderUsesVars_(code) {
+    return /\bvars\s*\[/.test(code);
+  }
+
+  /**
+   * @param {Array<string>} names Names.
+   * @private
+   */
+  setVariableNames_(names) {
+    if (
+      names.length === this.variableNames_.length &&
+      names.every((n, i) => n === this.variableNames_[i])
+    ) {
+      return;
+    }
+    this.variableNames_ = names;
+    this.variableIndexByName_.clear();
+    for (let i = 0; i < names.length; i++) {
+      this.variableIndexByName_.set(names[i], i);
+    }
+    this.variablesBuffer_ = null;
+    this.variablesBufferSize_ = 0;
+    this.variablesData_ = null;
+  }
+
+  /**
+   * @param {GPUDevice} device Device.
+   * @return {GPUBuffer} Variable storage buffer (array<vec4f>).
+   * @private
+   */
+  getVariablesBuffer_(device) {
+    const count = Math.max(1, this.variableNames_.length);
+    const byteSize = count * 16;
+    if (!this.variablesBuffer_ || this.variablesBufferSize_ !== byteSize) {
+      this.variablesBuffer_ = device.createBuffer({
+        size: byteSize,
+        usage: 0x0080 | 0x0008, // STORAGE | COPY_DST
+      });
+      this.variablesBufferSize_ = byteSize;
+      this.variablesData_ = new Float32Array(count * 4);
+      device.queue.writeBuffer(this.variablesBuffer_, 0, this.variablesData_);
+    }
+    return this.variablesBuffer_;
+  }
+
+  /**
+   * @param {GPUDevice} device Device.
+   * @private
+   */
+  syncVariables_(device) {
+    const buffer = this.getVariablesBuffer_(device);
+    const data = this.variablesData_;
+    if (!data) {
+      return;
+    }
+
+    let dirty = false;
+    const vars = this.variables_;
+    const names = this.variableNames_;
+    for (let i = 0; i < names.length; i++) {
+      const name = names[i];
+      const value = vars[name];
+      let x = 0;
+      let y = 0;
+      let z = 0;
+      let w = 0;
+
+      if (typeof value === 'number') {
+        x = value;
+      } else if (typeof value === 'boolean') {
+        x = value ? 1 : 0;
+      } else if (typeof value === 'string') {
+        try {
+          const c = asArray(value);
+          x = c[0] / 255;
+          y = c[1] / 255;
+          z = c[2] / 255;
+          w = c.length > 3 ? c[3] : 1;
+        } catch {
+          x = 0;
+        }
+      } else if (Array.isArray(value) && value.length >= 3) {
+        const a = /** @type {Array<*>} */ (value);
+        const r = Number(a[0]);
+        const g = Number(a[1]);
+        const b = Number(a[2]);
+        if (Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(b)) {
+          const max = Math.max(r, g, b);
+          const scale = max > 1.5 ? 1 / 255 : 1;
+          x = r * scale;
+          y = g * scale;
+          z = b * scale;
+          const alpha = a.length > 3 ? Number(a[3]) : 1;
+          w = Number.isFinite(alpha) ? alpha : 1;
+        }
+      }
+
+      const o = i * 4;
+      if (
+        data[o] !== x ||
+        data[o + 1] !== y ||
+        data[o + 2] !== z ||
+        data[o + 3] !== w
+      ) {
+        data[o] = x;
+        data[o + 1] = y;
+        data[o + 2] = z;
+        data[o + 3] = w;
+        dirty = true;
+      }
+    }
+
+    if (dirty) {
+      device.queue.writeBuffer(buffer, 0, data);
+    }
+  }
+
+  /**
+   * @param {string} name Variable name.
+   * @param {number} type Value type bitmask.
+   * @return {string} WGSL expression.
+   * @private
+   */
+  getVarExpression_(name, type) {
+    const idx = this.variableIndexByName_.get(name);
+    if (idx === undefined) {
+      if (isType(type, ColorType)) {
+        return 'vec4f(0.0, 0.0, 0.0, 0.0)';
+      }
+      if (isType(type, BooleanType)) {
+        return 'false';
+      }
+      return '0.0';
+    }
+
+    if (isType(type, ColorType)) {
+      return `vars[${idx}]`;
+    }
+    if (isType(type, BooleanType)) {
+      return `(vars[${idx}].x > 0.0)`;
+    }
+    if (isType(type, NumberType)) {
+      return `vars[${idx}].x`;
+    }
+    return `vars[${idx}].x`;
   }
 
   /**
@@ -322,6 +518,19 @@ class VectorStyleRenderer {
     const rules = (Array.isArray(this.styles_) ? this.styles_ : []).map(
       (entry) => (entry && entry.style ? entry : {style: entry}),
     );
+
+    const varsUsed = new Set();
+    for (const rule of rules) {
+      collectVarNames(rule.filter, varsUsed);
+      const style = rule.style;
+      if (!style) {
+        continue;
+      }
+      for (const value of Object.values(style)) {
+        collectVarNames(value, varsUsed);
+      }
+    }
+    this.setVariableNames_(Array.from(varsUsed).sort());
 
     // --- 1. Generate Point Buffers ---
     const pointBatch = geometryBatch.pointBatch;
@@ -1116,6 +1325,7 @@ class VectorStyleRenderer {
           const ctx = {
             lineMetricVar: 'lineMetric',
             getProp: (name) => (name === 'limit' ? 'style.get0' : '0.0'),
+            getVar: (name, type) => this.getVarExpression_(name, type),
           };
           const discard = filter
             ? `!(${compileWgslExpression(filter, ctx, 'bool')})`
@@ -1596,6 +1806,8 @@ class VectorStyleRenderer {
       return;
     }
 
+    this.syncVariables_(device);
+
     // --- Uniforms Calculation (World -> Clip) ---
     const size = frameState.size;
     const width = size[0];
@@ -1795,6 +2007,16 @@ class VectorStyleRenderer {
                   },
                 ]
               : []),
+            ...(this.shaderUsesVars_(fillCode)
+              ? [
+                  {
+                    binding: 4,
+                    resource: {
+                      buffer: this.getVariablesBuffer_(device),
+                    },
+                  },
+                ]
+              : []),
           ],
         });
 
@@ -1934,6 +2156,16 @@ class VectorStyleRenderer {
                   },
                 ]
               : []),
+            ...(this.shaderUsesVars_(strokeCode)
+              ? [
+                  {
+                    binding: 4,
+                    resource: {
+                      buffer: this.getVariablesBuffer_(device),
+                    },
+                  },
+                ]
+              : []),
           ],
         });
 
@@ -2034,6 +2266,16 @@ class VectorStyleRenderer {
                   {
                     binding: 3,
                     resource: bufferSet.pattern.view,
+                  },
+                ]
+              : []),
+            ...(this.shaderUsesVars_(symbolCode)
+              ? [
+                  {
+                    binding: 4,
+                    resource: {
+                      buffer: this.getVariablesBuffer_(device),
+                    },
                   },
                 ]
               : []),

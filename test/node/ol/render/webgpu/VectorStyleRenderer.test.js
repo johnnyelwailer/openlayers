@@ -133,4 +133,57 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
     expect(polyCalled.ref).to.be(7);
     expect(polyCalled.feature).to.be(feature);
   });
+
+  it('syncs style variables to the GPU buffer', () => {
+    const variables = {
+      w: 5,
+      enabled: true,
+      tint: '#ff0000',
+    };
+
+    /** @type {Array<Float32Array>} */
+    const writes = [];
+    const device = {
+      createBuffer: () => ({}),
+      queue: {
+        writeBuffer: (buffer, offset, data) => {
+          writes.push(new Float32Array(data));
+        },
+      },
+    };
+
+    const helper = {
+      getDevice: () => device,
+    };
+
+    const renderer = new VectorStyleRenderer(
+      [{}],
+      variables,
+      /** @type {*} */ (helper),
+    );
+
+    renderer.setVariableNames_(['enabled', 'tint', 'w']);
+    renderer.syncVariables_(/** @type {*} */ (device));
+
+    expect(writes.length).to.be.greaterThan(0);
+    const last = writes[writes.length - 1];
+
+    // enabled (bool) stored in x component
+    expect(last[0]).to.be(1);
+    expect(last[1]).to.be(0);
+    expect(last[2]).to.be(0);
+    expect(last[3]).to.be(0);
+
+    // tint stored as RGBA in 0..1
+    expect(last[4]).to.be(1);
+    expect(last[5]).to.be(0);
+    expect(last[6]).to.be(0);
+    expect(last[7]).to.be(1);
+
+    // w (number) stored in x component
+    expect(last[8]).to.be(5);
+    expect(last[9]).to.be(0);
+    expect(last[10]).to.be(0);
+    expect(last[11]).to.be(0);
+  });
 });

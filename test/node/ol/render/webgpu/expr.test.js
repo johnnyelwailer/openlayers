@@ -1,5 +1,6 @@
 import {
   collectGetProperties,
+  collectVarNames,
   compileWgslExpression,
 } from '../../../../../src/ol/render/webgpu/expr.js';
 import expect from '../../../expect.js';
@@ -16,10 +17,22 @@ describe('ol/render/webgpu/expr', () => {
     });
   });
 
+  describe('collectVarNames()', () => {
+    it('collects var() names', () => {
+      const vars = new Set();
+      collectVarNames(
+        ['case', ['<', ['var', 'threshold'], 3], ['var', 'a'], 2],
+        vars,
+      );
+      expect(Array.from(vars).sort()).to.eql(['a', 'threshold']);
+    });
+  });
+
   describe('compileWgslExpression()', () => {
     const ctx = {
       lineMetricVar: 'lineMetric',
       getProp: (name) => `get_${name}()`,
+      getVar: (name) => `var_${name}()`,
     };
 
     it('formats numeric constants as f32', () => {
@@ -46,6 +59,12 @@ describe('ol/render/webgpu/expr', () => {
           'f32',
         ),
       ).to.be('select(8.0, 2.0, (lineMetric > 60.0))');
+    });
+
+    it('compiles var()', () => {
+      expect(compileWgslExpression(['var', 'limit'], ctx, 'f32')).to.be(
+        'var_limit()',
+      );
     });
 
     it('compiles two-stop linear interpolate', () => {

@@ -20,6 +20,7 @@ import {
  * @typedef {Object} CompileWgslContext
  * @property {string} lineMetric WGSL expression for line metric.
  * @property {(name: string, type: number) => string} get WGSL expression for a `get` property.
+ * @property {(name: string, type: number) => string} [var] WGSL expression for a style variable (`var`).
  */
 
 /**
@@ -74,6 +75,15 @@ export function compileExpressionToWgsl(expression, ctx) {
     const firstArg = /** @type {LiteralExpression} */ (call.args[0]);
     const propName = /** @type {string} */ (firstArg.value);
     return ctx.get(propName, call.type);
+  }
+
+  if (op === Ops.Var) {
+    const firstArg = /** @type {LiteralExpression} */ (call.args[0]);
+    const varName = /** @type {string} */ (firstArg.value);
+    if (!ctx.var) {
+      return '0.0';
+    }
+    return ctx.var(varName, call.type);
   }
 
   if (op === Ops.LineMetric) {

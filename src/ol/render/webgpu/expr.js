@@ -22,6 +22,7 @@ import {
  * @typedef {Object} CompileContext
  * @property {string} lineMetricVar WGSL variable name for line metric.
  * @property {(name: string) => string} getProp WGSL expression for a numeric property.
+ * @property {(name: string, type: number) => string} [getVar] WGSL expression for a style variable.
  */
 
 /**
@@ -55,6 +56,39 @@ export function collectGetProperties(expr, out) {
     }
     for (const v of expr) {
       collectGetProperties(v, out);
+    }
+  }
+}
+
+/**
+ * @param {unknown} expr Encoded expression.
+ * @param {Set<string>} out Output set.
+ */
+export function collectVarNames(expr, out) {
+  if (!expr) {
+    return;
+  }
+
+  if (Array.isArray(expr)) {
+    try {
+      const parsingContext = newParsingContext();
+      parse(expr, NumberType | BooleanType | ColorType, parsingContext);
+      for (const name of parsingContext.variables) {
+        out.add(name);
+      }
+      return;
+    } catch {
+      // fall back to a best-effort recursive walk
+    }
+  }
+
+  if (Array.isArray(expr)) {
+    if (expr[0] === 'var' && typeof expr[1] === 'string') {
+      out.add(expr[1]);
+      return;
+    }
+    for (const v of expr) {
+      collectVarNames(v, out);
     }
   }
 }
@@ -95,6 +129,7 @@ export function compileWgslExpression(expr, ctx, expected) {
     return compileExpressionToWgsl(parsed, {
       lineMetric: ctx.lineMetricVar,
       get: (name) => ctx.getProp(name),
+      var: (name, type) => ctx.getVar?.(name, type) || '0.0',
     });
   }
   if (expected === 'bool') {
