@@ -19,26 +19,74 @@ if (typeof window === 'undefined') {
 
 describe('ol/webgpu/Helper', function () {
   let helper;
-  let originalNavigatorGpu;
+  /** @type {null|(() => void)} */
+  let restoreNavigatorGpu = null;
+
+  /**
+   * @param {*} mockGpu Mock GPU object.
+   * @return {() => void} Restore function.
+   */
+  function stubNavigatorGpu(mockGpu) {
+    const originalGpu = navigator.gpu;
+    if (originalGpu) {
+      const originalRequestAdapter = originalGpu.requestAdapter;
+      const originalGetPreferredCanvasFormat =
+        originalGpu.getPreferredCanvasFormat;
+      Object.defineProperty(originalGpu, 'requestAdapter', {
+        value: mockGpu.requestAdapter,
+        configurable: true,
+      });
+      Object.defineProperty(originalGpu, 'getPreferredCanvasFormat', {
+        value: mockGpu.getPreferredCanvasFormat,
+        configurable: true,
+      });
+      return () => {
+        Object.defineProperty(originalGpu, 'requestAdapter', {
+          value: originalRequestAdapter,
+          configurable: true,
+        });
+        Object.defineProperty(originalGpu, 'getPreferredCanvasFormat', {
+          value: originalGetPreferredCanvasFormat,
+          configurable: true,
+        });
+      };
+    }
+
+    const originalDescriptor = Object.getOwnPropertyDescriptor(
+      navigator,
+      'gpu',
+    );
+    Object.defineProperty(navigator, 'gpu', {
+      value: mockGpu,
+      configurable: true,
+    });
+    return () => {
+      if (originalDescriptor) {
+        Object.defineProperty(navigator, 'gpu', originalDescriptor);
+      } else {
+        delete navigator.gpu;
+      }
+    };
+  }
 
   beforeEach(function () {
-    originalNavigatorGpu = navigator.gpu;
     // Mock WebGPU environment
-    navigator.gpu = {
+    restoreNavigatorGpu = stubNavigatorGpu({
       requestAdapter: async () => ({
         requestDevice: async () => ({
           destroy: () => {},
         }),
       }),
       getPreferredCanvasFormat: () => 'bgra8unorm',
-    };
+    });
   });
 
   afterEach(function () {
     if (helper) {
       helper.dispose();
     }
-    navigator.gpu = originalNavigatorGpu;
+    restoreNavigatorGpu?.();
+    restoreNavigatorGpu = null;
   });
 
   it('initializes the device and adapter', async function () {
@@ -49,23 +97,27 @@ describe('ol/webgpu/Helper', function () {
   });
 
   it('creates its own canvas if none provided', async function () {
-    // Stub createElement to return a mock canvas with webgpu context support
-    const originalCreateElement = document.createElement;
+    // Ensure `canvas.getContext('webgpu')` returns a minimal GPUCanvasContext.
+    const originalCreateElement = document.createElement.bind(document);
     document.createElement = (tagName) => {
+      const element = originalCreateElement(tagName);
       if (tagName === 'canvas') {
-        return {
-          getContext: (type) => {
-            if (type === 'webgpu') {
-              return {
-                configure: () => {},
-              };
-            }
-            return null;
-          },
-          style: {},
+        const originalGetContext = element.getContext.bind(element);
+        element.getContext = (type) => {
+          if (type === 'webgpu') {
+            return {
+              canvas: element,
+              configure: () => {},
+              unconfigure: () => {},
+              getCurrentTexture: () => ({
+                createView: () => ({}),
+              }),
+            };
+          }
+          return originalGetContext(type);
         };
       }
-      return originalCreateElement(tagName);
+      return element;
     };
 
     helper = new WebGPUHelper();
@@ -78,26 +130,30 @@ describe('ol/webgpu/Helper', function () {
 
   it('configures the context', async function () {
     let configured = false;
-    const originalCreateElement = document.createElement;
+    const originalCreateElement = document.createElement.bind(document);
     document.createElement = (tagName) => {
+      const element = originalCreateElement(tagName);
       if (tagName === 'canvas') {
-        return {
-          getContext: (type) => {
-            if (type === 'webgpu') {
-              return {
-                configure: (config) => {
-                  configured = true;
-                  expect(config.device).to.be.ok();
-                  expect(config.format).to.be('bgra8unorm');
-                },
-              };
-            }
-            return null;
-          },
-          style: {},
+        const originalGetContext = element.getContext.bind(element);
+        element.getContext = (type) => {
+          if (type === 'webgpu') {
+            return {
+              canvas: element,
+              configure: (config) => {
+                configured = true;
+                expect(config.device).to.be.ok();
+                expect(config.format).to.be('bgra8unorm');
+              },
+              unconfigure: () => {},
+              getCurrentTexture: () => ({
+                createView: () => ({}),
+              }),
+            };
+          }
+          return originalGetContext(type);
         };
       }
-      return originalCreateElement(tagName);
+      return element;
     };
 
     helper = new WebGPUHelper();

@@ -1,6 +1,7 @@
 import expect from 'expect.js';
 import Feature from '../../../../../../src/ol/Feature.js';
 import Point from '../../../../../../src/ol/geom/Point.js';
+import Polygon from '../../../../../../src/ol/geom/Polygon.js';
 import VectorLayer from '../../../../../../src/ol/layer/Vector.js';
 import WebGPUVectorLayerRenderer from '../../../../../../src/ol/renderer/webgpu/VectorLayer.js';
 import VectorSource from '../../../../../../src/ol/source/Vector.js';
@@ -25,10 +26,59 @@ if (typeof window === 'undefined') {
 describe('ol/renderer/webgpu/VectorLayer', function () {
   let renderer;
   let layer;
+  /** @type {null|(() => void)} */
+  let restoreNavigatorGpu = null;
+
+  /**
+   * @param {*} mockGpu Mock GPU object.
+   * @return {() => void} Restore function.
+   */
+  function stubNavigatorGpu(mockGpu) {
+    const originalGpu = navigator.gpu;
+    if (originalGpu) {
+      const originalRequestAdapter = originalGpu.requestAdapter;
+      const originalGetPreferredCanvasFormat =
+        originalGpu.getPreferredCanvasFormat;
+      Object.defineProperty(originalGpu, 'requestAdapter', {
+        value: mockGpu.requestAdapter,
+        configurable: true,
+      });
+      Object.defineProperty(originalGpu, 'getPreferredCanvasFormat', {
+        value: mockGpu.getPreferredCanvasFormat,
+        configurable: true,
+      });
+      return () => {
+        Object.defineProperty(originalGpu, 'requestAdapter', {
+          value: originalRequestAdapter,
+          configurable: true,
+        });
+        Object.defineProperty(originalGpu, 'getPreferredCanvasFormat', {
+          value: originalGetPreferredCanvasFormat,
+          configurable: true,
+        });
+      };
+    }
+
+    const originalDescriptor = Object.getOwnPropertyDescriptor(
+      navigator,
+      'gpu',
+    );
+    Object.defineProperty(navigator, 'gpu', {
+      value: mockGpu,
+      configurable: true,
+    });
+    return () => {
+      if (originalDescriptor) {
+        Object.defineProperty(navigator, 'gpu', originalDescriptor);
+      } else {
+        delete navigator.gpu;
+      }
+    };
+  }
 
   beforeEach(function () {
     // Mock navigator.gpu
-    navigator.gpu = {
+    restoreNavigatorGpu = stubNavigatorGpu({
       requestAdapter: async () => ({
         requestDevice: async () => ({
           createBuffer: () => ({}),
@@ -37,7 +87,7 @@ describe('ol/renderer/webgpu/VectorLayer', function () {
         }),
       }),
       getPreferredCanvasFormat: () => 'bgra8unorm',
-    };
+    });
 
     layer = new VectorLayer({
       source: new VectorSource(),
@@ -48,7 +98,9 @@ describe('ol/renderer/webgpu/VectorLayer', function () {
   });
 
   afterEach(function () {
-    renderer.dispose();
+    renderer?.dispose?.();
+    restoreNavigatorGpu?.();
+    restoreNavigatorGpu = null;
   });
 
   it('can be instantiated', function () {
@@ -71,43 +123,42 @@ describe('ol/renderer/webgpu/VectorLayer', function () {
   });
 
   it('renders frame using style renderer', async function () {
-    // Setup helper and style renderer
-    const frameState = {
-      size: [100, 100],
-      viewState: {center: [0, 0], resolution: 1, rotation: 0},
-      mapId: '1',
-      layerStatesArray: [],
-    };
-
-    // Trigger helper creation
-    renderer.prepareFrame(frameState);
-    await renderer.helper.ready();
-
-    // Manually trigger callback since we are mocking
-    renderer.afterHelperCreated();
-
-    const styleRenderer = renderer.styleRenderer_;
-
-    // Mock generateBuffers to resolve immediately with dummy buffers
-    const buffers = {pointBuffers: []};
-    styleRenderer.generateBuffers = async () => buffers;
-
     // Spy on render
     let renderCalled = false;
-    styleRenderer.render = () => {
-      renderCalled = true;
+    renderer.styleRenderer_ = {
+      render: () => {
+        renderCalled = true;
+      },
     };
 
-    // Mock helper context
-    renderer.helper.configureContext = () => {};
+    renderer.currentBuffers_ = {
+      pointBuffers: [],
+      lineStringBuffers: [],
+      polygonBuffers: [],
+    };
 
-    // Trigger generation now that style renderer is ready
-    renderer.prepareFrame(frameState);
+    renderer.helper = {
+      configureContextForFrame: () => {},
+      isFirstPass: () => true,
+      getCanvas: () => ({}),
+      dispose: () => {},
+    };
 
-    // Wait for the async generation (microtask)
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    const frameState = {
+      index: 0,
+      size: [100, 100],
+      pixelRatio: 1,
+      extent: [-1, -1, 1, 1],
+      viewHints: [0, 0],
+      viewState: {
+        center: [0, 0],
+        resolution: 1,
+        rotation: 0,
+        zoom: 0,
+        projection: {canWrapX: () => false, getExtent: () => [0, 0, 0, 0]},
+      },
+    };
 
-    // Call renderFrame should use the buffers
     renderer.renderFrame(frameState);
 
     expect(renderCalled).to.be(true);
@@ -145,10 +196,84 @@ describe('ol/renderer/webgpu/VectorLayer', function () {
       configureContextForFrame: () => {},
       isFirstPass: () => true,
       getCanvas: () => ({}),
+      dispose: () => {},
     };
 
     // Property-only change: geometry revision remains unchanged.
     feature.set('color', 'red');
+    renderer.handleSourceFeatureChanged_(null, {feature});
+
+    expect(renderer.geometryDirty_).to.be(false);
+    expect(renderer.styleDirtyRefs_.has(ref)).to.be(true);
+
+    const frameState = {
+      index: 0,
+      size: [100, 100],
+      pixelRatio: 1,
+      extent: [-1, -1, 1, 1],
+      viewState: {
+        center: [0, 0],
+        resolution: 1,
+        rotation: 0,
+        zoom: 0,
+        projection: {canWrapX: () => false, getExtent: () => [0, 0, 0, 0]},
+      },
+    };
+    renderer.renderFrame(frameState);
+
+    expect(updateCalled).to.be.ok();
+    expect(updateCalled.dirtyRef).to.be(ref);
+    expect(updateCalled.dirtyFeature).to.be(feature);
+    expect(renderer.styleDirtyRefs_.size).to.be(0);
+  });
+
+  it('updates polygon styles without regenerating geometry buffers', function () {
+    const feature = new Feature({
+      geometry: new Polygon([
+        [
+          [0, 0],
+          [1, 0],
+          [1, 1],
+          [0, 1],
+          [0, 0],
+        ],
+      ]),
+    });
+    layer.getSource().addFeature(feature);
+
+    renderer.initialFeaturesAdded_ = true;
+    renderer.batch_.addFeature(feature);
+    const uid = getUid(feature);
+    const ref = renderer.batch_.polygonBatch.entries[uid].ref;
+    renderer.geometryRevisionByUid_.set(
+      uid,
+      feature.getGeometry().getRevision(),
+    );
+    renderer.geometryDirty_ = false;
+
+    renderer.currentBuffers_ = {
+      pointBuffers: [],
+      lineStringBuffers: [],
+      polygonBuffers: [],
+    };
+
+    let updateCalled = null;
+    renderer.styleRenderer_ = {
+      updateFeatureStyles: (buffers, dirtyRef, dirtyFeature) => {
+        updateCalled = {buffers, dirtyRef, dirtyFeature};
+      },
+      render: () => {},
+    };
+
+    renderer.helper = {
+      configureContextForFrame: () => {},
+      isFirstPass: () => true,
+      getCanvas: () => ({}),
+      dispose: () => {},
+    };
+
+    // Property-only change: geometry revision remains unchanged.
+    feature.set('fill', 'blue');
     renderer.handleSourceFeatureChanged_(null, {feature});
 
     expect(renderer.geometryDirty_).to.be(false);
@@ -207,6 +332,7 @@ describe('ol/renderer/webgpu/VectorLayer', function () {
       configureContextForFrame: () => {},
       isFirstPass: () => true,
       getCanvas: () => ({}),
+      dispose: () => {},
     };
 
     // Geometry change: revision changes, should trigger geometry rebuild path.

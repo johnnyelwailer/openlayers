@@ -1,3 +1,4 @@
+import expect from 'expect.js';
 import Map from '../../src/ol/Map.js';
 import View from '../../src/ol/View.js';
 import {setLevel as setLogLevel} from '../../src/ol/console.js';
@@ -52,7 +53,7 @@ setLogLevel('error');
   };
 
   // extensions to expect.js
-  const expect = global.expect;
+  global.expect = expect;
 
   /**
    * Assert value is within some tolerance of a number.

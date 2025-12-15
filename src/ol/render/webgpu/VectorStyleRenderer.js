@@ -32,6 +32,8 @@ import {collectGetProperties, compileWgslExpression} from './expr.js';
  * @property {WebGPUBuffer} style Style buffer.
  * @property {string} [fillShader] Optional WGSL shader override.
  * @property {StrokePatternTexture} [pattern] Optional fill pattern resources.
+ * @property {(device: GPUDevice, ref: number, feature: import("../../Feature.js").default|import("../../render/Feature.js").default) => void} [updateStyle]
+ * Update per-feature style record for a given ref.
  */
 
 /**
@@ -1166,6 +1168,7 @@ class VectorStyleRenderer {
       return (
         s &&
         (typeof s['fill-color'] === 'string' ||
+          (Array.isArray(s['fill-color']) && s['fill-color'][0] === 'get') ||
           typeof s['fill-pattern-src'] === 'string')
       );
     });
@@ -1188,17 +1191,8 @@ class VectorStyleRenderer {
     const fillPatternSrc = polyStyle['fill-pattern-src'];
     const hasFillPattern = typeof fillPatternSrc === 'string';
 
-    // Resolve Poly Color (used as tint for patterns when fill-color is provided)
-    let polyColor = hasFillPattern ? [1, 1, 1, 1] : [0, 0, 1, 1];
-    const colorStr = polyStyle['fill-color'];
-    if (colorStr) {
-      try {
-        const c = asArray(colorStr);
-        polyColor = [c[0] / 255, c[1] / 255, c[2] / 255, c[3]];
-      } catch {
-        // Ignore
-      }
-    }
+    const fillColorExpr = polyStyle['fill-color'];
+    const fallbackTint = hasFillPattern ? [1, 1, 1, 1] : [0, 0, 1, 1];
 
     /** @type {StrokePatternTexture|undefined} */
     let fillPatternTexture;
@@ -1240,10 +1234,13 @@ class VectorStyleRenderer {
       const ref = entry.ref || 0;
 
       // Style
-      polyStyleData[ref * 4 + 0] = polyColor[0];
-      polyStyleData[ref * 4 + 1] = polyColor[1];
-      polyStyleData[ref * 4 + 2] = polyColor[2];
-      polyStyleData[ref * 4 + 3] = polyColor[3];
+      const fillColor = fillColorExpr
+        ? resolveColor(fillColorExpr, entry.feature, fallbackTint)
+        : fallbackTint;
+      polyStyleData[ref * 4 + 0] = fillColor[0];
+      polyStyleData[ref * 4 + 1] = fillColor[1];
+      polyStyleData[ref * 4 + 2] = fillColor[2];
+      polyStyleData[ref * 4 + 3] = fillColor[3];
 
       // entry.flatCoordss is Array<Array<number>> (polygons)
       // entry.ringsVerticesCounts is Array<Array<number>> (rings per polygon)
@@ -1325,6 +1322,20 @@ class VectorStyleRenderer {
                   })
                 : undefined,
               pattern: fillPatternTexture,
+              updateStyle: (device, ref, feature) => {
+                if (!ref) {
+                  return;
+                }
+                const fillColor = fillColorExpr
+                  ? resolveColor(fillColorExpr, feature, fallbackTint)
+                  : fallbackTint;
+                const record = new Float32Array(fillColor);
+                device.queue.writeBuffer(
+                  polyStyleBuffer.getBuffer(),
+                  ref * 16,
+                  record,
+                );
+              },
             },
           ]
         : [],
@@ -1351,6 +1362,11 @@ class VectorStyleRenderer {
 
     const lineBuffers = buffers.lineStringBuffers || [];
     for (const set of lineBuffers) {
+      set.updateStyle?.(device, ref, feature);
+    }
+
+    const polyBuffers = buffers.polygonBuffers || [];
+    for (const set of polyBuffers) {
       set.updateStyle?.(device, ref, feature);
     }
   }

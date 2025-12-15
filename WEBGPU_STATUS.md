@@ -1,12 +1,12 @@
 # WebGPU Vector Rendering - Implementation Status
 
-**Date:** 2025-12-13
+**Date:** 2025-12-15
 **Branch:** `feature/webgpu-vector` (implied)
 
 ## 1. Executive Summary
 The core infrastructure for WebGPU vector rendering has been implemented, mirroring the architecture of the WebGL renderer. The system compiles and runs without runtime errors or validation crashes.
 
-**Latest Progress (2025-12-13):**
+**Latest Progress (2025-12-15):**
 *   **Instanced Line Rendering**: Implemented GPU-side line expansion using instanced rendering with `triangle-strip` topology. Lines now correctly respect `stroke-width` style property.
 *   **Stroke Width Support**: The shader now reads `resolution` uniform and expands line segments into quads, enabling variable-width lines that scale correctly with zoom.
 *   **webgpu-vector Test**: ✅ Passing again. Polygons and lines render correctly.
@@ -30,7 +30,8 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 *   **New Hardening Rendering Cases**: Added `webgpu-mixed-layers` and `webgpu-multiple-layers` (plus existing `webgpu-vector-opacity` and `webgpu-vector-multiple-layers`) to cover compositing/ordering behavior across WebGL↔WebGPU and multiple WebGPU layers.
 *   **Rendering Tests**: ✅ All `webgpu-*` rendering cases pass locally (minor `webgpu-points-rotation` diffs tolerated at 0.01 due to rasterization/sampling differences).
 *   **Perf Hardening**: Cached polygon fill + symbol render pipelines to avoid per-frame `createRenderPipeline()` churn (stroke pipeline was already cached).
-*   **Incremental Styling (WIP)**: Switched to stable per-feature refs (from `MixedGeometryBatch`) and added a first pass at partial style updates (update point/line style storage buffers on feature property changes without regenerating geometry).
+*   **Incremental Styling (WIP)**: Switched to stable per-feature refs (from `MixedGeometryBatch`) and added partial style updates for point/line/polygon (update style storage buffers on feature property changes without regenerating geometry; polygon fill supports literal or `get()`-based `fill-color`/tint).
+*   **Test Hardening**: `npm run lint`, `npm run test-node`, `npm run test-browser`, and `npm run test-rendering -- --match webgpu` all passing locally.
 
 ## 2. Components Implemented
 

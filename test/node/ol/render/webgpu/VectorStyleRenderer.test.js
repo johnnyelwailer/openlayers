@@ -95,6 +95,7 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
 
     let pointCalled = null;
     let lineCalled = null;
+    let polyCalled = null;
     const buffers = {
       pointBuffers: [
         {
@@ -110,6 +111,13 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
           },
         },
       ],
+      polygonBuffers: [
+        {
+          updateStyle: (dev, ref, feature) => {
+            polyCalled = {dev, ref, feature};
+          },
+        },
+      ],
     };
 
     const feature = {foo: 1};
@@ -121,5 +129,8 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
     expect(lineCalled.dev).to.be(device);
     expect(lineCalled.ref).to.be(7);
     expect(lineCalled.feature).to.be(feature);
+    expect(polyCalled.dev).to.be(device);
+    expect(polyCalled.ref).to.be(7);
+    expect(polyCalled.feature).to.be(feature);
   });
 });
