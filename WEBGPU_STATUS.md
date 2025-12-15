@@ -296,3 +296,6 @@ The following files contain temporary debug logging that should be removed befor
   - Multiple expression syntax variations per property (as exhaustive as possbible)
   - Generates `docs/` (or `WEBGPU_STATUS.md`) tables from the results (pass/fail + mismatch metric + notes).
 - Start with operator-level tests (one operator per fixture), then style-property fixtures (circle/icon/stroke/fill/pattern).
+
+### Hardware sanity checks (dev workflow)
+- Rendering tests already support headed runs by default when not in CI (omit `--headless`), and now support `--gpu-info` / `--require-hardware` to log (or assert) the WebGPU adapter type (hardware vs. SwiftShader) during local validation.

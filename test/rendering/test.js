@@ -263,6 +263,90 @@ async function render(entries, options) {
     page.setDefaultNavigationTimeout(options.timeout);
     await exposeRender(page);
     await page.setViewport({width: 256, height: 256});
+
+    if (options.gpuInfo || options.requireHardware) {
+      let gpuInfo = null;
+      try {
+        await page.goto(
+          `http://${options.host}:${options.port}/gpu-info.html`,
+          {
+            waitUntil: 'networkidle0',
+          },
+        );
+        gpuInfo = await page.evaluate(async () => {
+          /** @type {any} */
+          const out = {supported: false};
+          if ('gpu' in navigator) {
+            out.supported = true;
+            const adapter = await navigator.gpu.requestAdapter();
+            out.adapter = !!adapter;
+            if (adapter) {
+              if (adapter.requestAdapterInfo) {
+                try {
+                  const info = await adapter.requestAdapterInfo();
+                  out.info = {
+                    vendor: info.vendor,
+                    architecture: info.architecture,
+                    device: info.device,
+                    description: info.description,
+                  };
+                } catch {
+                  // requestAdapterInfo may be restricted/unsupported.
+                }
+              }
+            }
+          }
+
+          // Fallback: get WebGL renderer string (useful for spotting SwiftShader).
+          try {
+            const canvas = document.createElement('canvas');
+            const gl =
+              canvas.getContext('webgl2') || canvas.getContext('webgl');
+            if (gl) {
+              const ext = gl.getExtension('WEBGL_debug_renderer_info');
+              if (ext) {
+                out.webgl = {
+                  vendor: gl.getParameter(ext.UNMASKED_VENDOR_WEBGL),
+                  renderer: gl.getParameter(ext.UNMASKED_RENDERER_WEBGL),
+                };
+              } else {
+                out.webgl = {
+                  vendor: gl.getParameter(gl.VENDOR),
+                  renderer: gl.getParameter(gl.RENDERER),
+                };
+              }
+            }
+          } catch {
+            // ignore
+          }
+
+          return out;
+        });
+      } catch (err) {
+        options.log.warn('unable to query WebGPU adapter info', err.message);
+      }
+
+      const webgpuText = gpuInfo?.info
+        ? `${gpuInfo.info.vendor} ${gpuInfo.info.device} ${gpuInfo.info.description}`
+        : null;
+      const webglText = gpuInfo?.webgl
+        ? `${gpuInfo.webgl.vendor} ${gpuInfo.webgl.renderer}`
+        : null;
+      options.log.info(
+        `gpu info: webgpu=${webgpuText || 'unknown'} webgl=${
+          webglText || 'unknown'
+        }`,
+      );
+
+      const lower = `${webgpuText || ''} ${webglText || ''}`.toLowerCase();
+      const isSoftware = /swiftshader|llvmpipe|software/.test(lower);
+      if (options.requireHardware && isSoftware) {
+        throw new Error(
+          `GPU appears to be using a software adapter (webgpu=${webgpuText || 'unknown'} webgl=${webglText || 'unknown'}); rerun on a machine with GPU acceleration enabled.`,
+        );
+      }
+    }
+
     fail = await renderEach(page, entries, options);
   } finally {
     if (options.interactive) {
@@ -399,6 +483,18 @@ if (esMain(import.meta)) {
             '--enable-unsafe-webgpu',
           ]
         : ['--enable-unsafe-webgpu'],
+    })
+    .option('gpu-info', {
+      describe:
+        'Log WebGPU adapter info (helps confirm hardware vs. SwiftShader)',
+      type: 'boolean',
+      default: false,
+    })
+    .option('require-hardware', {
+      describe:
+        'Fail if the WebGPU adapter looks like a software rasterizer (best-effort)',
+      type: 'boolean',
+      default: false,
     })
     .parse();
 
