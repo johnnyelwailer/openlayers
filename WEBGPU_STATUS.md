@@ -110,33 +110,57 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 - [x] **Caps/Joins Options**: Implemented and aligned with WebGL defaults.
 
 ### Known Failures / Investigation
-- None known (all `webgpu-*` rendering cases pass locally). Minor rasterization/AA differences across GPUs are expected; defer baseline updates until feature parity stabilizes.
+- `webgpu-points-rotation` mismatch above tolerance (0.005) but visually indistinguishable on at least one machine; decide whether to tighten the shader math/sampling or accept a looser tolerance for this case.
+- Minor rasterization/AA differences across GPUs are expected; defer broad baseline updates until feature parity stabilizes.
 
 ### Features (Pending)
-- [ ] **Complex Styling**: Full rule support and broader expression coverage (beyond current `webgpu-line-metric` subset).
-- [ ] **Shared Expression Compiler**: Continue expanding the WGSL backend so WebGL/WebGPU share parsing + typing + operator semantics (only backend codegen differs).
-- [ ] **Style Variables (`var()`) Parity**: Keep expanding `var()` usage across symbolizers and move more `var()`-driven properties from CPU-computed style buffers to the `vars` storage buffer (so `updateStyleVariables()` does not require re-uploading per-feature style records).
-- [ ] **Compatibility Matrix Expansion**: Add operator-level coverage (interpolate/match/step/etc.), more geometry+symbolizer combinations, and turn the matrix into CI conformance signal (regression-only by default).
-- [ ] **Hit Detection**: `forEachFeatureAtPixel` implementation.
-- [ ] **Texture/Icon Support**: Broaden sprite/atlas + anchor/rotation parity (baseline icon rendering works, but needs deeper style-property coverage).
-- [ ] **Fill Patterns**: Broaden fill/stroke pattern support beyond current coverage and add deeper conformance tests (pattern-size/offset as expressions, more symbolizers, edge cases).
-- [ ] **Symbol Rendering**: Expand circles/shapes/icons parity (baseline cases pass; missing many style properties and rule combinations).
+- [ ] **Complex Styling**: Full rule support (multiple rules, filters on point/line/polygon) and broader expression coverage beyond the current subset.
+- [ ] **WGSL Expression Coverage**: Expand operator support (e.g. `step`, `match`, `between`, `in`, `all/any/!`, `coalesce`, `floor/round`, trig) and remove “silent default” codegen paths (surface unsupported ops as errors/warnings).
+- [ ] **Style Variables (`var()`) Parity**: Keep expanding `var()` usage across symbolizers and move more dynamic properties from CPU-resolved style buffers to the `vars` storage buffer.
+- [ ] **Pattern Expressions**: Support expressions for `*-pattern-size`, `*-pattern-offset`, and related sub-rect fields (WebGL supports expressions here).
+- [ ] **Point/Polygon Expressions**: Extend point/polygon pipelines beyond `literal|get|var` (icons, circles, shapes, polygon fill-color).
+- [ ] **Hit Detection**: `forEachFeatureAtPixel` parity, including wiring `disableHitDetection` (currently a no-op).
+- [ ] **Compatibility Matrix Expansion**: Add operator-level fixtures, more geometry+symbolizer combinations, and turn the matrix into a CI conformance signal (regression-only by default).
 
-## 5. Files Modified (Debug Logging)
-The following files contain temporary debug logging that should be removed before merge:
-(removed)
+## 5. Hardening & Feature Gap Backlog
+
+### Snapshot (what works today)
+- **Renderer scope**: WebGPU vector rendering only (`WebGPUVector`); tiles/vector tiles/flow/heatmap are out of scope for the current implementation.
+- **Rendering parity**: All existing `test/rendering/cases/webgpu-*` pass locally (with the noted `webgpu-points-rotation` tolerance caveat).
+- **Style coverage**:
+  - **Lines**: Stroke AA/caps/joins/dashes/patterns; limited WGSL expression compilation is used for line discard + dynamic `stroke-width`/`stroke-color` in some cases.
+  - **Points + polygons**: Most properties are resolved CPU-side and written into per-feature style buffers; many fields are currently `literal|get|var` only.
+  - **Image src fields**: `icon-src`, `stroke-pattern-src`, `fill-pattern-src` are **string-only** (no expressions), consistent with current WebGL behavior.
+
+### P0 (correctness / merge-blocking hardening)
+- [ ] **Style parsing parity**: Replace the “single builder” approach in `src/ol/render/webgpu/VectorStyleRenderer.js` with WebGL-equivalent rule parsing (multiple rules, filters per rule, consistent defaults).
+- [ ] **Filter parity**: Apply rule filters consistently across point/line/polygon (not just line discard).
+- [ ] **Expression hardening**: Prevent silent fallbacks in WGSL codegen (unsupported ops compiling to `0.0`/`false`); emit actionable diagnostics and/or fall back to CPU evaluation where feasible.
+- [ ] **Hit detection plumbing**: Implement `forEachFeatureAtPixel` and wire `disableHitDetection` so it actually bypasses work.
+- [ ] **Device lifecycle**: Handle device loss and renderer disposal cleanly (destroy GPU resources, avoid stale cached canvas/device state).
+
+### P1 (feature parity expansion)
+- [ ] **WGSL operator coverage**: Prioritize ops exercised by the compatibility matrix (`step`, `match`, boolean ops, `coalesce`) and common numeric transforms (`floor/round`, trig).
+- [ ] **Pattern expressions**: Port WebGL’s expression support for pattern sub-rect sizing/offset fields (`*-pattern-size`, `*-pattern-offset`, `*-pattern-offset-origin`, spacing/start-offset as expressions where applicable).
+- [ ] **Point/Polygon expressions**: Move more per-feature properties to shader-evaluated expressions (or a richer feature-properties storage buffer) to match WebGL semantics and reduce CPU churn.
+- [ ] **Browser spec tests**: Expand `test/browser/spec/ol/render/webgpu/*` toward WebGL’s coverage (buffer utils, shader builder, style parsing, renderer lifecycle).
+
+### P2 (scope expansion beyond vector)
+- [ ] **WebGPU points-only layer** (`WebGLPoints` parity): separate pipeline + hit detection.
+- [ ] **WebGPU vector tiles** (`WebGLVectorTile` parity): masking, patterns, tile lifecycle/cache integration.
+- [ ] **WebGPU tile rendering** (`WebGLTile` parity): reprojection, palettes/bands, data tiles, tile-specific tests/examples.
 
 ## 6. Next Steps
-1. **Unify expression compilation**: Reuse `src/ol/expr` parsing/typing, add a shared “emit WGSL/GLSL” layer to avoid duplicating operator coverage.
-2. **Fill patterns + icons**: Port `fill-pattern-src` and icon/sprite logic to WebGPU (texture atlas, offsets, anchors).
-3. **Complex styling**: Expand rule handling (multiple rules + filters) and expressions (interpolate multi-stop, variables).
-4. **Hit detection**: Add `forEachFeatureAtPixel` support for WebGPU vector.
+1. **Style parsing + filters parity**: Port WebGL’s rule/filter behavior to WebGPU across point/line/polygon.
+2. **Expression hardening + coverage**: Add missing ops and make unsupported ops observable (no silent defaults).
+3. **Hit detection**: Implement `forEachFeatureAtPixel` and wire `disableHitDetection`.
+4. **Pattern + symbol parity**: Add expression support for pattern sub-rect fields and expand point/polygon expression handling.
 
 ## 7. WebGL → WebGPU Port Completeness Audit
 
 ### Rendering cases
 
-**Counts (as of 2025-12-13):**
+**Counts (as of 2025-12-16):**
 - WebGL rendering cases: **55**
 - WebGPU rendering cases: **18**
 - WebGL cases with a WebGPU equivalent: **16**
@@ -314,7 +338,7 @@ The following files contain temporary debug logging that should be removed befor
 - Add an E2E style/expression conformance suite that:
   - Renders the same fixture set under Canvas, WebGL, and WebGPU.
   - Captures images + records which style properties and expression ops compiled/executed without fallback/errors.
-  - Multiple expression syntax variations per property (as exhaustive as possbible)
+  - Multiple expression syntax variations per property (as exhaustive as possible)
   - Generates `docs/` (or `WEBGPU_STATUS.md`) tables from the results (pass/fail + mismatch metric + notes).
 - Start with operator-level tests (one operator per fixture), then style-property fixtures (circle/icon/stroke/fill/pattern).
 
