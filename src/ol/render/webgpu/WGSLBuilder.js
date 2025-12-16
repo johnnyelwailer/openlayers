@@ -13,6 +13,7 @@
 /**
  * @typedef {Object} FillShaderOptions
  * @property {FillPatternShaderOptions} [pattern] Fill pattern sampling options.
+ * @property {string} [discard] WGSL `bool` expression for fragment discard.
  */
 
 /**
@@ -37,17 +38,20 @@
  * @typedef {Object} CircleSymbolShaderOptions
  * @property {string} [fillColor] WGSL `vec4f` expression for the circle fill color.
  * @property {string} [strokeColor] WGSL `vec4f` expression for the circle stroke color.
+ * @property {string} [discard] WGSL `bool` expression for fragment discard.
  */
 
 /**
  * @typedef {Object} ShapeSymbolShaderOptions
  * @property {string} [fillColor] WGSL `vec4f` expression for the shape fill color.
  * @property {string} [strokeColor] WGSL `vec4f` expression for the shape stroke color.
+ * @property {string} [discard] WGSL `bool` expression for fragment discard.
  */
 
 /**
  * @typedef {Object} IconSymbolShaderOptions
  * @property {string} [tint] WGSL `vec4f` expression for the icon tint.
+ * @property {string} [discard] WGSL `bool` expression for fragment discard.
  */
 
 /**
@@ -117,6 +121,7 @@ export class WGSLBuilder {
    */
   getFillShader(options = {}) {
     const pattern = options.pattern;
+    const discardExpr = options.discard || 'false';
     const patternBindings = pattern
       ? `
       @group(0) @binding(2) var fillPatternSampler : sampler;
@@ -176,6 +181,7 @@ export class WGSLBuilder {
       struct VertexOutput {
         @builtin(position) position : vec4f,
         @location(0) color : vec4f,
+        @location(1) @interpolate(flat) featureIndex : f32,
       };
 
       struct Style {
@@ -196,6 +202,7 @@ export class WGSLBuilder {
       @group(0) @binding(1) var<uniform> uniforms : Uniforms;
       ${patternBindings}
       @group(0) @binding(4) var<storage, read> vars : array<vec4f>;
+      @group(0) @binding(5) var<storage, read> props : array<vec4f>;
       ${patternFns}
 
       @vertex
@@ -209,12 +216,16 @@ export class WGSLBuilder {
         let index = u32(featureIndex);
         let style = styles[index];
         output.color = style.fillColor;
+        output.featureIndex = featureIndex;
         
         return output;
       }
 
       @fragment
       fn fs_main(input : VertexOutput) -> @location(0) vec4f {
+        if (${discardExpr}) {
+          discard;
+        }
         ${
           pattern
             ? `
@@ -357,6 +368,7 @@ export class WGSLBuilder {
       @group(0) @binding(1) var<uniform> uniforms : StrokeUniforms;
       ${patternBindings}
       @group(0) @binding(4) var<storage, read> vars : array<vec4f>;
+      @group(0) @binding(5) var<storage, read> props : array<vec4f>;
 
       const LINESTRING_ANGLE_COSINE_CUTOFF : f32 = 0.985;
 
@@ -714,6 +726,7 @@ export class WGSLBuilder {
   getCircleSymbolShader(options = {}) {
     const fillColorExpr = options.fillColor || 'style.fillColor';
     const strokeColorExpr = options.strokeColor || 'style.strokeColor';
+    const discardExpr = options.discard || 'false';
     return `
       struct VertexOutput {
         @builtin(position) position : vec4f,
@@ -756,6 +769,7 @@ export class WGSLBuilder {
       @group(0) @binding(0) var<storage, read> styles : array<Style>;
       @group(0) @binding(1) var<uniform> uniforms : Uniforms;
       @group(0) @binding(4) var<storage, read> vars : array<vec4f>;
+      @group(0) @binding(5) var<storage, read> props : array<vec4f>;
 
       fn localPosition(vertexIndex : u32) -> vec2f {
         // triangle-strip order: (-1,-1), (1,-1), (-1,1), (1,1)
@@ -828,6 +842,9 @@ export class WGSLBuilder {
 
       @fragment
       fn fs_main(input : VertexOutput) -> @location(0) vec4f {
+        if (${discardExpr}) {
+          discard;
+        }
         // Convert from physical pixels with top-left origin to CSS pixels with bottom-left origin.
         var coordsPx = vec2f(
           input.position.x,
@@ -859,12 +876,14 @@ export class WGSLBuilder {
    */
   getIconSymbolShader(options = {}) {
     const tintExpr = options.tint || 'style.tint';
+    const discardExpr = options.discard || 'false';
     return `
       struct VertexOutput {
         @builtin(position) position : vec4f,
         @location(0) texCoord : vec2f,
         @location(1) @interpolate(flat) tint : vec4f,
         @location(2) @interpolate(flat) opacity : f32,
+        @location(3) @interpolate(flat) featureIndex : f32,
       };
 
       struct Style {
@@ -896,6 +915,7 @@ export class WGSLBuilder {
       @group(0) @binding(2) var iconSampler : sampler;
       @group(0) @binding(3) var iconTexture : texture_2d<f32>;
       @group(0) @binding(4) var<storage, read> vars : array<vec4f>;
+      @group(0) @binding(5) var<storage, read> props : array<vec4f>;
 
       fn localPosition(vertexIndex : u32) -> vec2f {
         if (vertexIndex == 0u) { return vec2f(-1.0, -1.0); }
@@ -935,11 +955,15 @@ export class WGSLBuilder {
         output.texCoord = vec2f(u, v);
         output.tint = ${tintExpr};
         output.opacity = style.opacity;
+        output.featureIndex = featureIndex;
         return output;
       }
 
       @fragment
       fn fs_main(input : VertexOutput) -> @location(0) vec4f {
+        if (${discardExpr}) {
+          discard;
+        }
         var color = input.tint * textureSampleLevel(iconTexture, iconSampler, input.texCoord, 0.0);
         color.a = color.a * input.opacity;
         return vec4f(color.rgb * color.a, color.a);
@@ -955,6 +979,7 @@ export class WGSLBuilder {
   getShapeSymbolShader(options = {}) {
     const fillColorExpr = options.fillColor || 'style.fillColor';
     const strokeColorExpr = options.strokeColor || 'style.strokeColor';
+    const discardExpr = options.discard || 'false';
     return `
       struct VertexOutput {
         @builtin(position) position : vec4f,
@@ -1000,6 +1025,7 @@ export class WGSLBuilder {
       @group(0) @binding(0) var<storage, read> styles : array<Style>;
       @group(0) @binding(1) var<uniform> uniforms : Uniforms;
       @group(0) @binding(4) var<storage, read> vars : array<vec4f>;
+      @group(0) @binding(5) var<storage, read> props : array<vec4f>;
 
       fn localPosition(vertexIndex : u32) -> vec2f {
         if (vertexIndex == 0u) { return vec2f(-1.0, -1.0); }
@@ -1104,6 +1130,9 @@ export class WGSLBuilder {
 
       @fragment
       fn fs_main(input : VertexOutput) -> @location(0) vec4f {
+        if (${discardExpr}) {
+          discard;
+        }
         var coordsPx = vec2f(
           input.position.x,
           uniforms.viewportSizePx.y * uniforms.pixelRatio - input.position.y,

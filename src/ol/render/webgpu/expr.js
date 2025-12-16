@@ -21,7 +21,7 @@ import {
 /**
  * @typedef {Object} CompileContext
  * @property {string} lineMetricVar WGSL variable name for line metric.
- * @property {(name: string) => string} getProp WGSL expression for a numeric property.
+ * @property {(name: string, type: number) => string} getProp WGSL expression for a `get` property.
  * @property {(name: string, type: number) => string} [getVar] WGSL expression for a style variable.
  */
 
@@ -131,7 +131,7 @@ export function compileWgslExpression(expr, ctx, expected) {
       resolution: 'uniforms.resolution',
       zoom: 'uniforms.zoom',
       time: 'uniforms.time',
-      get: (name) => ctx.getProp(name),
+      get: (name, type) => ctx.getProp(name, type),
       var: (name, type) => ctx.getVar?.(name, type) || '0.0',
     });
   }

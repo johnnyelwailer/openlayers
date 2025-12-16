@@ -347,6 +347,18 @@ class VectorStyleRenderer {
   }
 
   /**
+   * WebGPU pipelines created with `layout: 'auto'` only expose bindings that are
+   * statically used by the shader. We therefore must only add the `props` bind
+   * group entry when the shader actually reads from `props[...]`.
+   * @param {string} code WGSL shader code.
+   * @return {boolean} Whether the shader reads from the `props` buffer.
+   * @private
+   */
+  shaderUsesProps_(code) {
+    return /\bprops\s*\[/.test(code);
+  }
+
+  /**
    * @param {Array<string>} names Names.
    * @private
    */
@@ -490,6 +502,43 @@ class VectorStyleRenderer {
   }
 
   /**
+   * @param {string} name Property name.
+   * @param {number} type Value type bitmask.
+   * @param {string} featureIndexExpr WGSL expression for feature index.
+   * @param {Map<string, number>} indexByName Property index map.
+   * @param {number} propCount Property count (stride) per feature.
+   * @return {string} WGSL expression.
+   * @private
+   */
+  getFeaturePropExpression_(
+    name,
+    type,
+    featureIndexExpr,
+    indexByName,
+    propCount,
+  ) {
+    const idx = indexByName.get(name);
+    if (idx === undefined || propCount <= 0) {
+      if (isType(type, ColorType)) {
+        return 'vec4f(0.0, 0.0, 0.0, 0.0)';
+      }
+      if (isType(type, BooleanType)) {
+        return 'false';
+      }
+      return '0.0';
+    }
+
+    const entry = `props[u32(${featureIndexExpr}) * ${propCount}u + ${idx}u]`;
+    if (isType(type, ColorType)) {
+      return entry;
+    }
+    if (isType(type, BooleanType)) {
+      return `(${entry}.x > 0.0)`;
+    }
+    return `${entry}.x`;
+  }
+
+  /**
    * @param {string} src Image URL or data URL.
    * @return {Promise<{sampler: GPUSampler, view: GPUTextureView, size: [number, number]}>} Texture resources.
    * @private
@@ -580,6 +629,28 @@ class VectorStyleRenderer {
     }
     this.setVariableNames_(Array.from(varsUsed).sort());
 
+    const propsUsed = new Set();
+    for (const rule of rules) {
+      collectGetProperties(rule.filter, propsUsed);
+      const style = rule.style;
+      if (!style) {
+        continue;
+      }
+      // Only collect properties that may be used by the WGSL expression backend today.
+      if (Array.isArray(style['stroke-width'])) {
+        collectGetProperties(style['stroke-width'], propsUsed);
+      }
+      if (Array.isArray(style['stroke-color'])) {
+        collectGetProperties(style['stroke-color'], propsUsed);
+      }
+    }
+    const propNames = Array.from(propsUsed).sort();
+    const propIndexByName = new Map();
+    for (let i = 0; i < propNames.length; i++) {
+      propIndexByName.set(propNames[i], i);
+    }
+    const propCount = propNames.length;
+
     // --- 1. Generate Point Buffers ---
     const pointBatch = geometryBatch.pointBatch;
     const pointEntries = Object.values(pointBatch.entries);
@@ -635,16 +706,34 @@ class VectorStyleRenderer {
 
     if (pointBuffer) {
       const STYLE_STRIDE = 20;
-      const circleShader =
+      const baseCircleShader =
         this.styleShaders_[0].builder.getCircleSymbolShader();
-      const iconShader = this.styleShaders_[0].builder.getIconSymbolShader();
-      const shapeShader = this.styleShaders_[0].builder.getShapeSymbolShader();
+      const baseIconShader =
+        this.styleShaders_[0].builder.getIconSymbolShader();
+      const baseShapeShader =
+        this.styleShaders_[0].builder.getShapeSymbolShader();
 
       for (const rule of rules) {
         const style = rule.style;
         if (!style) {
           continue;
         }
+        const filter = rule.filter;
+        const filterCtx = {
+          lineMetricVar: '0.0',
+          getProp: (name, type) =>
+            this.getFeaturePropExpression_(
+              name,
+              type,
+              'input.featureIndex',
+              propIndexByName,
+              propCount,
+            ),
+          getVar: (name, type) => this.getVarExpression_(name, type),
+        };
+        const discard = filter
+          ? `!(${compileWgslExpression(filter, filterCtx, 'bool')})`
+          : 'false';
 
         // --- Icons ---
         const iconSrc = style['icon-src'];
@@ -846,10 +935,13 @@ class VectorStyleRenderer {
           pointBuffers.push({
             vertex: pointBuffer,
             style: styleBuffer,
-            symbolShader: iconShader,
+            symbolShader:
+              discard === 'false'
+                ? baseIconShader
+                : this.styleShaders_[0].builder.getIconSymbolShader({discard}),
             pattern: texture,
             updateStyle: (device, ref, feature) => {
-              if (!ref) {
+              if (!ref || ref > pointMaxRef) {
                 return;
               }
               const record = new Float32Array(STYLE_STRIDE);
@@ -1026,9 +1118,12 @@ class VectorStyleRenderer {
           pointBuffers.push({
             vertex: pointBuffer,
             style: styleBuffer,
-            symbolShader: shapeShader,
+            symbolShader:
+              discard === 'false'
+                ? baseShapeShader
+                : this.styleShaders_[0].builder.getShapeSymbolShader({discard}),
             updateStyle: (device, ref, feature) => {
-              if (!ref) {
+              if (!ref || ref > pointMaxRef) {
                 return;
               }
               const record = new Float32Array(STYLE_STRIDE);
@@ -1173,9 +1268,14 @@ class VectorStyleRenderer {
           pointBuffers.push({
             vertex: pointBuffer,
             style: styleBuffer,
-            symbolShader: circleShader,
+            symbolShader:
+              discard === 'false'
+                ? baseCircleShader
+                : this.styleShaders_[0].builder.getCircleSymbolShader({
+                    discard,
+                  }),
             updateStyle: (device, ref, feature) => {
-              if (!ref) {
+              if (!ref || ref > pointMaxRef) {
                 return;
               }
               const record = new Float32Array(STYLE_STRIDE);
@@ -1194,6 +1294,10 @@ class VectorStyleRenderer {
     // --- 2. Generate LineString Buffers ---
     const lineBatch = geometryBatch.lineStringBatch;
     const lineEntries = Object.values(lineBatch.entries);
+    const lineMaxRef = lineEntries.reduce(
+      (max, entry) => Math.max(max, entry.ref || 0),
+      0,
+    );
 
     // stride is 3 (XYM) for lines in MixedGeometryBatch
     const LINE_STRIDE = 3;
@@ -1294,21 +1398,10 @@ class VectorStyleRenderer {
       const STYLE_STRIDE = 28;
       const DASH_MAX = 8;
       const defaultColor = [0, 0, 0, 1];
-      const lineMaxRef = lineEntries.reduce(
-        (max, entry) => Math.max(max, entry.ref || 0),
-        0,
-      );
-
       for (const rule of strokeRules) {
         const style = rule.style;
         const filter = rule.filter;
         const lineStyleData = new Float32Array((lineMaxRef + 1) * STYLE_STRIDE);
-
-        const getProps = new Set();
-        collectGetProperties(filter, getProps);
-        collectGetProperties(style['stroke-width'], getProps);
-        collectGetProperties(style['stroke-color'], getProps);
-        const hasLimit = getProps.has('limit');
 
         const patternSrc = style['stroke-pattern-src'];
         if (
@@ -1425,15 +1518,6 @@ class VectorStyleRenderer {
             const vecBase = d < 4 ? sIdx + 16 : sIdx + 20;
             lineStyleData[vecBase + (d % 4)] = len;
           }
-
-          // Optional numeric get() property used by `webgpu-line-metric` ("limit").
-          if (hasLimit) {
-            lineStyleData[sIdx + 24] = resolveNumber(
-              ['get', 'limit'],
-              feature,
-              0.0,
-            );
-          }
         };
 
         for (let i = 0; i < lineEntries.length; i++) {
@@ -1466,19 +1550,38 @@ class VectorStyleRenderer {
             style['stroke-color'][0] !== 'get') ||
           hasStrokePattern
         ) {
-          const ctx = {
+          const vertexCtx = {
             lineMetricVar: 'lineMetric',
-            getProp: (name) => (name === 'limit' ? 'style.get0' : '0.0'),
+            getProp: (name, type) =>
+              this.getFeaturePropExpression_(
+                name,
+                type,
+                'featureIndex',
+                propIndexByName,
+                propCount,
+              ),
+            getVar: (name, type) => this.getVarExpression_(name, type),
+          };
+          const fragmentCtx = {
+            lineMetricVar: 'lineMetric',
+            getProp: (name, type) =>
+              this.getFeaturePropExpression_(
+                name,
+                type,
+                'input.featureIndex',
+                propIndexByName,
+                propCount,
+              ),
             getVar: (name, type) => this.getVarExpression_(name, type),
           };
           const discard = filter
-            ? `!(${compileWgslExpression(filter, ctx, 'bool')})`
+            ? `!(${compileWgslExpression(filter, fragmentCtx, 'bool')})`
             : 'false';
           const widthExpr = Array.isArray(style['stroke-width'])
-            ? compileWgslExpression(style['stroke-width'], ctx, 'f32')
+            ? compileWgslExpression(style['stroke-width'], vertexCtx, 'f32')
             : 'style.width';
           const colorExpr = Array.isArray(style['stroke-color'])
-            ? compileWgslExpression(style['stroke-color'], ctx, 'vec4f')
+            ? compileWgslExpression(style['stroke-color'], fragmentCtx, 'vec4f')
             : 'style.color';
           strokeShader = this.styleShaders_[0].builder.getStrokeShader({
             strokeColor: colorExpr,
@@ -1494,7 +1597,7 @@ class VectorStyleRenderer {
           strokeShader,
           pattern: patternTexture,
           updateStyle: (device, ref, feature) => {
-            if (!ref) {
+            if (!ref || ref > lineMaxRef) {
               return;
             }
             const record = new Float32Array(STYLE_STRIDE);
@@ -1544,174 +1647,183 @@ class VectorStyleRenderer {
 
       return hasFillColor || typeof patternSrc === 'string';
     });
-    if (!polyStyleRule) {
-      // No literal fill style: don't render polygons (prevents wrong default fills).
-      return {
-        pointBuffers,
-        lineStringBuffers,
-        polygonBuffers: [],
+    /** @type {Array<PolygonBufferSet>} */
+    let polygonBuffers = [];
+    if (polyStyleRule) {
+      // To estimate size, we'd need to triangulate first or use a dynamic array.
+      // Since earcut is fast enough for 2D, let's triangulate into a temp array.
+
+      const polyVertices = []; // [x, y, featureIndex, x, y, featureIndex]
+      const polyStyleData = new Float32Array((polyMaxRef + 1) * 4); // vec4 per feature ref
+
+      const polyStyle = polyStyleRule.style;
+      const polyFilter = polyStyleRule.filter;
+      const fillPatternSrc = polyStyle['fill-pattern-src'];
+      const hasFillPattern = typeof fillPatternSrc === 'string';
+
+      const fillColorExpr = polyStyle['fill-color'];
+      const fallbackTint = hasFillPattern ? [1, 1, 1, 1] : [0, 0, 1, 1];
+
+      const resolveFillColor = (feature) => {
+        if (!fillColorExpr) {
+          return fallbackTint;
+        }
+        if (
+          Array.isArray(fillColorExpr) &&
+          fillColorExpr.length === 2 &&
+          fillColorExpr[0] === 'var'
+        ) {
+          return resolveColor(
+            this.variables_[fillColorExpr[1]],
+            feature,
+            fallbackTint,
+          );
+        }
+        return resolveColor(fillColorExpr, feature, fallbackTint);
       };
-    }
 
-    // To estimate size, we'd need to triangulate first or use a dynamic array.
-    // Since earcut is fast enough for 2D, let's triangulate into a temp array.
-
-    const polyVertices = []; // [x, y, featureIndex, x, y, featureIndex]
-    const polyStyleData = new Float32Array((polyMaxRef + 1) * 4); // vec4 per feature ref
-
-    const polyStyle = polyStyleRule.style;
-    const fillPatternSrc = polyStyle['fill-pattern-src'];
-    const hasFillPattern = typeof fillPatternSrc === 'string';
-
-    const fillColorExpr = polyStyle['fill-color'];
-    const fallbackTint = hasFillPattern ? [1, 1, 1, 1] : [0, 0, 1, 1];
-
-    const resolveFillColor = (feature) => {
-      if (!fillColorExpr) {
-        return fallbackTint;
-      }
-      if (
-        Array.isArray(fillColorExpr) &&
-        fillColorExpr.length === 2 &&
-        fillColorExpr[0] === 'var'
-      ) {
-        return resolveColor(
-          this.variables_[fillColorExpr[1]],
-          feature,
-          fallbackTint,
-        );
-      }
-      return resolveColor(fillColorExpr, feature, fallbackTint);
-    };
-
-    /** @type {StrokePatternTexture|undefined} */
-    let fillPatternTexture;
-    /** @type {import("./WGSLBuilder.js").FillPatternShaderOptions|undefined} */
-    let fillPatternOptions;
-    if (hasFillPattern) {
-      fillPatternTexture = await this.getPatternTexture_(fillPatternSrc);
-      const textureSize = fillPatternTexture.size;
-      const sampleSize = Array.isArray(polyStyle['fill-pattern-size'])
-        ? polyStyle['fill-pattern-size']
-        : textureSize;
-      const baseOffset = Array.isArray(polyStyle['fill-pattern-offset'])
-        ? polyStyle['fill-pattern-offset']
-        : [0, 0];
-      const origin = polyStyle['fill-pattern-offset-origin'] || 'top-left';
-      let offsetX = baseOffset[0] || 0;
-      let offsetY = baseOffset[1] || 0;
-      if (origin === 'top-right') {
-        offsetX = textureSize[0] - sampleSize[0] - offsetX;
-      } else if (origin === 'bottom-left') {
-        offsetY = textureSize[1] - sampleSize[1] - offsetY;
-      } else if (origin === 'bottom-right') {
-        offsetX = textureSize[0] - sampleSize[0] - offsetX;
-        offsetY = textureSize[1] - sampleSize[1] - offsetY;
-      }
-
-      fillPatternOptions = {
-        textureSize: `vec2f(${textureSize[0]}, ${textureSize[1]})`,
-        textureOffset: `vec2f(${offsetX}, ${offsetY})`,
-        sampleSize: `vec2f(${sampleSize[0]}, ${sampleSize[1]})`,
-        tint: 'input.color',
-      };
-    }
-
-    const POLY_STRIDE = 2; // MixedGeometryBatch usually 2 unless M/Z
-
-    for (let i = 0; i < polyEntries.length; i++) {
-      const entry = polyEntries[i];
-      const ref = entry.ref || 0;
-
-      // Style
-      const fillColor = resolveFillColor(entry.feature);
-      polyStyleData[ref * 4 + 0] = fillColor[0];
-      polyStyleData[ref * 4 + 1] = fillColor[1];
-      polyStyleData[ref * 4 + 2] = fillColor[2];
-      polyStyleData[ref * 4 + 3] = fillColor[3];
-
-      // entry.flatCoordss is Array<Array<number>> (polygons)
-      // entry.ringsVerticesCounts is Array<Array<number>> (rings per polygon)
-
-      for (let pOffset = 0; pOffset < entry.flatCoordss.length; pOffset++) {
-        const flatCoords = entry.flatCoordss[pOffset];
-        const ringsCounts = entry.ringsVerticesCounts[pOffset];
-
-        if (!flatCoords || flatCoords.length === 0) {
-          continue;
+      /** @type {StrokePatternTexture|undefined} */
+      let fillPatternTexture;
+      /** @type {import("./WGSLBuilder.js").FillPatternShaderOptions|undefined} */
+      let fillPatternOptions;
+      if (hasFillPattern) {
+        fillPatternTexture = await this.getPatternTexture_(fillPatternSrc);
+        const textureSize = fillPatternTexture.size;
+        const sampleSize = Array.isArray(polyStyle['fill-pattern-size'])
+          ? polyStyle['fill-pattern-size']
+          : textureSize;
+        const baseOffset = Array.isArray(polyStyle['fill-pattern-offset'])
+          ? polyStyle['fill-pattern-offset']
+          : [0, 0];
+        const origin = polyStyle['fill-pattern-offset-origin'] || 'top-left';
+        let offsetX = baseOffset[0] || 0;
+        let offsetY = baseOffset[1] || 0;
+        if (origin === 'top-right') {
+          offsetX = textureSize[0] - sampleSize[0] - offsetX;
+        } else if (origin === 'bottom-left') {
+          offsetY = textureSize[1] - sampleSize[1] - offsetY;
+        } else if (origin === 'bottom-right') {
+          offsetX = textureSize[0] - sampleSize[0] - offsetX;
+          offsetY = textureSize[1] - sampleSize[1] - offsetY;
         }
 
-        // Calculate holes
-        // holes: array of vertex-indices where holes start
-        const holes = [];
-        let currentVertexIndex = 0;
-        for (let r = 0; r < ringsCounts.length; r++) {
-          // ringsCounts[r] is number of vertices in this ring
-          if (r > 0) {
-            holes.push(currentVertexIndex);
+        fillPatternOptions = {
+          textureSize: `vec2f(${textureSize[0]}, ${textureSize[1]})`,
+          textureOffset: `vec2f(${offsetX}, ${offsetY})`,
+          sampleSize: `vec2f(${sampleSize[0]}, ${sampleSize[1]})`,
+          tint: 'input.color',
+        };
+      }
+
+      const polyFilterCtx = {
+        lineMetricVar: '0.0',
+        getProp: (name, type) =>
+          this.getFeaturePropExpression_(
+            name,
+            type,
+            'input.featureIndex',
+            propIndexByName,
+            propCount,
+          ),
+        getVar: (name, type) => this.getVarExpression_(name, type),
+      };
+      const polyDiscard = polyFilter
+        ? `!(${compileWgslExpression(polyFilter, polyFilterCtx, 'bool')})`
+        : 'false';
+
+      const POLY_STRIDE = 2; // MixedGeometryBatch usually 2 unless M/Z
+
+      for (let i = 0; i < polyEntries.length; i++) {
+        const entry = polyEntries[i];
+        const ref = entry.ref || 0;
+
+        // Style
+        const fillColor = resolveFillColor(entry.feature);
+        polyStyleData[ref * 4 + 0] = fillColor[0];
+        polyStyleData[ref * 4 + 1] = fillColor[1];
+        polyStyleData[ref * 4 + 2] = fillColor[2];
+        polyStyleData[ref * 4 + 3] = fillColor[3];
+
+        // entry.flatCoordss is Array<Array<number>> (polygons)
+        // entry.ringsVerticesCounts is Array<Array<number>> (rings per polygon)
+
+        for (let pOffset = 0; pOffset < entry.flatCoordss.length; pOffset++) {
+          const flatCoords = entry.flatCoordss[pOffset];
+          const ringsCounts = entry.ringsVerticesCounts[pOffset];
+
+          if (!flatCoords || flatCoords.length === 0) {
+            continue;
           }
-          currentVertexIndex += ringsCounts[r];
-        }
 
-        // Triangulate
-        const triangles = earcut(flatCoords, holes, POLY_STRIDE);
+          // Calculate holes
+          // holes: array of vertex-indices where holes start
+          const holes = [];
+          let currentVertexIndex = 0;
+          for (let r = 0; r < ringsCounts.length; r++) {
+            // ringsCounts[r] is number of vertices in this ring
+            if (r > 0) {
+              holes.push(currentVertexIndex);
+            }
+            currentVertexIndex += ringsCounts[r];
+          }
 
-        // triangles is flat array of vertex indices
-        for (let t = 0; t < triangles.length; t++) {
-          const vIdx = triangles[t]; // Index of vertex (0-based)
-          const px = flatCoords[vIdx * POLY_STRIDE];
-          const py = flatCoords[vIdx * POLY_STRIDE + 1];
+          // Triangulate
+          const triangles = earcut(flatCoords, holes, POLY_STRIDE);
 
-          polyVertices.push(px, py, ref); // x, y, featureIndex (stable ref)
+          // triangles is flat array of vertex indices
+          for (let t = 0; t < triangles.length; t++) {
+            const vIdx = triangles[t]; // Index of vertex (0-based)
+            const px = flatCoords[vIdx * POLY_STRIDE];
+            const py = flatCoords[vIdx * POLY_STRIDE + 1];
+
+            polyVertices.push(px, py, ref); // x, y, featureIndex (stable ref)
+          }
         }
       }
-    }
 
-    let polyBuffer = null;
-    let polyStyleBuffer = null;
+      let polyBuffer = null;
+      let polyStyleBuffer = null;
 
-    if (polyVertices.length > 0) {
-      const polyDataFloat = new Float32Array(polyVertices);
-      polyBuffer = new WebGPUBuffer({
-        size: polyDataFloat.byteLength,
-        usage: 0x0020 | 0x0008,
-        mappedAtCreation: true,
-      });
-      polyBuffer.create(this.helper_);
-      new Float32Array(polyBuffer.getBuffer().getMappedRange()).set(
-        polyDataFloat,
-      );
-      polyBuffer.getBuffer().unmap();
+      if (polyVertices.length > 0) {
+        const polyDataFloat = new Float32Array(polyVertices);
+        polyBuffer = new WebGPUBuffer({
+          size: polyDataFloat.byteLength,
+          usage: 0x0020 | 0x0008,
+          mappedAtCreation: true,
+        });
+        polyBuffer.create(this.helper_);
+        new Float32Array(polyBuffer.getBuffer().getMappedRange()).set(
+          polyDataFloat,
+        );
+        polyBuffer.getBuffer().unmap();
 
-      polyStyleBuffer = new WebGPUBuffer({
-        size: polyStyleData.byteLength,
-        usage: 0x0080 | 0x0008,
-        mappedAtCreation: true,
-      });
-      polyStyleBuffer.create(this.helper_);
-      new Float32Array(polyStyleBuffer.getBuffer().getMappedRange()).set(
-        polyStyleData,
-      );
-      polyStyleBuffer.getBuffer().unmap();
-    }
+        polyStyleBuffer = new WebGPUBuffer({
+          size: polyStyleData.byteLength,
+          usage: 0x0080 | 0x0008,
+          mappedAtCreation: true,
+        });
+        polyStyleBuffer.create(this.helper_);
+        new Float32Array(polyStyleBuffer.getBuffer().getMappedRange()).set(
+          polyStyleData,
+        );
+        polyStyleBuffer.getBuffer().unmap();
+      }
 
-    return {
-      pointBuffers,
-      lineStringBuffers,
-      /** @type {Array<PolygonBufferSet>} */
-      polygonBuffers: polyBuffer
+      polygonBuffers = polyBuffer
         ? [
             {
               vertex: polyBuffer,
               style: polyStyleBuffer,
-              fillShader: hasFillPattern
-                ? this.styleShaders_[0].builder.getFillShader({
-                    pattern: fillPatternOptions,
-                  })
-                : undefined,
+              fillShader:
+                hasFillPattern || polyDiscard !== 'false'
+                  ? this.styleShaders_[0].builder.getFillShader({
+                      pattern: fillPatternOptions,
+                      discard: polyDiscard,
+                    })
+                  : undefined,
               pattern: fillPatternTexture,
               updateStyle: (device, ref, feature) => {
-                if (!ref) {
+                if (!ref || ref > polyMaxRef) {
                   return;
                 }
                 const fillColor = resolveFillColor(feature);
@@ -1724,7 +1836,104 @@ class VectorStyleRenderer {
               },
             },
           ]
-        : [],
+        : [];
+    }
+
+    const maxRef = Math.max(pointMaxRef, lineMaxRef, polyMaxRef);
+    const featureCount = maxRef + 1;
+    /** @type {{buffer: WebGPUBuffer, propNames: Array<string>, propCount: number, indexByName: Map<string, number>, update: (device: GPUDevice, ref: number, feature: import(\"../../Feature.js\").default|import(\"../../render/Feature.js\").default) => void}|null} */
+    let featureProperties = null;
+    if (propCount > 0 && featureCount > 0) {
+      const featureByRef = new Array(featureCount);
+      for (const entry of pointEntries) {
+        const ref = entry.ref || 0;
+        if (!featureByRef[ref]) {
+          featureByRef[ref] = entry.feature;
+        }
+      }
+      for (const entry of lineEntries) {
+        const ref = entry.ref || 0;
+        if (!featureByRef[ref]) {
+          featureByRef[ref] = entry.feature;
+        }
+      }
+      for (const entry of polyEntries) {
+        const ref = entry.ref || 0;
+        if (!featureByRef[ref]) {
+          featureByRef[ref] = entry.feature;
+        }
+      }
+
+      const data = new Float32Array(featureCount * propCount * 4);
+      for (let ref = 0; ref < featureCount; ref++) {
+        const feature = featureByRef[ref];
+        if (!feature) {
+          continue;
+        }
+        for (let i = 0; i < propCount; i++) {
+          const name = propNames[i];
+          const value = feature.get(name);
+          let x = 0;
+          if (typeof value === 'number') {
+            x = Number.isFinite(value) ? value : 0;
+          } else if (typeof value === 'boolean') {
+            x = value ? 1 : 0;
+          } else if (typeof value === 'string') {
+            const n = Number(value);
+            x = Number.isFinite(n) ? n : 0;
+          }
+          data[(ref * propCount + i) * 4] = x;
+        }
+      }
+
+      const propsBuffer = new WebGPUBuffer({
+        size: data.byteLength,
+        usage: 0x0080 | 0x0008, // STORAGE | COPY_DST
+        mappedAtCreation: true,
+      });
+      propsBuffer.create(this.helper_);
+      new Float32Array(propsBuffer.getBuffer().getMappedRange()).set(data);
+      propsBuffer.getBuffer().unmap();
+
+      const strideBytes = propCount * 16;
+      featureProperties = {
+        buffer: propsBuffer,
+        propNames,
+        propCount,
+        indexByName: propIndexByName,
+        update: (device, ref, feature) => {
+          if (!ref || ref >= featureCount) {
+            return;
+          }
+          const record = new Float32Array(propCount * 4);
+          for (let i = 0; i < propCount; i++) {
+            const name = propNames[i];
+            const value = feature.get(name);
+            let x = 0;
+            if (typeof value === 'number') {
+              x = Number.isFinite(value) ? value : 0;
+            } else if (typeof value === 'boolean') {
+              x = value ? 1 : 0;
+            } else if (typeof value === 'string') {
+              const n = Number(value);
+              x = Number.isFinite(n) ? n : 0;
+            }
+            record[i * 4] = x;
+          }
+          device.queue.writeBuffer(
+            propsBuffer.getBuffer(),
+            ref * strideBytes,
+            record,
+          );
+        },
+      };
+    }
+
+    return {
+      featureProperties,
+      pointBuffers,
+      lineStringBuffers,
+      polygonBuffers,
     };
   }
 
@@ -1755,6 +1964,8 @@ class VectorStyleRenderer {
     for (const set of polyBuffers) {
       set.updateStyle?.(device, ref, feature);
     }
+
+    buffers.featureProperties?.update?.(device, ref, feature);
   }
 
   /**
@@ -2193,6 +2404,16 @@ class VectorStyleRenderer {
                   },
                 ]
               : []),
+            ...(buffers.featureProperties && this.shaderUsesProps_(fillCode)
+              ? [
+                  {
+                    binding: 5,
+                    resource: {
+                      buffer: buffers.featureProperties.buffer.getBuffer(),
+                    },
+                  },
+                ]
+              : []),
           ],
         });
 
@@ -2342,6 +2563,16 @@ class VectorStyleRenderer {
                   },
                 ]
               : []),
+            ...(buffers.featureProperties && this.shaderUsesProps_(strokeCode)
+              ? [
+                  {
+                    binding: 5,
+                    resource: {
+                      buffer: buffers.featureProperties.buffer.getBuffer(),
+                    },
+                  },
+                ]
+              : []),
           ],
         });
 
@@ -2451,6 +2682,16 @@ class VectorStyleRenderer {
                     binding: 4,
                     resource: {
                       buffer: this.getVariablesBuffer_(device),
+                    },
+                  },
+                ]
+              : []),
+            ...(buffers.featureProperties && this.shaderUsesProps_(symbolCode)
+              ? [
+                  {
+                    binding: 5,
+                    resource: {
+                      buffer: buffers.featureProperties.buffer.getBuffer(),
                     },
                   },
                 ]

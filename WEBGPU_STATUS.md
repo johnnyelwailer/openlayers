@@ -10,8 +10,9 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 *   **Compat Matrix Parity (Points)**: Fixed WebGPU “blank output” for `circle-fill-color/var`, `circle-stroke-color/var`, `shape-fill-color/var`, `shape-stroke-color/var`, `icon-color/var`, `icon-size/get`, and `icon-size/var` by resolving `var()` and size expressions for point symbol style buffers.
 *   **Icon Sprite Sub-rect Expressions**: WebGPU icon rendering now resolves `icon-size`/`icon-offset` as `literal|get|var` per feature (prevents NaNs in UVs and enables the compat-matrix icon-size coverage).
 *   **Style Resolution Helpers**: Extended WebGPU style-buffer helpers to resolve `['var', …]` and added `resolveSize()` for `SizeExpression` handling (used in the point/icon pipeline).
+*   **Feature Properties Buffer (`get()` in WGSL)**: Added a per-feature `props` storage buffer and switched WGSL `get()` compilation to read from it; enables rule filter discard on points/polygons (not just lines) and supports arbitrary numeric/boolean feature properties in WebGPU WGSL expressions.
 *   **Compatibility Matrix Baseline Updated**: Regenerated `test/compat-matrix/baseline.json` after the above parity fixes.
-*   **Validation (Latest)**: `npm run lint`, `npm run test-node`, `npm run test-rendering -- --match webgpu`, `npm run build-full`, and `node test/compat-matrix/test.js --headless` passing locally.
+*   **Validation (Latest)**: `npm run lint`, `node test/rendering/test.js --match webgpu`, `npm run build-full`, and `node test/compat-matrix/test.js --headless` passing locally.
 
 **Earlier Progress (2025-12-15):**
 *   **Instanced Line Rendering**: Implemented GPU-side line expansion using instanced rendering with `triangle-strip` topology. Lines now correctly respect `stroke-width` style property.
@@ -135,7 +136,7 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 
 ### P0 (correctness / merge-blocking hardening)
 - [ ] **Style parsing parity**: Replace the “single builder” approach in `src/ol/render/webgpu/VectorStyleRenderer.js` with WebGL-equivalent rule parsing (multiple rules, filters per rule, consistent defaults).
-- [ ] **Filter parity**: Apply rule filters consistently across point/line/polygon (not just line discard).
+- [x] **Filter parity**: Apply rule filters consistently across point/line/polygon (polygons currently apply the filter for the active fill rule).
 - [ ] **Expression hardening**: Prevent silent fallbacks in WGSL codegen (unsupported ops compiling to `0.0`/`false`); emit actionable diagnostics and/or fall back to CPU evaluation where feasible.
 - [ ] **Hit detection plumbing**: Implement `forEachFeatureAtPixel` and wire `disableHitDetection` so it actually bypasses work.
 - [ ] **Device lifecycle**: Handle device loss and renderer disposal cleanly (destroy GPU resources, avoid stale cached canvas/device state).
@@ -156,6 +157,20 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 2. **Expression hardening + coverage**: Add missing ops and make unsupported ops observable (no silent defaults).
 3. **Hit detection**: Implement `forEachFeatureAtPixel` and wire `disableHitDetection`.
 4. **Pattern + symbol parity**: Add expression support for pattern sub-rect fields and expand point/polygon expression handling.
+
+## 6.1 Review Notes (2025-12-16)
+
+These are follow-up notes after hardening `get()` support in the WGSL backend via a per-feature `props` storage buffer.
+
+### Correctness risks
+- **Global refs vs per-geometry buffers**: MixedGeometryBatch refs are global across point/line/polygon, but WebGPU per-geometry style buffers are sized based on each geometry type’s `*MaxRef`. `updateFeatureStyles()` currently fans out updates to all buffer sets, so per-buffer `updateStyle()` must guard against out-of-range `ref` values. (Hardened in `src/ol/render/webgpu/VectorStyleRenderer.js` by checking `ref > {point,line,poly}MaxRef` before writing.)
+- **`get()` return type limitations**: The `props` buffer currently only stores scalar values in `.x` (numbers + bools as 1/0, strings coerced via `Number()`), leaving `.yzw` at 0. This is sufficient for current WebGPU uses (filters + numeric expressions), but will be incorrect if we start compiling expressions where `get()` is expected to return a color/vec4f.
+- **Auto pipeline layout sensitivity**: Shaders are built with `layout: 'auto'`, so unused bindings are omitted by WebGPU. Binding logic currently relies on scanning WGSL source for `vars[...]` / `props[...]`. This is pragmatic but fragile if shader codegen changes.
+
+### Performance considerations
+- **Bind group churn**: Bind groups are created inside render loops (per buffer set). Caching bind groups keyed by pipeline + bound resources would reduce CPU overhead on frame-to-frame redraw.
+- **Per-update allocations**: `updateStyle()`/`featureProperties.update()` allocate fresh `Float32Array` records per update. For high-frequency feature updates, this may cause avoidable GC churn; consider pooling or reusing scratch arrays.
+- **Memory scaling**: `featureProperties` scales as `featureCount * propCount * 16 bytes` (vec4f per property slot) and is allocated whenever `propCount > 0`. If many distinct `get()` properties are referenced, memory can grow quickly; avoid allocating/binding `props` unless a compiled shader actually needs it.
 
 ## 7. WebGL → WebGPU Port Completeness Audit
 
