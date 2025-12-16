@@ -10,7 +10,7 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 *   **Compat Matrix Parity (Points)**: Fixed WebGPU “blank output” for `circle-fill-color/var`, `circle-stroke-color/var`, `shape-fill-color/var`, `shape-stroke-color/var`, `icon-color/var`, `icon-size/get`, and `icon-size/var` by resolving `var()` and size expressions for point symbol style buffers.
 *   **Icon Sprite Sub-rect Expressions**: WebGPU icon rendering now resolves `icon-size`/`icon-offset` as `literal|get|var` per feature (prevents NaNs in UVs and enables the compat-matrix icon-size coverage).
 *   **Style Resolution Helpers**: Extended WebGPU style-buffer helpers to resolve `['var', …]` and added `resolveSize()` for `SizeExpression` handling (used in the point/icon pipeline).
-*   **Feature Properties Buffer (`get()` in WGSL)**: Added a per-feature `props` storage buffer and switched WGSL `get()` compilation to read from it; enables rule filter discard on points/polygons (not just lines) and supports arbitrary numeric/boolean feature properties in WebGPU WGSL expressions.
+*   **Feature Properties Buffer (`get()` in WGSL)**: Added a per-feature `props` storage buffer and switched WGSL `get()` compilation to read from it; enables rule filter discard on points/polygons (not just lines) and supports typed reads (scalars + colors) from feature properties in WebGPU WGSL expressions.
 *   **Bind Group Caching**: Reduced per-frame overhead by caching bind groups per buffer set (keyed by pipeline + bound resources), instead of creating bind groups on every render call.
 *   **`props` Allocation Optimization**: Avoid allocating/binding the feature-properties buffer for CPU-resolved `get()` usage (e.g. direct `['get', ...]` stroke width/color), while still allocating when WGSL expressions require it (filters/expressions).
 *   **Update Path Allocations Reduced**: Reused scratch arrays for per-feature GPU buffer updates and reused the uniform upload array to reduce GC churn.
@@ -167,7 +167,7 @@ These are follow-up notes after hardening `get()` support in the WGSL backend vi
 
 ### Correctness risks
 - **Global refs vs per-geometry buffers**: MixedGeometryBatch refs are global across point/line/polygon, but WebGPU per-geometry style buffers are sized based on each geometry type’s `*MaxRef`. `updateFeatureStyles()` currently fans out updates to all buffer sets, so per-buffer `updateStyle()` must guard against out-of-range `ref` values. (Hardened in `src/ol/render/webgpu/VectorStyleRenderer.js` by checking `ref > {point,line,poly}MaxRef` before writing.)
-- **`get()` return type limitations**: The `props` buffer currently only stores scalar values in `.x` (numbers + bools as 1/0, strings coerced via `Number()`), leaving `.yzw` at 0. This is sufficient for current WebGPU uses (filters + numeric expressions), but will be incorrect if we start compiling expressions where `get()` is expected to return a color/vec4f.
+- **`get()` return type limitations**: `get()` now supports both scalar and color reads by storing two `vec4f` slots per property (scalar slot + color slot). This is correct but increases memory usage; future work may want a more compact typed layout.
 - **Auto pipeline layout sensitivity**: Shaders are built with `layout: 'auto'`, so unused bindings are omitted by WebGPU. Binding logic currently relies on scanning WGSL source for `vars[...]` / `props[...]`. This is pragmatic but fragile if shader codegen changes.
 
 ### Performance considerations

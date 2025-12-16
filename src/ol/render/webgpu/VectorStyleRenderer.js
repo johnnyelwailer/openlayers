@@ -557,7 +557,7 @@ class VectorStyleRenderer {
    * @param {number} type Value type bitmask.
    * @param {string} featureIndexExpr WGSL expression for feature index.
    * @param {Map<string, number>} indexByName Property index map.
-   * @param {number} propCount Property count (stride) per feature.
+   * @param {number} propStride Vec4 slot stride per feature.
    * @return {string} WGSL expression.
    * @private
    */
@@ -566,10 +566,10 @@ class VectorStyleRenderer {
     type,
     featureIndexExpr,
     indexByName,
-    propCount,
+    propStride,
   ) {
     const idx = indexByName.get(name);
-    if (idx === undefined || propCount <= 0) {
+    if (idx === undefined || propStride <= 0) {
       if (isType(type, ColorType)) {
         return 'vec4f(0.0, 0.0, 0.0, 0.0)';
       }
@@ -579,7 +579,11 @@ class VectorStyleRenderer {
       return '0.0';
     }
 
-    const entry = `props[u32(${featureIndexExpr}) * ${propCount}u + ${idx}u]`;
+    // Each property uses two vec4 slots:
+    // - even slot: scalar/bool in .x
+    // - odd slot: color in rgba
+    const slot = isType(type, ColorType) ? '1u' : '0u';
+    const entry = `props[u32(${featureIndexExpr}) * ${propStride}u + ${idx}u * 2u + ${slot}]`;
     if (isType(type, ColorType)) {
       return entry;
     }
@@ -707,6 +711,7 @@ class VectorStyleRenderer {
       propIndexByName.set(propNames[i], i);
     }
     const propCount = propNames.length;
+    const propStride = propCount * 2;
 
     // --- 1. Generate Point Buffers ---
     const pointBatch = geometryBatch.pointBatch;
@@ -784,7 +789,7 @@ class VectorStyleRenderer {
               type,
               'input.featureIndex',
               propIndexByName,
-              propCount,
+              propStride,
             ),
           getVar: (name, type) => this.getVarExpression_(name, type),
         };
@@ -1616,7 +1621,7 @@ class VectorStyleRenderer {
                 type,
                 'featureIndex',
                 propIndexByName,
-                propCount,
+                propStride,
               ),
             getVar: (name, type) => this.getVarExpression_(name, type),
           };
@@ -1628,7 +1633,7 @@ class VectorStyleRenderer {
                 type,
                 'input.featureIndex',
                 propIndexByName,
-                propCount,
+                propStride,
               ),
             getVar: (name, type) => this.getVarExpression_(name, type),
           };
@@ -1780,7 +1785,7 @@ class VectorStyleRenderer {
             type,
             'input.featureIndex',
             propIndexByName,
-            propCount,
+            propStride,
           ),
         getVar: (name, type) => this.getVarExpression_(name, type),
       };
@@ -1925,7 +1930,7 @@ class VectorStyleRenderer {
         }
       }
 
-      const data = new Float32Array(featureCount * propCount * 4);
+      const data = new Float32Array(featureCount * propStride * 4);
       for (let ref = 0; ref < featureCount; ref++) {
         const feature = featureByRef[ref];
         if (!feature) {
@@ -1934,16 +1939,62 @@ class VectorStyleRenderer {
         for (let i = 0; i < propCount; i++) {
           const name = propNames[i];
           const value = feature.get(name);
-          let x = 0;
+          let scalar = 0;
           if (typeof value === 'number') {
-            x = Number.isFinite(value) ? value : 0;
+            scalar = Number.isFinite(value) ? value : 0;
           } else if (typeof value === 'boolean') {
-            x = value ? 1 : 0;
+            scalar = value ? 1 : 0;
           } else if (typeof value === 'string') {
             const n = Number(value);
-            x = Number.isFinite(n) ? n : 0;
+            scalar = Number.isFinite(n) ? n : 0;
           }
-          data[(ref * propCount + i) * 4] = x;
+          const scalarOffset = (ref * propStride + i * 2) * 4;
+          data[scalarOffset] = scalar;
+
+          if (Array.isArray(value)) {
+            const r = Number(value[0]);
+            const g = Number(value[1]);
+            const b = Number(value[2]);
+            if (
+              Number.isFinite(r) &&
+              Number.isFinite(g) &&
+              Number.isFinite(b)
+            ) {
+              const max = Math.max(r, g, b);
+              const scale = max > 1.5 ? 1 / 255 : 1;
+              const a = value.length > 3 ? Number(value[3]) : 1;
+              const alpha = Number.isFinite(a) ? a : 1;
+              const colorOffset = (ref * propStride + i * 2 + 1) * 4;
+              data[colorOffset] = r * scale;
+              data[colorOffset + 1] = g * scale;
+              data[colorOffset + 2] = b * scale;
+              data[colorOffset + 3] = alpha;
+            }
+          } else if (typeof value === 'string') {
+            try {
+              const rgba = asArray(value);
+              const r = Number(rgba[0]);
+              const g = Number(rgba[1]);
+              const b = Number(rgba[2]);
+              if (
+                Number.isFinite(r) &&
+                Number.isFinite(g) &&
+                Number.isFinite(b)
+              ) {
+                const max = Math.max(r, g, b);
+                const scale = max > 1.5 ? 1 / 255 : 1;
+                const a = rgba.length > 3 ? Number(rgba[3]) : 1;
+                const alpha = Number.isFinite(a) ? a : 1;
+                const colorOffset = (ref * propStride + i * 2 + 1) * 4;
+                data[colorOffset] = r * scale;
+                data[colorOffset + 1] = g * scale;
+                data[colorOffset + 2] = b * scale;
+                data[colorOffset + 3] = alpha;
+              }
+            } catch {
+              // ignore invalid colors
+            }
+          }
         }
       }
 
@@ -1956,8 +2007,8 @@ class VectorStyleRenderer {
       new Float32Array(propsBuffer.getBuffer().getMappedRange()).set(data);
       propsBuffer.getBuffer().unmap();
 
-      const strideBytes = propCount * 16;
-      const scratch = new Float32Array(propCount * 4);
+      const strideBytes = propStride * 16;
+      const scratch = new Float32Array(propStride * 4);
       featureProperties = {
         buffer: propsBuffer,
         propNames,
@@ -1967,19 +2018,65 @@ class VectorStyleRenderer {
           if (!ref || ref >= featureCount) {
             return;
           }
+          scratch.fill(0);
           for (let i = 0; i < propCount; i++) {
             const name = propNames[i];
             const value = feature.get(name);
-            let x = 0;
+            let scalar = 0;
             if (typeof value === 'number') {
-              x = Number.isFinite(value) ? value : 0;
+              scalar = Number.isFinite(value) ? value : 0;
             } else if (typeof value === 'boolean') {
-              x = value ? 1 : 0;
+              scalar = value ? 1 : 0;
             } else if (typeof value === 'string') {
               const n = Number(value);
-              x = Number.isFinite(n) ? n : 0;
+              scalar = Number.isFinite(n) ? n : 0;
             }
-            scratch[i * 4] = x;
+            scratch[i * 8] = scalar;
+
+            if (Array.isArray(value)) {
+              const r = Number(value[0]);
+              const g = Number(value[1]);
+              const b = Number(value[2]);
+              if (
+                Number.isFinite(r) &&
+                Number.isFinite(g) &&
+                Number.isFinite(b)
+              ) {
+                const max = Math.max(r, g, b);
+                const scale = max > 1.5 ? 1 / 255 : 1;
+                const a = value.length > 3 ? Number(value[3]) : 1;
+                const alpha = Number.isFinite(a) ? a : 1;
+                const colorOffset = i * 8 + 4;
+                scratch[colorOffset] = r * scale;
+                scratch[colorOffset + 1] = g * scale;
+                scratch[colorOffset + 2] = b * scale;
+                scratch[colorOffset + 3] = alpha;
+              }
+            } else if (typeof value === 'string') {
+              try {
+                const rgba = asArray(value);
+                const r = Number(rgba[0]);
+                const g = Number(rgba[1]);
+                const b = Number(rgba[2]);
+                if (
+                  Number.isFinite(r) &&
+                  Number.isFinite(g) &&
+                  Number.isFinite(b)
+                ) {
+                  const max = Math.max(r, g, b);
+                  const scale = max > 1.5 ? 1 / 255 : 1;
+                  const a = rgba.length > 3 ? Number(rgba[3]) : 1;
+                  const alpha = Number.isFinite(a) ? a : 1;
+                  const colorOffset = i * 8 + 4;
+                  scratch[colorOffset] = r * scale;
+                  scratch[colorOffset + 1] = g * scale;
+                  scratch[colorOffset + 2] = b * scale;
+                  scratch[colorOffset + 3] = alpha;
+                }
+              } catch {
+                // ignore invalid colors
+              }
+            }
           }
           device.queue.writeBuffer(
             propsBuffer.getBuffer(),

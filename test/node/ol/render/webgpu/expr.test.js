@@ -1,4 +1,9 @@
 import {
+  ColorType,
+  NumberType,
+  isType,
+} from '../../../../../src/ol/expr/expression.js';
+import {
   collectGetProperties,
   collectVarNames,
   compileWgslExpression,
@@ -31,7 +36,12 @@ describe('ol/render/webgpu/expr', () => {
   describe('compileWgslExpression()', () => {
     const ctx = {
       lineMetricVar: 'lineMetric',
-      getProp: (name) => `get_${name}()`,
+      getProp: (name, type) =>
+        isType(type, ColorType)
+          ? `getColor_${name}()`
+          : isType(type, NumberType)
+            ? `getNumber_${name}()`
+            : `get_${name}()`,
       getVar: (name) => `var_${name}()`,
     };
 
@@ -43,7 +53,7 @@ describe('ol/render/webgpu/expr', () => {
 
     it('compiles basic operators used by webgpu-line-metric', () => {
       expect(compileWgslExpression(['get', 'limit'], ctx, 'f32')).to.be(
-        'get_limit()',
+        'getNumber_limit()',
       );
       expect(compileWgslExpression(['line-metric'], ctx, 'f32')).to.be(
         'lineMetric',
@@ -64,6 +74,15 @@ describe('ol/render/webgpu/expr', () => {
     it('compiles var()', () => {
       expect(compileWgslExpression(['var', 'limit'], ctx, 'f32')).to.be(
         'var_limit()',
+      );
+    });
+
+    it('passes expected type to get()', () => {
+      expect(compileWgslExpression(['get', 'c'], ctx, 'vec4f')).to.be(
+        'getColor_c()',
+      );
+      expect(compileWgslExpression(['get', 'n'], ctx, 'f32')).to.be(
+        'getNumber_n()',
       );
     });
 

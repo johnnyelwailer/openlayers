@@ -1,3 +1,4 @@
+import {ColorType, NumberType} from '../../../../../src/ol/expr/expression.js';
 import VectorStyleRenderer from '../../../../../src/ol/render/webgpu/VectorStyleRenderer.js';
 import expect from '../../../expect.js';
 
@@ -213,6 +214,148 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
     expect(updateWrites[0].data).to.be(updateWrites[1].data);
   });
 
+  it('ignores non-color string feature properties in props packing', async () => {
+    const writes = [];
+    const device = {
+      createBuffer: ({size}) => ({
+        size,
+        getMappedRange: () => new ArrayBuffer(size),
+        unmap: () => {},
+      }),
+      queue: {
+        writeBuffer: (buffer, offset, data) => {
+          writes.push({buffer, offset, data: new Float32Array(data)});
+        },
+      },
+    };
+    const helper = {
+      getDevice: () => device,
+    };
+
+    const renderer = new VectorStyleRenderer(
+      [
+        {
+          style: {
+            'circle-radius': 10,
+            'circle-fill-color': [255, 0, 0, 1],
+          },
+          filter: ['==', ['get', 'limit'], 5],
+        },
+      ],
+      {},
+      /** @type {*} */ (helper),
+    );
+
+    const feature = {
+      get: (name) => (name === 'limit' ? '5' : undefined),
+    };
+    const geometryBatch = {
+      pointBatch: {
+        entries: {
+          a: {
+            ref: 1,
+            feature,
+            flatCoordss: [[0, 0]],
+          },
+        },
+      },
+      lineStringBatch: {entries: {}},
+      polygonBatch: {entries: {}},
+    };
+
+    const buffers = await renderer.generateBuffers(
+      /** @type {*} */ (geometryBatch),
+      /** @type {*} */ ([]),
+    );
+
+    expect(buffers.featureProperties).to.not.be(null);
+    buffers.featureProperties.update(
+      /** @type {*} */ (device),
+      1,
+      /** @type {*} */ (feature),
+    );
+
+    expect(writes.length).to.be.greaterThan(0);
+    // Scalar slot for the only property should get the numeric string value.
+    expect(writes[writes.length - 1].data[0]).to.be(5);
+  });
+
+  it('packs color feature properties into the color slot', async () => {
+    /** @type {ArrayBuffer|null} */
+    let propsMapped = null;
+
+    const device = {
+      createBuffer: ({size}) => {
+        const mapped = new ArrayBuffer(size);
+        if (size === 64) {
+          propsMapped = mapped;
+        }
+        return {
+          size,
+          getMappedRange: () => mapped,
+          unmap: () => {},
+        };
+      },
+      queue: {
+        writeBuffer: () => {},
+      },
+    };
+    const helper = {
+      getDevice: () => device,
+    };
+
+    const renderer = new VectorStyleRenderer(
+      [
+        {
+          style: {
+            'stroke-width': 2,
+            'stroke-color': [
+              'case',
+              ['>', ['line-metric'], 0],
+              ['get', 'c'],
+              'rgba(0,0,0,0)',
+            ],
+          },
+        },
+      ],
+      {},
+      /** @type {*} */ (helper),
+    );
+
+    const feature = {
+      get: (name) => (name === 'c' ? 'rgb(255,0,0)' : undefined),
+    };
+    const geometryBatch = {
+      pointBatch: {entries: {}},
+      lineStringBatch: {
+        entries: {
+          a: {
+            ref: 1,
+            feature,
+            flatCoordss: [[0, 0, 0, 10, 0, 10]],
+          },
+        },
+      },
+      polygonBatch: {entries: {}},
+    };
+
+    const buffers = await renderer.generateBuffers(
+      /** @type {*} */ (geometryBatch),
+      /** @type {*} */ ([]),
+    );
+
+    expect(buffers.featureProperties).to.not.be(null);
+    expect(propsMapped).to.not.be(null);
+
+    const floats = new Float32Array(propsMapped);
+    // ref 1 layout is [scalar vec4][color vec4], with a leading ref 0 row.
+    expect(floats[8]).to.be(0);
+    expect(floats[12]).to.be(1);
+    expect(floats[13]).to.be(0);
+    expect(floats[14]).to.be(0);
+    expect(floats[15]).to.be(1);
+  });
+
   it('writes layer opacity to uniform buffer', () => {
     /** @type {number|null} */
     let compositeOpacity = null;
@@ -290,6 +433,36 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
     );
 
     expect(compositeOpacity).to.be(0.25);
+  });
+
+  it('indexes scalar vs color props slots', () => {
+    const helper = {getDevice: () => ({})};
+    const renderer = new VectorStyleRenderer(
+      [{}],
+      {},
+      /** @type {*} */ (helper),
+    );
+
+    const indexByName = new Map([['p', 2]]);
+    const propStride = 10;
+
+    const numberExpr = renderer.getFeaturePropExpression_(
+      'p',
+      NumberType,
+      'fi',
+      indexByName,
+      propStride,
+    );
+    expect(numberExpr).to.be('props[u32(fi) * 10u + 2u * 2u + 0u].x');
+
+    const colorExpr = renderer.getFeaturePropExpression_(
+      'p',
+      ColorType,
+      'fi',
+      indexByName,
+      propStride,
+    );
+    expect(colorExpr).to.be('props[u32(fi) * 10u + 2u * 2u + 1u]');
   });
 
   it('updates feature styles for dirty refs', () => {
