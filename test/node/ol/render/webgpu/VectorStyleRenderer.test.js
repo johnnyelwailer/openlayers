@@ -435,6 +435,90 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
     expect(compositeOpacity).to.be(0.25);
   });
 
+  it('writes time to the uniforms buffer', () => {
+    if (typeof navigator === 'undefined' || !navigator) {
+      Object.defineProperty(globalThis, 'navigator', {
+        value: {},
+        configurable: true,
+      });
+    }
+    navigator.gpu = {
+      getPreferredCanvasFormat: () => 'bgra8unorm',
+    };
+
+    /** @type {number|null} */
+    let timeSeconds = null;
+
+    const device = {
+      createBuffer: () => ({}),
+      createTexture: () => ({
+        createView: () => ({}),
+        destroy: () => {},
+      }),
+      createSampler: () => ({}),
+      createShaderModule: () => ({}),
+      createRenderPipeline: () => ({
+        getBindGroupLayout: () => ({}),
+      }),
+      createBindGroup: () => ({}),
+      createCommandEncoder: () => ({
+        beginRenderPass: () => ({
+          setPipeline: () => {},
+          setBindGroup: () => {},
+          setVertexBuffer: () => {},
+          draw: () => {},
+          end: () => {},
+        }),
+        finish: () => ({}),
+      }),
+      queue: {
+        writeBuffer: (buffer, offset, data) => {
+          if (data instanceof Float32Array && data.length === 28) {
+            timeSeconds = data[24];
+          }
+        },
+        submit: () => {},
+      },
+    };
+
+    const helper = {
+      getDevice: () => device,
+      getContext: () => ({
+        getCurrentTexture: () => ({createView: () => ({})}),
+      }),
+      getCurrentTextureView: () => ({}),
+      getFrameTextureView: () => ({}),
+      isFirstPass: () => true,
+    };
+
+    const renderer = new VectorStyleRenderer(
+      [{}],
+      {},
+      /** @type {*} */ (helper),
+    );
+    renderer.startTime_ = 1000;
+
+    renderer.render(
+      {pointBuffers: [], lineStringBuffers: [], polygonBuffers: []},
+      {
+        index: 0,
+        time: 3500,
+        size: [32, 32],
+        pixelRatio: 1,
+        viewState: {
+          center: [0, 0],
+          resolution: 1,
+          rotation: 0,
+          zoom: 0,
+        },
+      },
+      0,
+      1,
+    );
+
+    expect(timeSeconds).to.be(2.5);
+  });
+
   it('indexes scalar vs color props slots', () => {
     const helper = {getDevice: () => ({})};
     const renderer = new VectorStyleRenderer(

@@ -602,6 +602,28 @@ function generateScenarios(properties) {
     });
   }
 
+  /**
+   * @param {string} suffix Scenario suffix.
+   * @param {any} styleOrRules Style or rules.
+   */
+  function pushMapStateOperatorScenario(suffix, styleOrRules) {
+    scenarios.push({
+      id: `capabilities/operators/${suffix}`,
+      group: 'capability',
+      geometry: 'line',
+      capabilityKind: 'operators',
+      capabilityCount: 1,
+      capabilityVarsUsed: 0,
+      capabilityGetsUsed: 0,
+      style: styleOrRules,
+      needsGet: false,
+      needsVar: false,
+      getKey: null,
+      literal: null,
+      varKey: null,
+    });
+  }
+
   // Multi-stop interpolate: make the third stop required for non-blank output.
   pushOperatorScenario(
     'interpolate-linear-multistop',
@@ -795,6 +817,13 @@ function generateScenarios(properties) {
     },
     4,
   );
+
+  // time() operator (map-state dependent).
+  // Use it directly so a missing/zeroed time uniform is likely to produce blank output.
+  pushMapStateOperatorScenario('time', {
+    ...operatorBaseStyle,
+    'stroke-width': ['time'],
+  });
 
   return scenarios;
 }

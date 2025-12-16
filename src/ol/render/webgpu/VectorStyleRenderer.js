@@ -356,9 +356,9 @@ class VectorStyleRenderer {
 
     /**
      * @private
-     * @type {number}
+     * @type {number|null}
      */
-    this.startTime_ = Date.now();
+    this.startTime_ = null;
 
     /**
      * @private
@@ -2578,7 +2578,12 @@ class VectorStyleRenderer {
       uniformData[21] = zoom;
       uniformData[22] = 0;
       uniformData[23] = 0;
-      uniformData[24] = (Date.now() - this.startTime_) * 0.001;
+      const now =
+        typeof frameState.time === 'number' ? frameState.time : Date.now();
+      if (this.startTime_ === null) {
+        this.startTime_ = now;
+      }
+      uniformData[24] = (now - this.startTime_) * 0.001;
       uniformData[25] = 0;
       uniformData[26] = 0;
       uniformData[27] = 0;
