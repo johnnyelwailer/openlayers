@@ -91,8 +91,10 @@ describe('ol/render/webgpu/expr', () => {
       expect(compileWgslExpression(false, ctx, 'bool')).to.be('false');
     });
 
-    it('compiles time() as a constant', () => {
-      expect(compileWgslExpression(['time'], ctx, 'f32')).to.be('0.0');
+    it('compiles time()', () => {
+      expect(compileWgslExpression(['time'], ctx, 'f32')).to.be(
+        'uniforms.time',
+      );
     });
 
     it('compiles two-stop linear interpolate', () => {

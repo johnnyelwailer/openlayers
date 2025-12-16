@@ -34,7 +34,7 @@ import {toSize} from '../size.js';
  *     `Circle` geometries are returned as 'Polygon'
  *     `GeometryCollection` geometries are returned as the type of the first geometry found in the collection (WebGL only).
  *   * `['resolution']` returns the current resolution
- *   * `['time']` The time in seconds since the creation of the layer (WebGL only).
+ *   * `['time']` The time in seconds since the creation of the layer (WebGL and WebGPU).
  *   * `['var', 'varName']` fetches a value from the style variables; will throw an error if that variable is undefined
  *   * `['zoom']` The current zoom level (WebGL only).
  *   * `['line-metric']` returns the M component of the current point on a line (WebGL only); in case where the geometry layout of the line

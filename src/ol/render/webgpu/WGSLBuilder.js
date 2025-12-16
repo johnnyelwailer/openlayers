@@ -196,6 +196,7 @@ export class WGSLBuilder {
         rotation : f32,
         zoom : f32,
         padding : vec2f,
+        time : f32,
       };
 
       @group(0) @binding(0) var<storage, read> styles : array<Style>;
@@ -764,6 +765,7 @@ export class WGSLBuilder {
         rotation : f32,
         zoom : f32,
         padding : vec2f,
+        time : f32,
       };
 
       @group(0) @binding(0) var<storage, read> styles : array<Style>;
@@ -908,6 +910,7 @@ export class WGSLBuilder {
         rotation : f32,
         zoom : f32,
         padding : vec2f,
+        time : f32,
       };
 
       @group(0) @binding(0) var<storage, read> styles : array<Style>;
@@ -1020,6 +1023,7 @@ export class WGSLBuilder {
         rotation : f32,
         zoom : f32,
         padding : vec2f,
+        time : f32,
       };
 
       @group(0) @binding(0) var<storage, read> styles : array<Style>;

@@ -135,7 +135,7 @@ export function compileWgslExpression(expr, ctx, expected) {
       lineMetric: ctx.lineMetricVar,
       resolution: 'uniforms.resolution',
       zoom: 'uniforms.zoom',
-      time: '0.0',
+      time: 'uniforms.time',
       get: (name, type) => ctx.getProp(name, type),
       var: (name, type) => ctx.getVar?.(name, type) || '0.0',
     });

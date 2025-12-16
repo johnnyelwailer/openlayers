@@ -162,6 +162,47 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 3. **Hit detection**: Implement `forEachFeatureAtPixel` and wire `disableHitDetection`.
 4. **Pattern + symbol parity**: Add expression support for pattern sub-rect fields and expand point/polygon expression handling.
 
+### Hit Detection Approaches (WebGPU)
+
+WebGL’s current approach is a GPU ID-buffer render pass + `readPixels()` from an offscreen render target. This is accurate (it matches shader discard/alpha), but it is also prone to stalls because `readPixels()` is synchronous and typically forces the browser/driver to flush GPU work. It is also “work proportional to what you render”: the pick pass runs the full draw workload again, and the readback cost scales with the pick buffer size (even if only one pixel is ultimately used).
+
+WebGPU changes the trade space: readback is *asynchronous* (`copyTextureToBuffer` + `mapAsync()`), so it can avoid blocking the main thread, but the result cannot be made available synchronously without redesigning APIs or accepting stale/latency-compromised results.
+
+#### Constraints / goals
+- **API shape**: `Map#forEachFeatureAtPixel()` / `getFeaturesAtPixel()` are synchronous today; any “GPU readback” approach is inherently async in WebGPU.
+- **Semantics**: Must respect style-dependent visibility (alpha/discard, symbol shape), hit tolerance, and “topmost” behavior (z-index + draw order), plus wrapX worlds.
+- **Cost model**: Picking must remain fast with large feature counts; `disableHitDetection` must actually bypass extra work.
+
+#### Options
+1. **CPU hit detection (spatial index + geometry tests)**  
+   Use a spatial index (source RBush, or a renderer-local index) to prefilter candidates, then do geometry-specific tests (distance-to-point for points/lines, point-in-polygon for fills, distance-to-ring for strokes), expanding by `hitTolerance` and style-derived widths/radii where feasible.
+   - **Pros**: Synchronous (works with existing `forEachFeatureAtPixel`), no GPU stalls, no extra render pass, predictable cost with good indexing.
+   - **Cons**: Hard to match WebGL/WebGPU visual semantics for complex styles (icons/alpha masks, patterns, shader discard), and “topmost” ordering must be reproduced in JS (rule/zIndex/order/declutter).
+
+2. **GPU ID-buffer picking (raster pick pass + 1px readback)**  
+   Render to a small pick target (ideally `r32uint` or packed `rgba8unorm`) where each fragment writes a feature id/ref, then `copyTextureToBuffer` for a 1×1 region and `mapAsync()` to read the id.
+   - **Pros**: Highest fidelity (matches shader discard/alpha, patterns, icons), naturally returns the topmost fragment, and can keep readback bandwidth minimal (4–16 bytes).
+   - **Cons**: Still requires a pick render pass (often “draw everything again” unless paired with culling), and it is async (doesn’t plug into synchronous `forEachFeatureAtPixel` without API changes or a “last known pick” cache with latency).
+
+3. **GPU compute picking (compute shader over pick primitives)**  
+   Maintain GPU buffers with per-feature “pick primitives” (e.g., screen-space bounds for points, segment AABBs for lines, coarse polygon bounds), run a compute pass that tests the query pixel (and tolerance) in parallel, and write the best match to a small output buffer for async readback.
+   - **Pros**: Avoids rasterizing the whole scene for picking; can be much cheaper than a full pick render pass if pick primitives are compact and well-binned; can return multiple hits (e.g., within tolerance) with bounded output.
+   - **Cons**: Considerably more complex; requires maintaining additional GPU-side pick data, implementing ordering (zIndex/draw order/depth), and still needs async readback. Exact polygon/icon semantics still require a second-stage “exact” test or fallback.
+
+4. **Hybrid CPU prefilter + GPU exactness**  
+   CPU prefilters candidates (extent/tolerance/style-aware bounds) and sends only a small candidate set to the GPU for an exact test (raster pick pass restricted to candidates, or compute test against exact data).
+   - **Pros**: Can drastically reduce GPU work while keeping high fidelity; limits readback to a single id; avoids “draw everything again” in typical cases.
+   - **Cons**: More plumbing (candidate extraction + upload per pick), still async, and correctness depends on how conservative the CPU prefilter is (must not miss candidates).
+
+5. **Always-on pick buffer (keep an ID buffer per frame)**  
+   Continuously render an ID buffer alongside the main pass and keep it available for queries.
+   - **Pros**: Can make “what’s under the cursor?” queries cheap *if* the ID buffer is already produced.
+   - **Cons**: Increases per-frame GPU cost for all users (even if no picking happens), and making it synchronous would still require readback or a redesign that keeps pick results GPU-side (not currently compatible with `forEachFeatureAtPixel`).
+
+#### Recommendation (pragmatic path)
+- **Near-term**: Implement **CPU hit detection** for WebGPU vector so `forEachFeatureAtPixel` parity is possible without changing public APIs; make it fast via spatial indexing + early-out ordering heuristics.
+- **Optional (higher fidelity / future)**: Add a **GPU pick path** behind an async API surface (e.g. `layer.getFeatures(pixel)` for WebGPU renderers, or a new async map-level method) and/or as an internal refinement step where latency is acceptable (hover/tooltips).
+
 ## 6.1 Review Notes (2025-12-16)
 
 These are follow-up notes after hardening `get()` support in the WGSL backend via a per-feature `props` storage buffer.

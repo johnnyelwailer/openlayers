@@ -356,6 +356,12 @@ class VectorStyleRenderer {
 
     /**
      * @private
+     * @type {number}
+     */
+    this.startTime_ = Date.now();
+
+    /**
+     * @private
      * @type {import("../../transform.js").Transform}
      */
     this.renderTransform_ = createTransform();
@@ -2501,7 +2507,7 @@ class VectorStyleRenderer {
     // 5. Update Uniform Buffer (re-done inside render to include resolution)
     if (!this.uniformBuffer_) {
       this.uniformBuffer_ = device.createBuffer({
-        size: 96, // mat4x4<f32> (64) + remaining uniforms (32)
+        size: 112, // includes time (f32) + padding
         usage: 0x0040 | 0x0008, // UNIFORM | COPY_DST
       });
     }
@@ -2559,7 +2565,7 @@ class VectorStyleRenderer {
 
     // Update Uniform Buffer with resolution
     if (this.uniformBuffer_) {
-      const uniformData = this.uniformData_ || new Float32Array(24); // 96 bytes
+      const uniformData = this.uniformData_ || new Float32Array(28); // 112 bytes
       this.uniformData_ = uniformData;
       const mat4Data = this.clipMat4_;
       mat4FromTransform(mat4Data, clipTransform);
@@ -2572,6 +2578,10 @@ class VectorStyleRenderer {
       uniformData[21] = zoom;
       uniformData[22] = 0;
       uniformData[23] = 0;
+      uniformData[24] = (Date.now() - this.startTime_) * 0.001;
+      uniformData[25] = 0;
+      uniformData[26] = 0;
+      uniformData[27] = 0;
       device.queue.writeBuffer(this.uniformBuffer_, 0, uniformData);
     }
 
