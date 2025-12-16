@@ -589,6 +589,67 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
     expect(buffers.lineStringBuffers[1].strokeShader).to.contain('&& (!(');
   });
 
+  it('applies rule else semantics for polygon fills', async () => {
+    const device = {
+      createBuffer: ({size}) => ({
+        size,
+        getMappedRange: () => new ArrayBuffer(size),
+        unmap: () => {},
+      }),
+      queue: {
+        writeBuffer: () => {},
+      },
+    };
+    const helper = {
+      getDevice: () => device,
+    };
+
+    const renderer = new VectorStyleRenderer(
+      [
+        {
+          style: {
+            'fill-color': [255, 0, 0, 1],
+          },
+          filter: ['==', ['get', 'kind'], 1],
+        },
+        {
+          style: {
+            'fill-color': [0, 0, 255, 1],
+          },
+          else: true,
+        },
+      ],
+      {},
+      /** @type {*} */ (helper),
+    );
+
+    const feature = {
+      get: (name) => (name === 'kind' ? 1 : undefined),
+    };
+    const geometryBatch = {
+      pointBatch: {entries: {}},
+      lineStringBatch: {entries: {}},
+      polygonBatch: {
+        entries: {
+          a: {
+            ref: 1,
+            feature,
+            flatCoordss: [[0, 0, 10, 0, 10, 10, 0, 10]],
+            ringsVerticesCounts: [[4]],
+          },
+        },
+      },
+    };
+
+    const buffers = await renderer.generateBuffers(
+      /** @type {*} */ (geometryBatch),
+      /** @type {*} */ ([]),
+    );
+
+    expect(buffers.polygonBuffers.length).to.be(2);
+    expect(buffers.polygonBuffers[1].fillShader).to.contain('&& (!(');
+  });
+
   it('updates feature styles for dirty refs', () => {
     const device = {};
     const helper = {

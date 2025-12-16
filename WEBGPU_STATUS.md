@@ -171,7 +171,7 @@ These are follow-up notes after hardening `get()` support in the WGSL backend vi
 - **`get()` return type limitations**: `get()` now supports both scalar and color reads by storing two `vec4f` slots per property (scalar slot + color slot). This is correct but increases memory usage; future work may want a more compact typed layout.
 - **Auto pipeline layout sensitivity**: Shaders are built with `layout: 'auto'`, so unused bindings are omitted by WebGPU. Binding logic currently relies on scanning WGSL source for `vars[...]` / `props[...]`. This is pragmatic but fragile if shader codegen changes.
 - **Boolean literal filters in WGSL**: `compileWgslExpression()` does not currently compile top-level `true`/`false` literals for `expected === 'bool'` (it falls back to `false`). Call sites use a workaround like `['==', 1, 1]` for “always true”; this should be fixed in the compiler.
-- **Polygon rule support gaps**: Polygon rendering currently assumes a single fill rule; WebGL supports multiple fill rules with filters and `else: true` semantics. This is a correctness gap for complex styling.
+- **Polygon rule support gaps**: Polygons now support multiple fill rules with filters and `else: true` semantics, but fill style evaluation is still largely CPU-side (`literal|get|var` subsets) and lacks full WebGL rule parsing parity.
 
 ### Performance considerations
 - **Bind group churn**: Bind groups are now cached per buffer set; remaining churn is mostly limited to pipeline/resource changes (e.g. texture changes) rather than per-frame redraw.

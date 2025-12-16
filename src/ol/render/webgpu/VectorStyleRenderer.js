@@ -670,7 +670,7 @@ class VectorStyleRenderer {
     const rules = (Array.isArray(this.styles_) ? this.styles_ : []).map(
       (entry) => (entry && entry.style ? entry : {style: entry}),
     );
-    const alwaysTrueFilter = /** @type {any} */ (['==', 1, 1]);
+    const alwaysTrueFilter = true;
 
     const varsUsed = new Set();
     for (const rule of rules) {
@@ -1718,7 +1718,7 @@ class VectorStyleRenderer {
       0,
     );
 
-    const polyStyleRule = rules.find((r) => {
+    const polyRules = rules.filter((r) => {
       const s = r.style;
       if (!s) {
         return false;
@@ -1746,105 +1746,19 @@ class VectorStyleRenderer {
       return hasFillColor || typeof patternSrc === 'string';
     });
     /** @type {Array<PolygonBufferSet>} */
-    let polygonBuffers = [];
-    if (polyStyleRule) {
+    const polygonBuffers = [];
+    if (polyRules.length > 0) {
       // To estimate size, we'd need to triangulate first or use a dynamic array.
-      // Since earcut is fast enough for 2D, let's triangulate into a temp array.
-
-      const polyVertices = []; // [x, y, featureIndex, x, y, featureIndex]
-      const polyStyleData = new Float32Array((polyMaxRef + 1) * 4); // vec4 per feature ref
-
-      const polyStyle = polyStyleRule.style;
-      const polyFilter = polyStyleRule.filter;
-      const fillPatternSrc = polyStyle['fill-pattern-src'];
-      const hasFillPattern = typeof fillPatternSrc === 'string';
-
-      const fillColorExpr = polyStyle['fill-color'];
-      const fallbackTint = hasFillPattern ? [1, 1, 1, 1] : [0, 0, 1, 1];
-
-      const resolveFillColor = (feature) => {
-        if (!fillColorExpr) {
-          return fallbackTint;
-        }
-        if (
-          Array.isArray(fillColorExpr) &&
-          fillColorExpr.length === 2 &&
-          fillColorExpr[0] === 'var'
-        ) {
-          return resolveColor(
-            this.variables_[fillColorExpr[1]],
-            feature,
-            fallbackTint,
-          );
-        }
-        return resolveColor(fillColorExpr, feature, fallbackTint);
-      };
-
-      /** @type {StrokePatternTexture|undefined} */
-      let fillPatternTexture;
-      /** @type {import("./WGSLBuilder.js").FillPatternShaderOptions|undefined} */
-      let fillPatternOptions;
-      if (hasFillPattern) {
-        fillPatternTexture = await this.getPatternTexture_(fillPatternSrc);
-        const textureSize = fillPatternTexture.size;
-        const sampleSize = Array.isArray(polyStyle['fill-pattern-size'])
-          ? polyStyle['fill-pattern-size']
-          : textureSize;
-        const baseOffset = Array.isArray(polyStyle['fill-pattern-offset'])
-          ? polyStyle['fill-pattern-offset']
-          : [0, 0];
-        const origin = polyStyle['fill-pattern-offset-origin'] || 'top-left';
-        let offsetX = baseOffset[0] || 0;
-        let offsetY = baseOffset[1] || 0;
-        if (origin === 'top-right') {
-          offsetX = textureSize[0] - sampleSize[0] - offsetX;
-        } else if (origin === 'bottom-left') {
-          offsetY = textureSize[1] - sampleSize[1] - offsetY;
-        } else if (origin === 'bottom-right') {
-          offsetX = textureSize[0] - sampleSize[0] - offsetX;
-          offsetY = textureSize[1] - sampleSize[1] - offsetY;
-        }
-
-        fillPatternOptions = {
-          textureSize: `vec2f(${textureSize[0]}, ${textureSize[1]})`,
-          textureOffset: `vec2f(${offsetX}, ${offsetY})`,
-          sampleSize: `vec2f(${sampleSize[0]}, ${sampleSize[1]})`,
-          tint: 'input.color',
-        };
-      }
-
-      const polyFilterCtx = {
-        lineMetricVar: '0.0',
-        getProp: (name, type) =>
-          this.getFeaturePropExpression_(
-            name,
-            type,
-            'input.featureIndex',
-            propIndexByName,
-            propStride,
-          ),
-        getVar: (name, type) => this.getVarExpression_(name, type),
-      };
-      const polyDiscard = polyFilter
-        ? `!(${compileWgslExpression(polyFilter, polyFilterCtx, 'bool')})`
-        : 'false';
+      // Since earcut is fast enough for 2D, triangulate into a temp array once.
 
       const POLY_STRIDE = 2; // MixedGeometryBatch usually 2 unless M/Z
-
+      const polyVertices = []; // [x, y, featureIndex, x, y, featureIndex]
       for (let i = 0; i < polyEntries.length; i++) {
         const entry = polyEntries[i];
         const ref = entry.ref || 0;
 
-        // Style
-        const fillColor = resolveFillColor(entry.feature);
-        polyStyleData[ref * 4 + 0] = fillColor[0];
-        polyStyleData[ref * 4 + 1] = fillColor[1];
-        polyStyleData[ref * 4 + 2] = fillColor[2];
-        polyStyleData[ref * 4 + 3] = fillColor[3];
-
         // entry.flatCoordss is Array<Array<number>> (polygons)
         // entry.ringsVerticesCounts is Array<Array<number>> (rings per polygon)
-
         for (let pOffset = 0; pOffset < entry.flatCoordss.length; pOffset++) {
           const flatCoords = entry.flatCoordss[pOffset];
           const ringsCounts = entry.ringsVerticesCounts[pOffset];
@@ -1873,15 +1787,12 @@ class VectorStyleRenderer {
             const vIdx = triangles[t]; // Index of vertex (0-based)
             const px = flatCoords[vIdx * POLY_STRIDE];
             const py = flatCoords[vIdx * POLY_STRIDE + 1];
-
             polyVertices.push(px, py, ref); // x, y, featureIndex (stable ref)
           }
         }
       }
 
       let polyBuffer = null;
-      let polyStyleBuffer = null;
-
       if (polyVertices.length > 0) {
         const polyDataFloat = new Float32Array(polyVertices);
         polyBuffer = new WebGPUBuffer({
@@ -1894,51 +1805,151 @@ class VectorStyleRenderer {
           polyDataFloat,
         );
         polyBuffer.getBuffer().unmap();
-
-        polyStyleBuffer = new WebGPUBuffer({
-          size: polyStyleData.byteLength,
-          usage: 0x0080 | 0x0008,
-          mappedAtCreation: true,
-        });
-        polyStyleBuffer.create(this.helper_);
-        new Float32Array(polyStyleBuffer.getBuffer().getMappedRange()).set(
-          polyStyleData,
-        );
-        polyStyleBuffer.getBuffer().unmap();
       }
 
-      const scratch = new Float32Array(4);
-      polygonBuffers = polyBuffer
-        ? [
-            {
-              vertex: polyBuffer,
-              style: polyStyleBuffer,
-              fillShader:
-                hasFillPattern || polyDiscard !== 'false'
-                  ? this.styleShaders_[0].builder.getFillShader({
-                      pattern: fillPatternOptions,
-                      discard: polyDiscard,
-                    })
-                  : undefined,
-              pattern: fillPatternTexture,
-              updateStyle: (device, ref, feature) => {
-                if (!ref || ref > polyMaxRef) {
-                  return;
-                }
-                const fillColor = resolveFillColor(feature);
-                scratch[0] = fillColor[0];
-                scratch[1] = fillColor[1];
-                scratch[2] = fillColor[2];
-                scratch[3] = fillColor[3];
-                device.queue.writeBuffer(
-                  polyStyleBuffer.getBuffer(),
-                  ref * 16,
-                  scratch,
-                );
-              },
+      if (polyBuffer) {
+        /** @type {Array<any>} */
+        const prevFillFilters = [];
+        for (const rule of polyRules) {
+          const polyStyle = rule.style;
+          const fillPatternSrc = polyStyle['fill-pattern-src'];
+          const hasFillPattern = typeof fillPatternSrc === 'string';
+
+          const fillColorExpr = polyStyle['fill-color'];
+          const fallbackTint = hasFillPattern ? [1, 1, 1, 1] : [0, 0, 1, 1];
+          const resolveFillColor = (feature) => {
+            if (!fillColorExpr) {
+              return fallbackTint;
+            }
+            if (
+              Array.isArray(fillColorExpr) &&
+              fillColorExpr.length === 2 &&
+              fillColorExpr[0] === 'var'
+            ) {
+              return resolveColor(
+                this.variables_[fillColorExpr[1]],
+                feature,
+                fallbackTint,
+              );
+            }
+            return resolveColor(fillColorExpr, feature, fallbackTint);
+          };
+
+          /** @type {StrokePatternTexture|undefined} */
+          let fillPatternTexture;
+          /** @type {import("./WGSLBuilder.js").FillPatternShaderOptions|undefined} */
+          let fillPatternOptions;
+          if (hasFillPattern) {
+            fillPatternTexture = await this.getPatternTexture_(fillPatternSrc);
+            const textureSize = fillPatternTexture.size;
+            const sampleSize = Array.isArray(polyStyle['fill-pattern-size'])
+              ? polyStyle['fill-pattern-size']
+              : textureSize;
+            const baseOffset = Array.isArray(polyStyle['fill-pattern-offset'])
+              ? polyStyle['fill-pattern-offset']
+              : [0, 0];
+            const origin =
+              polyStyle['fill-pattern-offset-origin'] || 'top-left';
+            let offsetX = baseOffset[0] || 0;
+            let offsetY = baseOffset[1] || 0;
+            if (origin === 'top-right') {
+              offsetX = textureSize[0] - sampleSize[0] - offsetX;
+            } else if (origin === 'bottom-left') {
+              offsetY = textureSize[1] - sampleSize[1] - offsetY;
+            } else if (origin === 'bottom-right') {
+              offsetX = textureSize[0] - sampleSize[0] - offsetX;
+              offsetY = textureSize[1] - sampleSize[1] - offsetY;
+            }
+
+            fillPatternOptions = {
+              textureSize: `vec2f(${textureSize[0]}, ${textureSize[1]})`,
+              textureOffset: `vec2f(${offsetX}, ${offsetY})`,
+              sampleSize: `vec2f(${sampleSize[0]}, ${sampleSize[1]})`,
+              tint: 'input.color',
+            };
+          }
+
+          const polyStyleData = new Float32Array((polyMaxRef + 1) * 4); // vec4 per feature ref
+          for (let i = 0; i < polyEntries.length; i++) {
+            const entry = polyEntries[i];
+            const ref = entry.ref || 0;
+            const fillColor = resolveFillColor(entry.feature);
+            polyStyleData[ref * 4 + 0] = fillColor[0];
+            polyStyleData[ref * 4 + 1] = fillColor[1];
+            polyStyleData[ref * 4 + 2] = fillColor[2];
+            polyStyleData[ref * 4 + 3] = fillColor[3];
+          }
+
+          const polyStyleBuffer = new WebGPUBuffer({
+            size: polyStyleData.byteLength,
+            usage: 0x0080 | 0x0008,
+            mappedAtCreation: true,
+          });
+          polyStyleBuffer.create(this.helper_);
+          new Float32Array(polyStyleBuffer.getBuffer().getMappedRange()).set(
+            polyStyleData,
+          );
+          polyStyleBuffer.getBuffer().unmap();
+
+          const currentFilter = rule.filter || alwaysTrueFilter;
+          const hasPrev = prevFillFilters.length > 0;
+          const prevAny =
+            prevFillFilters.length === 1
+              ? prevFillFilters[0]
+              : /** @type {any} */ (['any', ...prevFillFilters]);
+          const effectiveFilter =
+            rule.else && hasPrev
+              ? /** @type {any} */ (['all', currentFilter, ['!', prevAny]])
+              : currentFilter;
+          prevFillFilters.push(effectiveFilter);
+
+          const polyFilterCtx = {
+            lineMetricVar: '0.0',
+            getProp: (name, type) =>
+              this.getFeaturePropExpression_(
+                name,
+                type,
+                'input.featureIndex',
+                propIndexByName,
+                propStride,
+              ),
+            getVar: (name, type) => this.getVarExpression_(name, type),
+          };
+          const needsDiscard = !!rule.filter || (rule.else && hasPrev);
+          const polyDiscard = needsDiscard
+            ? `!(${compileWgslExpression(effectiveFilter, polyFilterCtx, 'bool')})`
+            : 'false';
+
+          const scratch = new Float32Array(4);
+          polygonBuffers.push({
+            vertex: polyBuffer,
+            style: polyStyleBuffer,
+            fillShader:
+              hasFillPattern || polyDiscard !== 'false'
+                ? this.styleShaders_[0].builder.getFillShader({
+                    pattern: fillPatternOptions,
+                    discard: polyDiscard,
+                  })
+                : undefined,
+            pattern: fillPatternTexture,
+            updateStyle: (device, ref, feature) => {
+              if (!ref || ref > polyMaxRef) {
+                return;
+              }
+              const fillColor = resolveFillColor(feature);
+              scratch[0] = fillColor[0];
+              scratch[1] = fillColor[1];
+              scratch[2] = fillColor[2];
+              scratch[3] = fillColor[3];
+              device.queue.writeBuffer(
+                polyStyleBuffer.getBuffer(),
+                ref * 16,
+                scratch,
+              );
             },
-          ]
-        : [];
+          });
+        }
+      }
     }
 
     const maxRef = Math.max(pointMaxRef, lineMaxRef, polyMaxRef);

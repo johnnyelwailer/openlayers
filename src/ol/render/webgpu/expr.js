@@ -100,6 +100,11 @@ export function collectVarNames(expr, out) {
  * @return {string} WGSL expression.
  */
 export function compileWgslExpression(expr, ctx, expected) {
+  if (expected === 'bool') {
+    if (typeof expr === 'boolean') {
+      return expr ? 'true' : 'false';
+    }
+  }
   if (expected === 'f32') {
     if (typeof expr === 'number') {
       return numberToWgsl(expr);

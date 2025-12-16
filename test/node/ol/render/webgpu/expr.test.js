@@ -86,6 +86,11 @@ describe('ol/render/webgpu/expr', () => {
       );
     });
 
+    it('compiles boolean literals', () => {
+      expect(compileWgslExpression(true, ctx, 'bool')).to.be('true');
+      expect(compileWgslExpression(false, ctx, 'bool')).to.be('false');
+    });
+
     it('compiles two-stop linear interpolate', () => {
       expect(
         compileWgslExpression(
