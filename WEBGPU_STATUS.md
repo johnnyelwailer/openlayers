@@ -11,6 +11,9 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 *   **Icon Sprite Sub-rect Expressions**: WebGPU icon rendering now resolves `icon-size`/`icon-offset` as `literal|get|var` per feature (prevents NaNs in UVs and enables the compat-matrix icon-size coverage).
 *   **Style Resolution Helpers**: Extended WebGPU style-buffer helpers to resolve `['var', …]` and added `resolveSize()` for `SizeExpression` handling (used in the point/icon pipeline).
 *   **Feature Properties Buffer (`get()` in WGSL)**: Added a per-feature `props` storage buffer and switched WGSL `get()` compilation to read from it; enables rule filter discard on points/polygons (not just lines) and supports arbitrary numeric/boolean feature properties in WebGPU WGSL expressions.
+*   **Bind Group Caching**: Reduced per-frame overhead by caching bind groups per buffer set (keyed by pipeline + bound resources), instead of creating bind groups on every render call.
+*   **`props` Allocation Optimization**: Avoid allocating/binding the feature-properties buffer for CPU-resolved `get()` usage (e.g. direct `['get', ...]` stroke width/color), while still allocating when WGSL expressions require it (filters/expressions).
+*   **Update Path Allocations Reduced**: Reused scratch arrays for per-feature GPU buffer updates and reused the uniform upload array to reduce GC churn.
 *   **Compatibility Matrix Baseline Updated**: Regenerated `test/compat-matrix/baseline.json` after the above parity fixes.
 *   **Validation (Latest)**: `npm run lint`, `node test/rendering/test.js --match webgpu`, `npm run build-full`, and `node test/compat-matrix/test.js --headless` passing locally.
 

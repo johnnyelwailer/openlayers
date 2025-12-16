@@ -29,6 +29,8 @@ import {
   compileWgslExpression,
 } from './expr.js';
 
+const BIND_GROUP_CACHE = Symbol('ol/webgpu/VectorStyleRenderer.bindGroupCache');
+
 /**
  * @typedef {Object} StrokePatternTexture
  * @property {GPUSampler} sampler Sampler.
@@ -332,6 +334,55 @@ class VectorStyleRenderer {
      * @type {GPURenderPipeline|null}
      */
     this.compositePipeline_ = null;
+
+    /**
+     * @private
+     * @type {WeakMap<Object, number>}
+     */
+    this.objectIdByObject_ = new WeakMap();
+
+    /**
+     * @private
+     * @type {number}
+     */
+    this.nextObjectId_ = 1;
+
+    /**
+     * @private
+     * @type {Float32Array|null}
+     */
+    this.uniformData_ = null;
+  }
+
+  /**
+   * @param {Object|null|undefined} obj Object.
+   * @return {number} Stable numeric id for the object.
+   * @private
+   */
+  getObjectId_(obj) {
+    if (!obj) {
+      return 0;
+    }
+    let id = this.objectIdByObject_.get(obj);
+    if (id === undefined) {
+      id = this.nextObjectId_++;
+      this.objectIdByObject_.set(obj, id);
+    }
+    return id;
+  }
+
+  /**
+   * @param {Object} buffers Current buffers.
+   * @return {Map<string, GPUBindGroup>} Bind group cache.
+   * @private
+   */
+  getBindGroupCache_(buffers) {
+    let cache = buffers[BIND_GROUP_CACHE];
+    if (!cache) {
+      cache = new Map();
+      buffers[BIND_GROUP_CACHE] = cache;
+    }
+    return cache;
   }
 
   /**
@@ -637,10 +688,16 @@ class VectorStyleRenderer {
         continue;
       }
       // Only collect properties that may be used by the WGSL expression backend today.
-      if (Array.isArray(style['stroke-width'])) {
+      if (
+        Array.isArray(style['stroke-width']) &&
+        style['stroke-width'][0] !== 'get'
+      ) {
         collectGetProperties(style['stroke-width'], propsUsed);
       }
-      if (Array.isArray(style['stroke-color'])) {
+      if (
+        Array.isArray(style['stroke-color']) &&
+        style['stroke-color'][0] !== 'get'
+      ) {
         collectGetProperties(style['stroke-color'], propsUsed);
       }
     }
@@ -932,6 +989,7 @@ class VectorStyleRenderer {
           styleBuffer.getBuffer().unmap();
 
           const strideBytes = STYLE_STRIDE * 4;
+          const scratch = new Float32Array(STYLE_STRIDE);
           pointBuffers.push({
             vertex: pointBuffer,
             style: styleBuffer,
@@ -944,12 +1002,11 @@ class VectorStyleRenderer {
               if (!ref || ref > pointMaxRef) {
                 return;
               }
-              const record = new Float32Array(STYLE_STRIDE);
-              writeStyle(record, 0, feature);
+              writeStyle(scratch, 0, feature);
               device.queue.writeBuffer(
                 styleBuffer.getBuffer(),
                 ref * strideBytes,
-                record,
+                scratch,
               );
             },
           });
@@ -1115,6 +1172,7 @@ class VectorStyleRenderer {
           styleBuffer.getBuffer().unmap();
 
           const strideBytes = STYLE_STRIDE * 4;
+          const scratch = new Float32Array(STYLE_STRIDE);
           pointBuffers.push({
             vertex: pointBuffer,
             style: styleBuffer,
@@ -1126,12 +1184,11 @@ class VectorStyleRenderer {
               if (!ref || ref > pointMaxRef) {
                 return;
               }
-              const record = new Float32Array(STYLE_STRIDE);
-              writeStyle(record, 0, feature);
+              writeStyle(scratch, 0, feature);
               device.queue.writeBuffer(
                 styleBuffer.getBuffer(),
                 ref * strideBytes,
-                record,
+                scratch,
               );
             },
           });
@@ -1265,6 +1322,7 @@ class VectorStyleRenderer {
           styleBuffer.getBuffer().unmap();
 
           const strideBytes = STYLE_STRIDE * 4;
+          const scratch = new Float32Array(STYLE_STRIDE);
           pointBuffers.push({
             vertex: pointBuffer,
             style: styleBuffer,
@@ -1278,12 +1336,11 @@ class VectorStyleRenderer {
               if (!ref || ref > pointMaxRef) {
                 return;
               }
-              const record = new Float32Array(STYLE_STRIDE);
-              writeStyle(record, 0, feature);
+              writeStyle(scratch, 0, feature);
               device.queue.writeBuffer(
                 styleBuffer.getBuffer(),
                 ref * strideBytes,
-                record,
+                scratch,
               );
             },
           });
@@ -1541,6 +1598,7 @@ class VectorStyleRenderer {
         lineStyleBuffer.getBuffer().unmap();
 
         const strideBytes = STYLE_STRIDE * 4;
+        const scratch = new Float32Array(STYLE_STRIDE);
         let strokeShader;
         if (
           filter ||
@@ -1600,12 +1658,11 @@ class VectorStyleRenderer {
             if (!ref || ref > lineMaxRef) {
               return;
             }
-            const record = new Float32Array(STYLE_STRIDE);
-            writeStyle(record, 0, feature);
+            writeStyle(scratch, 0, feature);
             device.queue.writeBuffer(
               lineStyleBuffer.getBuffer(),
               ref * strideBytes,
-              record,
+              scratch,
             );
           },
         });
@@ -1809,6 +1866,7 @@ class VectorStyleRenderer {
         polyStyleBuffer.getBuffer().unmap();
       }
 
+      const scratch = new Float32Array(4);
       polygonBuffers = polyBuffer
         ? [
             {
@@ -1827,11 +1885,14 @@ class VectorStyleRenderer {
                   return;
                 }
                 const fillColor = resolveFillColor(feature);
-                const record = new Float32Array(fillColor);
+                scratch[0] = fillColor[0];
+                scratch[1] = fillColor[1];
+                scratch[2] = fillColor[2];
+                scratch[3] = fillColor[3];
                 device.queue.writeBuffer(
                   polyStyleBuffer.getBuffer(),
                   ref * 16,
-                  record,
+                  scratch,
                 );
               },
             },
@@ -1896,6 +1957,7 @@ class VectorStyleRenderer {
       propsBuffer.getBuffer().unmap();
 
       const strideBytes = propCount * 16;
+      const scratch = new Float32Array(propCount * 4);
       featureProperties = {
         buffer: propsBuffer,
         propNames,
@@ -1905,7 +1967,6 @@ class VectorStyleRenderer {
           if (!ref || ref >= featureCount) {
             return;
           }
-          const record = new Float32Array(propCount * 4);
           for (let i = 0; i < propCount; i++) {
             const name = propNames[i];
             const value = feature.get(name);
@@ -1918,12 +1979,12 @@ class VectorStyleRenderer {
               const n = Number(value);
               x = Number.isFinite(n) ? n : 0;
             }
-            record[i * 4] = x;
+            scratch[i * 4] = x;
           }
           device.queue.writeBuffer(
             propsBuffer.getBuffer(),
             ref * strideBytes,
-            record,
+            scratch,
           );
         },
       };
@@ -2286,7 +2347,8 @@ class VectorStyleRenderer {
 
     // Update Uniform Buffer with resolution
     if (this.uniformBuffer_) {
-      const uniformData = new Float32Array(24); // 96 bytes
+      const uniformData = this.uniformData_ || new Float32Array(24); // 96 bytes
+      this.uniformData_ = uniformData;
       const mat4Data = createMat4();
       mat4FromTransform(mat4Data, clipTransform);
       uniformData.set(mat4Data);
@@ -2302,6 +2364,7 @@ class VectorStyleRenderer {
     }
 
     const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
+    const bindGroupCache = this.getBindGroupCache_(buffers);
 
     // 1. Render Polygons (Draw first to be underneath)
     if (buffers.polygonBuffers) {
@@ -2367,55 +2430,77 @@ class VectorStyleRenderer {
           this.fillPipelineCache_.set(fillCacheKey, pipeline);
         }
 
-        const bindGroup = device.createBindGroup({
-          layout: pipeline.getBindGroupLayout(0),
-          entries: [
-            {
-              binding: 0,
-              resource: {
-                buffer: styleBuffer,
+        const varsBuffer = this.shaderUsesVars_(fillCode)
+          ? this.getVariablesBuffer_(device)
+          : null;
+        const propsBuffer =
+          buffers.featureProperties && this.shaderUsesProps_(fillCode)
+            ? buffers.featureProperties.buffer.getBuffer()
+            : null;
+        const patternSampler = bufferSet.pattern?.sampler || null;
+        const patternView = bufferSet.pattern?.view || null;
+        const bindGroupKey = [
+          this.getObjectId_(pipeline),
+          this.getObjectId_(styleBuffer),
+          this.getObjectId_(this.uniformBuffer_),
+          this.getObjectId_(patternSampler),
+          this.getObjectId_(patternView),
+          this.getObjectId_(varsBuffer),
+          this.getObjectId_(propsBuffer),
+        ].join('|');
+        let bindGroup = bindGroupCache.get(bindGroupKey);
+        if (!bindGroup) {
+          bindGroup = device.createBindGroup({
+            layout: pipeline.getBindGroupLayout(0),
+            entries: [
+              {
+                binding: 0,
+                resource: {
+                  buffer: styleBuffer,
+                },
               },
-            },
-            {
-              binding: 1,
-              resource: {
-                buffer: this.uniformBuffer_,
+              {
+                binding: 1,
+                resource: {
+                  buffer: this.uniformBuffer_,
+                },
               },
-            },
-            ...(bufferSet.pattern
-              ? [
-                  {
-                    binding: 2,
-                    resource: bufferSet.pattern.sampler,
-                  },
-                  {
-                    binding: 3,
-                    resource: bufferSet.pattern.view,
-                  },
-                ]
-              : []),
-            ...(this.shaderUsesVars_(fillCode)
-              ? [
-                  {
-                    binding: 4,
-                    resource: {
-                      buffer: this.getVariablesBuffer_(device),
+              ...(bufferSet.pattern
+                ? [
+                    {
+                      binding: 2,
+                      resource: bufferSet.pattern.sampler,
                     },
-                  },
-                ]
-              : []),
-            ...(buffers.featureProperties && this.shaderUsesProps_(fillCode)
-              ? [
-                  {
-                    binding: 5,
-                    resource: {
-                      buffer: buffers.featureProperties.buffer.getBuffer(),
+                    {
+                      binding: 3,
+                      resource: bufferSet.pattern.view,
                     },
-                  },
-                ]
-              : []),
-          ],
-        });
+                  ]
+                : []),
+              ...(varsBuffer
+                ? [
+                    {
+                      binding: 4,
+                      resource: {
+                        buffer: varsBuffer,
+                      },
+                    },
+                  ]
+                : []),
+              ...(propsBuffer
+                ? [
+                    {
+                      binding: 5,
+                      resource: {
+                        buffer: propsBuffer,
+                      },
+                    },
+                  ]
+                : []),
+            ],
+          });
+          bindGroupCache.set(bindGroupKey, bindGroup);
+        }
 
         passEncoder.setPipeline(pipeline);
         passEncoder.setBindGroup(0, bindGroup);
@@ -2526,55 +2611,77 @@ class VectorStyleRenderer {
           this.strokePipelineCache_.set(cacheKey, pipeline);
         }
 
-        const bindGroup = device.createBindGroup({
-          layout: pipeline.getBindGroupLayout(0),
-          entries: [
-            {
-              binding: 0,
-              resource: {
-                buffer: styleBuffer,
+        const varsBuffer = this.shaderUsesVars_(strokeCode)
+          ? this.getVariablesBuffer_(device)
+          : null;
+        const propsBuffer =
+          buffers.featureProperties && this.shaderUsesProps_(strokeCode)
+            ? buffers.featureProperties.buffer.getBuffer()
+            : null;
+        const patternSampler = bufferSet.pattern?.sampler || null;
+        const patternView = bufferSet.pattern?.view || null;
+        const bindGroupKey = [
+          this.getObjectId_(pipeline),
+          this.getObjectId_(styleBuffer),
+          this.getObjectId_(this.uniformBuffer_),
+          this.getObjectId_(patternSampler),
+          this.getObjectId_(patternView),
+          this.getObjectId_(varsBuffer),
+          this.getObjectId_(propsBuffer),
+        ].join('|');
+        let bindGroup = bindGroupCache.get(bindGroupKey);
+        if (!bindGroup) {
+          bindGroup = device.createBindGroup({
+            layout: pipeline.getBindGroupLayout(0),
+            entries: [
+              {
+                binding: 0,
+                resource: {
+                  buffer: styleBuffer,
+                },
               },
-            },
-            {
-              binding: 1,
-              resource: {
-                buffer: this.uniformBuffer_,
+              {
+                binding: 1,
+                resource: {
+                  buffer: this.uniformBuffer_,
+                },
               },
-            },
-            ...(bufferSet.pattern
-              ? [
-                  {
-                    binding: 2,
-                    resource: bufferSet.pattern.sampler,
-                  },
-                  {
-                    binding: 3,
-                    resource: bufferSet.pattern.view,
-                  },
-                ]
-              : []),
-            ...(this.shaderUsesVars_(strokeCode)
-              ? [
-                  {
-                    binding: 4,
-                    resource: {
-                      buffer: this.getVariablesBuffer_(device),
+              ...(bufferSet.pattern
+                ? [
+                    {
+                      binding: 2,
+                      resource: bufferSet.pattern.sampler,
                     },
-                  },
-                ]
-              : []),
-            ...(buffers.featureProperties && this.shaderUsesProps_(strokeCode)
-              ? [
-                  {
-                    binding: 5,
-                    resource: {
-                      buffer: buffers.featureProperties.buffer.getBuffer(),
+                    {
+                      binding: 3,
+                      resource: bufferSet.pattern.view,
                     },
-                  },
-                ]
-              : []),
-          ],
-        });
+                  ]
+                : []),
+              ...(varsBuffer
+                ? [
+                    {
+                      binding: 4,
+                      resource: {
+                        buffer: varsBuffer,
+                      },
+                    },
+                  ]
+                : []),
+              ...(propsBuffer
+                ? [
+                    {
+                      binding: 5,
+                      resource: {
+                        buffer: propsBuffer,
+                      },
+                    },
+                  ]
+                : []),
+            ],
+          });
+          bindGroupCache.set(bindGroupKey, bindGroup);
+        }
 
         passEncoder.setPipeline(pipeline);
         passEncoder.setBindGroup(0, bindGroup);
@@ -2649,55 +2756,77 @@ class VectorStyleRenderer {
           this.symbolPipelineCache_.set(symbolCacheKey, pipeline);
         }
 
-        const bindGroup = device.createBindGroup({
-          layout: pipeline.getBindGroupLayout(0),
-          entries: [
-            {
-              binding: 0,
-              resource: {
-                buffer: styleBuffer,
+        const varsBuffer = this.shaderUsesVars_(symbolCode)
+          ? this.getVariablesBuffer_(device)
+          : null;
+        const propsBuffer =
+          buffers.featureProperties && this.shaderUsesProps_(symbolCode)
+            ? buffers.featureProperties.buffer.getBuffer()
+            : null;
+        const patternSampler = bufferSet.pattern?.sampler || null;
+        const patternView = bufferSet.pattern?.view || null;
+        const bindGroupKey = [
+          this.getObjectId_(pipeline),
+          this.getObjectId_(styleBuffer),
+          this.getObjectId_(this.uniformBuffer_),
+          this.getObjectId_(patternSampler),
+          this.getObjectId_(patternView),
+          this.getObjectId_(varsBuffer),
+          this.getObjectId_(propsBuffer),
+        ].join('|');
+        let bindGroup = bindGroupCache.get(bindGroupKey);
+        if (!bindGroup) {
+          bindGroup = device.createBindGroup({
+            layout: pipeline.getBindGroupLayout(0),
+            entries: [
+              {
+                binding: 0,
+                resource: {
+                  buffer: styleBuffer,
+                },
               },
-            },
-            {
-              binding: 1,
-              resource: {
-                buffer: this.uniformBuffer_,
+              {
+                binding: 1,
+                resource: {
+                  buffer: this.uniformBuffer_,
+                },
               },
-            },
-            ...(bufferSet.pattern
-              ? [
-                  {
-                    binding: 2,
-                    resource: bufferSet.pattern.sampler,
-                  },
-                  {
-                    binding: 3,
-                    resource: bufferSet.pattern.view,
-                  },
-                ]
-              : []),
-            ...(this.shaderUsesVars_(symbolCode)
-              ? [
-                  {
-                    binding: 4,
-                    resource: {
-                      buffer: this.getVariablesBuffer_(device),
+              ...(bufferSet.pattern
+                ? [
+                    {
+                      binding: 2,
+                      resource: bufferSet.pattern.sampler,
                     },
-                  },
-                ]
-              : []),
-            ...(buffers.featureProperties && this.shaderUsesProps_(symbolCode)
-              ? [
-                  {
-                    binding: 5,
-                    resource: {
-                      buffer: buffers.featureProperties.buffer.getBuffer(),
+                    {
+                      binding: 3,
+                      resource: bufferSet.pattern.view,
                     },
-                  },
-                ]
-              : []),
-          ],
-        });
+                  ]
+                : []),
+              ...(varsBuffer
+                ? [
+                    {
+                      binding: 4,
+                      resource: {
+                        buffer: varsBuffer,
+                      },
+                    },
+                  ]
+                : []),
+              ...(propsBuffer
+                ? [
+                    {
+                      binding: 5,
+                      resource: {
+                        buffer: propsBuffer,
+                      },
+                    },
+                  ]
+                : []),
+            ],
+          });
+          bindGroupCache.set(bindGroupKey, bindGroup);
+        }
 
         passEncoder.setPipeline(pipeline);
         passEncoder.setBindGroup(0, bindGroup);

@@ -2,6 +2,217 @@ import VectorStyleRenderer from '../../../../../src/ol/render/webgpu/VectorStyle
 import expect from '../../../expect.js';
 
 describe('ol/render/webgpu/VectorStyleRenderer', () => {
+  it('caches bind groups across renders', () => {
+    if (typeof navigator === 'undefined' || !navigator) {
+      Object.defineProperty(globalThis, 'navigator', {
+        value: {},
+        configurable: true,
+      });
+    }
+    navigator.gpu = {
+      getPreferredCanvasFormat: () => 'bgra8unorm',
+    };
+
+    let bindGroupsCreated = 0;
+    const device = {
+      createBuffer: () => ({}),
+      createShaderModule: () => ({}),
+      createRenderPipeline: () => ({
+        getBindGroupLayout: () => ({}),
+      }),
+      createBindGroup: () => {
+        bindGroupsCreated++;
+        return {};
+      },
+      createCommandEncoder: () => ({
+        beginRenderPass: () => ({
+          setPipeline: () => {},
+          setBindGroup: () => {},
+          setVertexBuffer: () => {},
+          draw: () => {},
+          end: () => {},
+        }),
+        finish: () => ({}),
+      }),
+      queue: {
+        writeBuffer: () => {},
+        submit: () => {},
+      },
+    };
+
+    const helper = {
+      getDevice: () => device,
+      getContext: () => ({getCurrentTexture: () => ({createView: () => ({})})}),
+      getFrameTextureView: () => ({}),
+      getCurrentTextureView: () => ({}),
+      isFirstPass: () => true,
+    };
+
+    const renderer = new VectorStyleRenderer(
+      [{}],
+      {},
+      /** @type {*} */ (helper),
+    );
+
+    const vertexBuffer = {size: 12};
+    const styleBuffer = {};
+    const buffers = {
+      polygonBuffers: [],
+      lineStringBuffers: [],
+      pointBuffers: [
+        {
+          vertex: {
+            getBuffer: () => vertexBuffer,
+          },
+          style: {
+            getBuffer: () => styleBuffer,
+          },
+        },
+      ],
+    };
+
+    const frameState = {
+      index: 0,
+      size: [32, 32],
+      pixelRatio: 1,
+      viewState: {
+        center: [0, 0],
+        resolution: 1,
+        rotation: 0,
+        zoom: 0,
+      },
+    };
+
+    renderer.render(buffers, frameState, 0, 1, true, false, true);
+    renderer.render(buffers, frameState, 0, 1, true, false, true);
+
+    expect(bindGroupsCreated).to.be(1);
+  });
+
+  it('does not allocate featureProperties for CPU-only get() usage', async () => {
+    const device = {
+      createBuffer: ({size}) => ({
+        size,
+        getMappedRange: () => new ArrayBuffer(size),
+        unmap: () => {},
+      }),
+      queue: {
+        writeBuffer: () => {},
+      },
+    };
+    const helper = {
+      getDevice: () => device,
+    };
+
+    const renderer = new VectorStyleRenderer(
+      [
+        {
+          style: {
+            'stroke-color': [0, 0, 255, 1],
+            'stroke-width': ['get', 'w'],
+          },
+        },
+      ],
+      {},
+      /** @type {*} */ (helper),
+    );
+
+    const feature = {
+      get: () => 1,
+    };
+    const geometryBatch = {
+      pointBatch: {
+        entries: {
+          a: {
+            ref: 1,
+            feature,
+            flatCoordss: [[0, 0]],
+          },
+        },
+      },
+      lineStringBatch: {entries: {}},
+      polygonBatch: {entries: {}},
+    };
+
+    const buffers = await renderer.generateBuffers(
+      /** @type {*} */ (geometryBatch),
+      /** @type {*} */ ([]),
+    );
+
+    expect(buffers.featureProperties).to.be(null);
+  });
+
+  it('reuses the featureProperties update scratch buffer', async () => {
+    const writes = [];
+    const device = {
+      createBuffer: ({size}) => ({
+        size,
+        getMappedRange: () => new ArrayBuffer(size),
+        unmap: () => {},
+      }),
+      queue: {
+        writeBuffer: (buffer, offset, data) => {
+          writes.push({buffer, offset, data});
+        },
+      },
+    };
+    const helper = {
+      getDevice: () => device,
+    };
+
+    const renderer = new VectorStyleRenderer(
+      [
+        {
+          style: {
+            'circle-radius': 10,
+            'circle-fill-color': [255, 0, 0, 1],
+          },
+          filter: ['==', ['get', 'limit'], 1],
+        },
+      ],
+      {},
+      /** @type {*} */ (helper),
+    );
+
+    const feature = {
+      get: (name) => (name === 'limit' ? 1 : 0),
+    };
+    const geometryBatch = {
+      pointBatch: {
+        entries: {
+          a: {
+            ref: 1,
+            feature,
+            flatCoordss: [[0, 0]],
+          },
+        },
+      },
+      lineStringBatch: {entries: {}},
+      polygonBatch: {entries: {}},
+    };
+
+    const buffers = await renderer.generateBuffers(
+      /** @type {*} */ (geometryBatch),
+      /** @type {*} */ ([]),
+    );
+
+    expect(buffers.featureProperties).to.not.be(null);
+    buffers.featureProperties.update(
+      /** @type {*} */ (device),
+      1,
+      /** @type {*} */ (feature),
+    );
+    buffers.featureProperties.update(
+      /** @type {*} */ (device),
+      1,
+      /** @type {*} */ (feature),
+    );
+
+    const updateWrites = writes.filter((w) => w.data instanceof Float32Array);
+    expect(updateWrites.length).to.be.greaterThan(1);
+    expect(updateWrites[0].data).to.be(updateWrites[1].data);
+  });
+
   it('writes layer opacity to uniform buffer', () => {
     /** @type {number|null} */
     let compositeOpacity = null;
