@@ -1,5 +1,6 @@
 import {
   BooleanType,
+  ColorType,
   NumberType,
   newParsingContext,
   parse,
@@ -10,6 +11,9 @@ import expect from '../../expect.js';
 describe('ol/expr/wgsl', () => {
   const ctx = {
     lineMetric: 'lineMetric',
+    resolution: 'uniforms.resolution',
+    zoom: 'uniforms.zoom',
+    time: 'uniforms.time',
     get: (name) => `get_${name}()`,
   };
 
@@ -52,5 +56,19 @@ describe('ol/expr/wgsl', () => {
     };
     const boolExpr = parse(['var', 'enabled'], BooleanType, parsingContext);
     expect(compileExpressionToWgsl(boolExpr, boolCtx)).to.be('var_enabled');
+  });
+
+  it('compiles color()', () => {
+    const parsingContext = newParsingContext();
+    const expr = parse(['color', 255, 0, 0, 0.5], ColorType, parsingContext);
+    expect(compileExpressionToWgsl(expr, ctx)).to.be(
+      'vec4f(255.0 / 255.0, 0.0 / 255.0, 0.0 / 255.0, 0.5)',
+    );
+  });
+
+  it('compiles arithmetic', () => {
+    const parsingContext = newParsingContext();
+    const expr = parse(['*', ['+', 2, 1], 3], NumberType, parsingContext);
+    expect(compileExpressionToWgsl(expr, ctx)).to.be('((2.0 + 1.0) * 3.0)');
   });
 });

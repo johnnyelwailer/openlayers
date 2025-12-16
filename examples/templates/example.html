@@ -115,6 +115,7 @@
         <div id="docs">{{ md docs }}</div>
       </div>
 
+{{#unless hideSource}}
       <div class="row-fluid">
         <h5 class="source-heading">main.js</h5>
         <pre><code id="example-js-source" class="language-js">{{ js.source }}</code></pre>
@@ -158,6 +159,7 @@
         <h5 class="source-heading">package.json</h5>
         <pre><code id="example-pkg-source" class="language-json">{{ pkgJson }}</code></pre>
       </div>
+{{/unless}}
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0/dist/js/bootstrap.bundle.min.js"></script>

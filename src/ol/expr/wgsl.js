@@ -8,7 +8,6 @@ import {
   LiteralExpression,
   NumberType,
   Ops,
-  StringType,
   isType,
 } from './expression.js';
 
@@ -19,6 +18,9 @@ import {
 /**
  * @typedef {Object} CompileWgslContext
  * @property {string} lineMetric WGSL expression for line metric.
+ * @property {string} resolution WGSL expression for resolution.
+ * @property {string} zoom WGSL expression for zoom.
+ * @property {string} time WGSL expression for time.
  * @property {(name: string, type: number) => string} get WGSL expression for a `get` property.
  * @property {(name: string, type: number) => string} [var] WGSL expression for a style variable (`var`).
  */
@@ -50,6 +52,20 @@ export function colorToWgsl(color) {
  * @return {string} WGSL code.
  */
 export function compileExpressionToWgsl(expression, ctx) {
+  /**
+   * @param {number} type Expression type.
+   * @return {string} WGSL literal for a safe default value.
+   */
+  function defaultForType(type) {
+    if (isType(type, ColorType)) {
+      return 'vec4f(0.0, 0.0, 0.0, 0.0)';
+    }
+    if (isType(type, BooleanType)) {
+      return 'false';
+    }
+    return '0.0';
+  }
+
   if (expression instanceof LiteralExpression) {
     if (isType(expression.type, NumberType)) {
       return numberToWgsl(/** @type {number} */ (expression.value));
@@ -62,10 +78,7 @@ export function compileExpressionToWgsl(expression, ctx) {
         /** @type {import("../color.js").Color} */ (expression.value),
       );
     }
-    if (isType(expression.type, StringType)) {
-      return '0.0';
-    }
-    return '0.0';
+    return defaultForType(expression.type);
   }
 
   const call = /** @type {CallExpression} */ (expression);
@@ -88,6 +101,69 @@ export function compileExpressionToWgsl(expression, ctx) {
 
   if (op === Ops.LineMetric) {
     return ctx.lineMetric;
+  }
+
+  if (op === Ops.Resolution) {
+    return ctx.resolution;
+  }
+
+  if (op === Ops.Zoom) {
+    return ctx.zoom;
+  }
+
+  if (op === Ops.Time) {
+    return ctx.time;
+  }
+
+  if (
+    op === Ops.Add ||
+    op === Ops.Multiply ||
+    op === Ops.Subtract ||
+    op === Ops.Divide ||
+    op === Ops.Mod ||
+    op === Ops.Pow
+  ) {
+    const compiled = call.args.map((arg) => compileExpressionToWgsl(arg, ctx));
+    if (compiled.length === 0) {
+      return defaultForType(call.type);
+    }
+    if (
+      op === Ops.Subtract ||
+      op === Ops.Divide ||
+      op === Ops.Mod ||
+      op === Ops.Pow
+    ) {
+      // Binary operators.
+      const a = compiled[0];
+      const b = compiled[1] || defaultForType(call.type);
+      if (op === Ops.Pow) {
+        return `pow(${a}, ${b})`;
+      }
+      return `(${a} ${op} ${b})`;
+    }
+    // N-ary (+/*).
+    return `(${compiled.join(` ${op} `)})`;
+  }
+
+  if (op === Ops.Clamp) {
+    const v = compileExpressionToWgsl(call.args[0], ctx);
+    const min = compileExpressionToWgsl(call.args[1], ctx);
+    const max = compileExpressionToWgsl(call.args[2], ctx);
+    return `clamp(${v}, ${min}, ${max})`;
+  }
+
+  if (op === Ops.Abs) {
+    const v = compileExpressionToWgsl(call.args[0], ctx);
+    return `abs(${v})`;
+  }
+
+  if (op === Ops.Color) {
+    const args = call.args.map((arg) => compileExpressionToWgsl(arg, ctx));
+    const r = args[0] || '0.0';
+    const g = args[1] || r;
+    const b = args[2] || r;
+    const a = args[3] || '1.0';
+    return `vec4f(${r} / 255.0, ${g} / 255.0, ${b} / 255.0, ${a})`;
   }
 
   if (
@@ -129,5 +205,5 @@ export function compileExpressionToWgsl(expression, ctx) {
     return `mix(${out0}, ${out1}, ${t})`;
   }
 
-  return '0.0';
+  return defaultForType(call.type);
 }

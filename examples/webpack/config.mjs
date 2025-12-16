@@ -70,6 +70,10 @@ export default {
         },
         {from: 'data', to: 'data'},
         {from: 'resources', to: 'resources'},
+        {
+          from: path.join(root, 'test', 'compat-matrix', 'baseline.json'),
+          to: path.join('resources', 'compat-matrix', 'baseline.json'),
+        },
         {from: 'index.html', to: 'index.html'},
         {from: 'index.js', to: 'index.js'},
       ],

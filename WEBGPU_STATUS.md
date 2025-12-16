@@ -33,7 +33,19 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 *   **Rendering Tests**: ✅ All `webgpu-*` rendering cases pass locally (minor `webgpu-points-rotation` diffs tolerated at 0.01 due to rasterization/sampling differences).
 *   **Perf Hardening**: Cached polygon fill + symbol render pipelines to avoid per-frame `createRenderPipeline()` churn (stroke pipeline was already cached).
 *   **Incremental Styling (WIP)**: Switched to stable per-feature refs (from `MixedGeometryBatch`) and added partial style updates for point/line/polygon (update style storage buffers on feature property changes without regenerating geometry; polygon fill supports literal or `get()`-based `fill-color`/tint).
-*   **Test Hardening**: `npm run lint`, `npm run test-node`, `npm run test-browser`, and `npm run test-rendering -- --match webgpu` all passing locally.
+*   **Compatibility Matrix (New)**: Added an end-to-end, baseline-driven compatibility matrix generator for Canvas/WebGL/WebGPU in `test/compat-matrix/`:
+    * Scenarios are auto-generated from **all 103 flat style properties** (`src/ol/style/flat.js`) with variants: `literal`, `get`, `var` (+ `arith` for numeric props).
+    * “Blank output” is treated as **not supported**; optional diagnostics show pixel coverage vs the runner background.
+    * Capability probes:
+        * `capabilities/max-style-vars/<N>` (1..16, 32, 64, 100): how many `var()` references a renderer can compile/execute.
+        * `capabilities/max-feature-props/<N>` (1..16, 32, 64): how many distinct `get()` properties can be referenced in one expression (WebGL is typically vertex-attrib limited).
+        * `capabilities/max-feature-props-case/<N>` (1..16, 32, 64): `case()` + distinct `get()` references (includes `idx` selector in the reported count).
+        * `capabilities/max-rule-filters/<N>` (1..16, 32, 64): number of rules + filters with distinct `get()` across rules (includes `idx` selector in the reported count).
+    * Output now includes a `scenarios` section so the viewer can show the exact flat style/rules/variables used.
+    * WebGL GL spam from intentionally failing capability probes is filtered in `test/compat-matrix/test.js` to keep logs readable (the structured errors remain in the results).
+*   **Compatibility Matrix Viewer (Examples)**: Added `examples/compatibility-matrix.html` / `examples/compatibility-matrix.js` and wired `test/compat-matrix/baseline.json` into `serve-examples` as `resources/compat-matrix/baseline.json`.
+    * Table UX: fixed column widths, group-by options, row-click expansion, per-renderer error details in their respective columns, and compact “flat style”/“style variables” previews with a subtle expand button.
+*   **Validation (Latest)**: `npm run lint`, `npm run test-node`, `node test/compat-matrix/test.js --headless`, `node test/compat-matrix/test.js --headless --fix`, and `npm run build-examples` passing locally.
 
 ## 2. Components Implemented
 
@@ -97,6 +109,7 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 - [ ] **Complex Styling**: Full rule support and broader expression coverage (beyond current `webgpu-line-metric` subset).
 - [ ] **Shared Expression Compiler**: Continue expanding the WGSL backend so WebGL/WebGPU share parsing + typing + operator semantics (only backend codegen differs).
 - [ ] **Style Variables (`var()`) Parity**: Extend `var()` usage beyond the current subset and add conformance tests (WebGL vs WebGPU) for operator/property parity.
+- [ ] **Compatibility Matrix Expansion**: Add operator-level coverage (interpolate/match/step/etc.), more geometry+symbolizer combinations, and turn the matrix into CI conformance signal (regression-only by default).
 - [ ] **Hit Detection**: `forEachFeatureAtPixel` implementation.
 - [ ] **Texture/Icon Support**: Broaden sprite/atlas + anchor/rotation parity (baseline icon rendering works, but needs deeper style-property coverage).
 - [ ] **Fill Patterns**: Broaden `fill-pattern-src` support and parsing parity (baseline works for the rendering case; not feature-complete yet).
@@ -190,6 +203,7 @@ The following files contain temporary debug logging that should be removed befor
 **WebGPU examples:**
 - `examples/webgpu-debug.html`
 - `examples/webgpu-debug.js`
+- `examples/compatibility-matrix.html`
 
 **WebGL examples (no WebGPU equivalent yet):**
 - `examples/filter-points-webgl.html`
