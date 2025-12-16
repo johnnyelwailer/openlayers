@@ -48,6 +48,7 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
         * `capabilities/max-feature-props/<N>` (1..16, 32, 64): how many distinct `get()` properties can be referenced in one expression (WebGL is typically vertex-attrib limited).
         * `capabilities/max-feature-props-case/<N>` (1..16, 32, 64): `case()` + distinct `get()` references (includes `idx` selector in the reported count).
         * `capabilities/max-rule-filters/<N>` (1..16, 32, 64): number of rules + filters with distinct `get()` across rules (includes `idx` selector in the reported count).
+        * `capabilities/operators/<op>`: targeted operator coverage (e.g. `in`, `between`, `match`, multi-stop `interpolate`, and math/boolean operators) without expanding the per-property matrix.
     * Output now includes a `scenarios` section so the viewer can show the exact flat style/rules/variables used.
     * WebGL GL spam from intentionally failing capability probes is filtered in `test/compat-matrix/test.js` to keep logs readable (the structured errors remain in the results).
 *   **Compatibility Matrix Viewer (Examples)**: Added `examples/compatibility-matrix.html` / `examples/compatibility-matrix.js` and wired `test/compat-matrix/baseline.json` into `serve-examples` as `resources/compat-matrix/baseline.json`.

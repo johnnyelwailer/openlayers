@@ -1,7 +1,7 @@
 {
   "meta": {
-    "date": "2025-12-16T08:02:12.671Z",
-    "scenarios": 419,
+    "date": "2025-12-16T10:08:14.384Z",
+    "scenarios": 435,
     "renderers": [
       "canvas",
       "webgl",
@@ -26937,6 +26937,608 @@
       "capabilityCount": 64,
       "capabilityVarsUsed": 0,
       "capabilityGetsUsed": 65
+    },
+    {
+      "id": "capabilities/operators/interpolate-linear-multistop",
+      "group": "capability",
+      "geometry": "line",
+      "style": {
+        "stroke-color": [
+          0,
+          0,
+          255,
+          1
+        ],
+        "stroke-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "get",
+            "limit"
+          ],
+          0,
+          0,
+          1,
+          0,
+          2,
+          8
+        ],
+        "stroke-line-cap": "round",
+        "stroke-line-join": "round"
+      },
+      "needsGet": true,
+      "needsVar": false,
+      "getKey": "limit",
+      "varKey": null,
+      "literal": 2,
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1
+    },
+    {
+      "id": "capabilities/operators/interpolate-exponential-multistop",
+      "group": "capability",
+      "geometry": "line",
+      "style": {
+        "stroke-color": [
+          0,
+          0,
+          255,
+          1
+        ],
+        "stroke-width": [
+          "interpolate",
+          [
+            "exponential",
+            2
+          ],
+          [
+            "get",
+            "limit"
+          ],
+          0,
+          0,
+          1,
+          0,
+          2,
+          8
+        ],
+        "stroke-line-cap": "round",
+        "stroke-line-join": "round"
+      },
+      "needsGet": true,
+      "needsVar": false,
+      "getKey": "limit",
+      "varKey": null,
+      "literal": 2,
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1
+    },
+    {
+      "id": "capabilities/operators/case-multi",
+      "group": "capability",
+      "geometry": "line",
+      "style": {
+        "stroke-color": [
+          0,
+          0,
+          255,
+          1
+        ],
+        "stroke-width": [
+          "case",
+          [
+            "<",
+            [
+              "get",
+              "limit"
+            ],
+            2
+          ],
+          0,
+          [
+            "<",
+            [
+              "get",
+              "limit"
+            ],
+            4
+          ],
+          8,
+          0
+        ],
+        "stroke-line-cap": "round",
+        "stroke-line-join": "round"
+      },
+      "needsGet": true,
+      "needsVar": false,
+      "getKey": "limit",
+      "varKey": null,
+      "literal": 3,
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1
+    },
+    {
+      "id": "capabilities/operators/match-number",
+      "group": "capability",
+      "geometry": "line",
+      "style": {
+        "stroke-color": [
+          0,
+          0,
+          255,
+          1
+        ],
+        "stroke-width": [
+          "match",
+          [
+            "get",
+            "limit"
+          ],
+          1,
+          0,
+          2,
+          0,
+          3,
+          8,
+          0
+        ],
+        "stroke-line-cap": "round",
+        "stroke-line-join": "round"
+      },
+      "needsGet": true,
+      "needsVar": false,
+      "getKey": "limit",
+      "varKey": null,
+      "literal": 3,
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1
+    },
+    {
+      "id": "capabilities/operators/match-color",
+      "group": "capability",
+      "geometry": "line",
+      "style": {
+        "stroke-color": [
+          "match",
+          [
+            "get",
+            "limit"
+          ],
+          1,
+          "rgb(0,0,0)",
+          3,
+          "rgb(255,0,0)",
+          "rgb(0,0,0)"
+        ],
+        "stroke-width": 8,
+        "stroke-line-cap": "round",
+        "stroke-line-join": "round"
+      },
+      "needsGet": true,
+      "needsVar": false,
+      "getKey": "limit",
+      "varKey": null,
+      "literal": 3,
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1
+    },
+    {
+      "id": "capabilities/operators/in",
+      "group": "capability",
+      "geometry": "line",
+      "style": [
+        {
+          "filter": [
+            "in",
+            [
+              "get",
+              "limit"
+            ],
+            [
+              1,
+              2,
+              3
+            ]
+          ],
+          "style": {
+            "stroke-color": [
+              0,
+              0,
+              255,
+              1
+            ],
+            "stroke-width": 8,
+            "stroke-line-cap": "round",
+            "stroke-line-join": "round"
+          }
+        }
+      ],
+      "needsGet": true,
+      "needsVar": false,
+      "getKey": "limit",
+      "varKey": null,
+      "literal": 3,
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1
+    },
+    {
+      "id": "capabilities/operators/between",
+      "group": "capability",
+      "geometry": "line",
+      "style": [
+        {
+          "filter": [
+            "between",
+            [
+              "get",
+              "limit"
+            ],
+            2,
+            4
+          ],
+          "style": {
+            "stroke-color": [
+              0,
+              0,
+              255,
+              1
+            ],
+            "stroke-width": 8,
+            "stroke-line-cap": "round",
+            "stroke-line-join": "round"
+          }
+        }
+      ],
+      "needsGet": true,
+      "needsVar": false,
+      "getKey": "limit",
+      "varKey": null,
+      "literal": 3,
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1
+    },
+    {
+      "id": "capabilities/operators/boolean-any-all-not",
+      "group": "capability",
+      "geometry": "line",
+      "style": [
+        {
+          "filter": [
+            "all",
+            [
+              "any",
+              false,
+              [
+                "==",
+                [
+                  "get",
+                  "limit"
+                ],
+                3
+              ]
+            ],
+            [
+              "!",
+              false
+            ]
+          ],
+          "style": {
+            "stroke-color": [
+              0,
+              0,
+              255,
+              1
+            ],
+            "stroke-width": 8,
+            "stroke-line-cap": "round",
+            "stroke-line-join": "round"
+          }
+        }
+      ],
+      "needsGet": true,
+      "needsVar": false,
+      "getKey": "limit",
+      "varKey": null,
+      "literal": 3,
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1
+    },
+    {
+      "id": "capabilities/operators/mod",
+      "group": "capability",
+      "geometry": "line",
+      "style": {
+        "stroke-color": [
+          0,
+          0,
+          255,
+          1
+        ],
+        "stroke-width": [
+          "*",
+          8,
+          [
+            "%",
+            [
+              "get",
+              "limit"
+            ],
+            1
+          ]
+        ],
+        "stroke-line-cap": "round",
+        "stroke-line-join": "round"
+      },
+      "needsGet": true,
+      "needsVar": false,
+      "getKey": "limit",
+      "varKey": null,
+      "literal": 0.9,
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1
+    },
+    {
+      "id": "capabilities/operators/floor",
+      "group": "capability",
+      "geometry": "line",
+      "style": {
+        "stroke-color": [
+          0,
+          0,
+          255,
+          1
+        ],
+        "stroke-width": [
+          "floor",
+          [
+            "get",
+            "limit"
+          ]
+        ],
+        "stroke-line-cap": "round",
+        "stroke-line-join": "round"
+      },
+      "needsGet": true,
+      "needsVar": false,
+      "getKey": "limit",
+      "varKey": null,
+      "literal": 8.9,
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1
+    },
+    {
+      "id": "capabilities/operators/ceil",
+      "group": "capability",
+      "geometry": "line",
+      "style": {
+        "stroke-color": [
+          0,
+          0,
+          255,
+          1
+        ],
+        "stroke-width": [
+          "ceil",
+          [
+            "get",
+            "limit"
+          ]
+        ],
+        "stroke-line-cap": "round",
+        "stroke-line-join": "round"
+      },
+      "needsGet": true,
+      "needsVar": false,
+      "getKey": "limit",
+      "varKey": null,
+      "literal": 7.1,
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1
+    },
+    {
+      "id": "capabilities/operators/round",
+      "group": "capability",
+      "geometry": "line",
+      "style": {
+        "stroke-color": [
+          0,
+          0,
+          255,
+          1
+        ],
+        "stroke-width": [
+          "round",
+          [
+            "get",
+            "limit"
+          ]
+        ],
+        "stroke-line-cap": "round",
+        "stroke-line-join": "round"
+      },
+      "needsGet": true,
+      "needsVar": false,
+      "getKey": "limit",
+      "varKey": null,
+      "literal": 7.6,
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1
+    },
+    {
+      "id": "capabilities/operators/sin",
+      "group": "capability",
+      "geometry": "line",
+      "style": {
+        "stroke-color": [
+          0,
+          0,
+          255,
+          1
+        ],
+        "stroke-width": [
+          "*",
+          16,
+          [
+            "abs",
+            [
+              "sin",
+              [
+                "get",
+                "limit"
+              ]
+            ]
+          ]
+        ],
+        "stroke-line-cap": "round",
+        "stroke-line-join": "round"
+      },
+      "needsGet": true,
+      "needsVar": false,
+      "getKey": "limit",
+      "varKey": null,
+      "literal": 1,
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1
+    },
+    {
+      "id": "capabilities/operators/cos",
+      "group": "capability",
+      "geometry": "line",
+      "style": {
+        "stroke-color": [
+          0,
+          0,
+          255,
+          1
+        ],
+        "stroke-width": [
+          "*",
+          16,
+          [
+            "abs",
+            [
+              "cos",
+              [
+                "get",
+                "limit"
+              ]
+            ]
+          ]
+        ],
+        "stroke-line-cap": "round",
+        "stroke-line-join": "round"
+      },
+      "needsGet": true,
+      "needsVar": false,
+      "getKey": "limit",
+      "varKey": null,
+      "literal": 1,
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1
+    },
+    {
+      "id": "capabilities/operators/atan2",
+      "group": "capability",
+      "geometry": "line",
+      "style": {
+        "stroke-color": [
+          0,
+          0,
+          255,
+          1
+        ],
+        "stroke-width": [
+          "*",
+          16,
+          [
+            "abs",
+            [
+              "atan",
+              1,
+              [
+                "get",
+                "limit"
+              ]
+            ]
+          ]
+        ],
+        "stroke-line-cap": "round",
+        "stroke-line-join": "round"
+      },
+      "needsGet": true,
+      "needsVar": false,
+      "getKey": "limit",
+      "varKey": null,
+      "literal": 2,
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1
+    },
+    {
+      "id": "capabilities/operators/sqrt",
+      "group": "capability",
+      "geometry": "line",
+      "style": {
+        "stroke-color": [
+          0,
+          0,
+          255,
+          1
+        ],
+        "stroke-width": [
+          "*",
+          4,
+          [
+            "sqrt",
+            [
+              "get",
+              "limit"
+            ]
+          ]
+        ],
+        "stroke-line-cap": "round",
+        "stroke-line-join": "round"
+      },
+      "needsGet": true,
+      "needsVar": false,
+      "getKey": "limit",
+      "varKey": null,
+      "literal": 4,
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1
     }
   ],
   "results": [
@@ -43497,6 +44099,726 @@
       "messages": [],
       "rendered": true,
       "differentFraction": 0.10382080078125
+    },
+    {
+      "id": "capabilities/operators/interpolate-linear-multistop",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030853271484375
+    },
+    {
+      "id": "capabilities/operators/interpolate-linear-multistop",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030792236328125
+    },
+    {
+      "id": "capabilities/operators/interpolate-linear-multistop",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030792236328125
+    },
+    {
+      "id": "capabilities/operators/interpolate-exponential-multistop",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030853271484375
+    },
+    {
+      "id": "capabilities/operators/interpolate-exponential-multistop",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030792236328125
+    },
+    {
+      "id": "capabilities/operators/interpolate-exponential-multistop",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030792236328125
+    },
+    {
+      "id": "capabilities/operators/case-multi",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030853271484375
+    },
+    {
+      "id": "capabilities/operators/case-multi",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030792236328125
+    },
+    {
+      "id": "capabilities/operators/case-multi",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030792236328125
+    },
+    {
+      "id": "capabilities/operators/match-number",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030853271484375
+    },
+    {
+      "id": "capabilities/operators/match-number",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030792236328125
+    },
+    {
+      "id": "capabilities/operators/match-number",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030792236328125
+    },
+    {
+      "id": "capabilities/operators/match-color",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030853271484375
+    },
+    {
+      "id": "capabilities/operators/match-color",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030792236328125
+    },
+    {
+      "id": "capabilities/operators/match-color",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030792236328125
+    },
+    {
+      "id": "capabilities/operators/in",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030853271484375
+    },
+    {
+      "id": "capabilities/operators/in",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030792236328125
+    },
+    {
+      "id": "capabilities/operators/in",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030792236328125
+    },
+    {
+      "id": "capabilities/operators/between",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030853271484375
+    },
+    {
+      "id": "capabilities/operators/between",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030792236328125
+    },
+    {
+      "id": "capabilities/operators/between",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030792236328125
+    },
+    {
+      "id": "capabilities/operators/boolean-any-all-not",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030853271484375
+    },
+    {
+      "id": "capabilities/operators/boolean-any-all-not",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030792236328125
+    },
+    {
+      "id": "capabilities/operators/boolean-any-all-not",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030792236328125
+    },
+    {
+      "id": "capabilities/operators/mod",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030029296875
+    },
+    {
+      "id": "capabilities/operators/mod",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030029296875
+    },
+    {
+      "id": "capabilities/operators/mod",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030029296875
+    },
+    {
+      "id": "capabilities/operators/floor",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030853271484375
+    },
+    {
+      "id": "capabilities/operators/floor",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030792236328125
+    },
+    {
+      "id": "capabilities/operators/floor",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030792236328125
+    },
+    {
+      "id": "capabilities/operators/ceil",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030853271484375
+    },
+    {
+      "id": "capabilities/operators/ceil",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030792236328125
+    },
+    {
+      "id": "capabilities/operators/ceil",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030792236328125
+    },
+    {
+      "id": "capabilities/operators/round",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030853271484375
+    },
+    {
+      "id": "capabilities/operators/round",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030792236328125
+    },
+    {
+      "id": "capabilities/operators/round",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030792236328125
+    },
+    {
+      "id": "capabilities/operators/sin",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.049285888671875
+    },
+    {
+      "id": "capabilities/operators/sin",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.049224853515625
+    },
+    {
+      "id": "capabilities/operators/sin",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.049224853515625
+    },
+    {
+      "id": "capabilities/operators/cos",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.0313720703125
+    },
+    {
+      "id": "capabilities/operators/cos",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.0313720703125
+    },
+    {
+      "id": "capabilities/operators/cos",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.0313720703125
+    },
+    {
+      "id": "capabilities/operators/atan2",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.0303955078125
+    },
+    {
+      "id": "capabilities/operators/atan2",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.0303955078125
+    },
+    {
+      "id": "capabilities/operators/atan2",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.0303955078125
+    },
+    {
+      "id": "capabilities/operators/sqrt",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030853271484375
+    },
+    {
+      "id": "capabilities/operators/sqrt",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030792236328125
+    },
+    {
+      "id": "capabilities/operators/sqrt",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 1,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.030792236328125
     }
   ]
 }

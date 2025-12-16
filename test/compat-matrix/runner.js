@@ -572,6 +572,230 @@ function generateScenarios(properties) {
     });
   }
 
+  // Operator probes (focused coverage for expression compiler support).
+  // These are intentionally small in number to avoid exploding the baseline.
+  // For WebGPU, these are primarily aimed at the WGSL expression backend used
+  // by the line (stroke) pipeline.
+  const operatorBaseStyle = baseStyleForGroup('stroke');
+  const limitKey = 'limit';
+
+  /**
+   * @param {string} suffix Scenario suffix.
+   * @param {any} styleOrRules Style or rules.
+   * @param {number} limitValue Value assigned to `limit`.
+   */
+  function pushOperatorScenario(suffix, styleOrRules, limitValue) {
+    scenarios.push({
+      id: `capabilities/operators/${suffix}`,
+      group: 'capability',
+      geometry: 'line',
+      capabilityKind: 'operators',
+      capabilityCount: 1,
+      capabilityVarsUsed: 0,
+      capabilityGetsUsed: 1,
+      style: styleOrRules,
+      needsGet: true,
+      needsVar: false,
+      getKey: limitKey,
+      literal: limitValue,
+      varKey: null,
+    });
+  }
+
+  // Multi-stop interpolate: make the third stop required for non-blank output.
+  pushOperatorScenario(
+    'interpolate-linear-multistop',
+    {
+      ...operatorBaseStyle,
+      'stroke-width': [
+        'interpolate',
+        ['linear'],
+        ['get', limitKey],
+        0,
+        0,
+        1,
+        0,
+        2,
+        8,
+      ],
+    },
+    2,
+  );
+  pushOperatorScenario(
+    'interpolate-exponential-multistop',
+    {
+      ...operatorBaseStyle,
+      'stroke-width': [
+        'interpolate',
+        ['exponential', 2],
+        ['get', limitKey],
+        0,
+        0,
+        1,
+        0,
+        2,
+        8,
+      ],
+    },
+    2,
+  );
+
+  // Multi-branch case.
+  pushOperatorScenario(
+    'case-multi',
+    {
+      ...operatorBaseStyle,
+      'stroke-width': [
+        'case',
+        ['<', ['get', limitKey], 2],
+        0,
+        ['<', ['get', limitKey], 4],
+        8,
+        0,
+      ],
+    },
+    3,
+  );
+
+  // match() (numeric output).
+  pushOperatorScenario(
+    'match-number',
+    {
+      ...operatorBaseStyle,
+      'stroke-width': ['match', ['get', limitKey], 1, 0, 2, 0, 3, 8, 0],
+    },
+    3,
+  );
+
+  // match() (color output).
+  pushOperatorScenario(
+    'match-color',
+    {
+      ...operatorBaseStyle,
+      'stroke-color': [
+        'match',
+        ['get', limitKey],
+        1,
+        'rgb(0,0,0)',
+        3,
+        'rgb(255,0,0)',
+        'rgb(0,0,0)',
+      ],
+      'stroke-width': 8,
+    },
+    3,
+  );
+
+  // Numeric in().
+  pushOperatorScenario(
+    'in',
+    [
+      {
+        filter: ['in', ['get', limitKey], [1, 2, 3]],
+        style: operatorBaseStyle,
+      },
+    ],
+    3,
+  );
+
+  // between().
+  pushOperatorScenario(
+    'between',
+    [
+      {
+        filter: ['between', ['get', limitKey], 2, 4],
+        style: operatorBaseStyle,
+      },
+    ],
+    3,
+  );
+
+  // Boolean ops any/all/!.
+  pushOperatorScenario(
+    'boolean-any-all-not',
+    [
+      {
+        filter: [
+          'all',
+          ['any', false, ['==', ['get', limitKey], 3]],
+          ['!', false],
+        ],
+        style: operatorBaseStyle,
+      },
+    ],
+    3,
+  );
+
+  // mod().
+  pushOperatorScenario(
+    'mod',
+    {
+      ...operatorBaseStyle,
+      'stroke-width': ['*', 8, ['%', ['get', limitKey], 1]],
+    },
+    0.9,
+  );
+
+  // floor/ceil/round.
+  pushOperatorScenario(
+    'floor',
+    {
+      ...operatorBaseStyle,
+      'stroke-width': ['floor', ['get', limitKey]],
+    },
+    8.9,
+  );
+  pushOperatorScenario(
+    'ceil',
+    {
+      ...operatorBaseStyle,
+      'stroke-width': ['ceil', ['get', limitKey]],
+    },
+    7.1,
+  );
+  pushOperatorScenario(
+    'round',
+    {
+      ...operatorBaseStyle,
+      'stroke-width': ['round', ['get', limitKey]],
+    },
+    7.6,
+  );
+
+  // Trig + sqrt.
+  pushOperatorScenario(
+    'sin',
+    {
+      ...operatorBaseStyle,
+      'stroke-width': ['*', 16, ['abs', ['sin', ['get', limitKey]]]],
+    },
+    1.0,
+  );
+  pushOperatorScenario(
+    'cos',
+    {
+      ...operatorBaseStyle,
+      'stroke-width': ['*', 16, ['abs', ['cos', ['get', limitKey]]]],
+    },
+    1.0,
+  );
+  pushOperatorScenario(
+    'atan2',
+    {
+      ...operatorBaseStyle,
+      'stroke-width': ['*', 16, ['abs', ['atan', 1, ['get', limitKey]]]],
+    },
+    2.0,
+  );
+  pushOperatorScenario(
+    'sqrt',
+    {
+      ...operatorBaseStyle,
+      'stroke-width': ['*', 4, ['sqrt', ['get', limitKey]]],
+    },
+    4,
+  );
+
   return scenarios;
 }
 
