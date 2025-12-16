@@ -465,6 +465,130 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
     expect(colorExpr).to.be('props[u32(fi) * 10u + 2u * 2u + 1u]');
   });
 
+  it('applies rule else semantics for point symbols', async () => {
+    const device = {
+      createBuffer: ({size}) => ({
+        size,
+        getMappedRange: () => new ArrayBuffer(size),
+        unmap: () => {},
+      }),
+      queue: {
+        writeBuffer: () => {},
+      },
+    };
+    const helper = {
+      getDevice: () => device,
+    };
+
+    const renderer = new VectorStyleRenderer(
+      [
+        {
+          style: {
+            'circle-radius': 10,
+            'circle-fill-color': [255, 0, 0, 1],
+          },
+          filter: ['==', ['get', 'kind'], 1],
+        },
+        {
+          style: {
+            'circle-radius': 10,
+            'circle-fill-color': [0, 0, 255, 1],
+          },
+          else: true,
+        },
+      ],
+      {},
+      /** @type {*} */ (helper),
+    );
+
+    const feature = {
+      get: (name) => (name === 'kind' ? 1 : undefined),
+    };
+    const geometryBatch = {
+      pointBatch: {
+        entries: {
+          a: {
+            ref: 1,
+            feature,
+            flatCoordss: [[0, 0]],
+          },
+        },
+      },
+      lineStringBatch: {entries: {}},
+      polygonBatch: {entries: {}},
+    };
+
+    const buffers = await renderer.generateBuffers(
+      /** @type {*} */ (geometryBatch),
+      /** @type {*} */ ([]),
+    );
+
+    expect(buffers.pointBuffers.length).to.be(2);
+    expect(buffers.pointBuffers[1].symbolShader).to.contain('&& (!(');
+  });
+
+  it('applies rule else semantics for strokes', async () => {
+    const device = {
+      createBuffer: ({size}) => ({
+        size,
+        getMappedRange: () => new ArrayBuffer(size),
+        unmap: () => {},
+      }),
+      queue: {
+        writeBuffer: () => {},
+      },
+    };
+    const helper = {
+      getDevice: () => device,
+    };
+
+    const renderer = new VectorStyleRenderer(
+      [
+        {
+          style: {
+            'stroke-color': [255, 0, 0, 1],
+            'stroke-width': 2,
+          },
+          filter: ['==', ['get', 'kind'], 1],
+        },
+        {
+          style: {
+            'stroke-color': [0, 0, 255, 1],
+            'stroke-width': 2,
+          },
+          else: true,
+        },
+      ],
+      {},
+      /** @type {*} */ (helper),
+    );
+
+    const feature = {
+      get: (name) => (name === 'kind' ? 1 : undefined),
+    };
+    const geometryBatch = {
+      pointBatch: {entries: {}},
+      lineStringBatch: {
+        entries: {
+          a: {
+            ref: 1,
+            feature,
+            flatCoordss: [[0, 0, 0, 10, 0, 10]],
+          },
+        },
+      },
+      polygonBatch: {entries: {}},
+    };
+
+    const buffers = await renderer.generateBuffers(
+      /** @type {*} */ (geometryBatch),
+      /** @type {*} */ ([]),
+    );
+
+    expect(buffers.lineStringBuffers.length).to.be(2);
+    expect(buffers.lineStringBuffers[1].strokeShader).to.contain('&& (!(');
+  });
+
   it('updates feature styles for dirty refs', () => {
     const device = {};
     const helper = {

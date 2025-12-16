@@ -670,6 +670,7 @@ class VectorStyleRenderer {
     const rules = (Array.isArray(this.styles_) ? this.styles_ : []).map(
       (entry) => (entry && entry.style ? entry : {style: entry}),
     );
+    const alwaysTrueFilter = /** @type {any} */ (['==', 1, 1]);
 
     const varsUsed = new Set();
     for (const rule of rules) {
@@ -775,12 +776,35 @@ class VectorStyleRenderer {
       const baseShapeShader =
         this.styleShaders_[0].builder.getShapeSymbolShader();
 
+      /** @type {Array<any>} */
+      const prevPointFilters = [];
       for (const rule of rules) {
         const style = rule.style;
         if (!style) {
           continue;
         }
-        const filter = rule.filter;
+
+        // --- Icons ---
+        const iconSrc = style['icon-src'];
+        const isIcon = typeof iconSrc === 'string';
+        const isShape = 'shape-points' in style;
+        const isCircle = 'circle-radius' in style;
+        if (!isIcon && !isShape && !isCircle) {
+          continue;
+        }
+
+        const currentFilter = rule.filter || alwaysTrueFilter;
+        const hasPrev = prevPointFilters.length > 0;
+        const prevAny =
+          prevPointFilters.length === 1
+            ? prevPointFilters[0]
+            : /** @type {any} */ (['any', ...prevPointFilters]);
+        const effectiveFilter =
+          rule.else && hasPrev
+            ? /** @type {any} */ (['all', currentFilter, ['!', prevAny]])
+            : currentFilter;
+        prevPointFilters.push(effectiveFilter);
+
         const filterCtx = {
           lineMetricVar: '0.0',
           getProp: (name, type) =>
@@ -793,12 +817,11 @@ class VectorStyleRenderer {
             ),
           getVar: (name, type) => this.getVarExpression_(name, type),
         };
-        const discard = filter
-          ? `!(${compileWgslExpression(filter, filterCtx, 'bool')})`
+        const needsDiscard = !!rule.filter || (rule.else && hasPrev);
+        const discard = needsDiscard
+          ? `!(${compileWgslExpression(effectiveFilter, filterCtx, 'bool')})`
           : 'false';
 
-        // --- Icons ---
-        const iconSrc = style['icon-src'];
         if (typeof iconSrc === 'string') {
           const texture = await this.getPatternTexture_(iconSrc);
           const textureSize = texture.size;
@@ -1019,7 +1042,7 @@ class VectorStyleRenderer {
         }
 
         // --- Shapes ---
-        if ('shape-points' in style) {
+        if (isShape) {
           const writeStyle = (styleData, sIdx, feature) => {
             const points = resolveNumber(
               style['shape-points'],
@@ -1201,7 +1224,7 @@ class VectorStyleRenderer {
         }
 
         // --- Circles ---
-        if ('circle-radius' in style) {
+        if (isCircle) {
           const writeStyle = (styleData, sIdx, feature) => {
             const radius = resolveNumber(
               style['circle-radius'],
@@ -1460,9 +1483,22 @@ class VectorStyleRenderer {
       const STYLE_STRIDE = 28;
       const DASH_MAX = 8;
       const defaultColor = [0, 0, 0, 1];
+      /** @type {Array<any>} */
+      const prevStrokeFilters = [];
       for (const rule of strokeRules) {
         const style = rule.style;
-        const filter = rule.filter;
+        const currentFilter = rule.filter || alwaysTrueFilter;
+        const hasPrev = prevStrokeFilters.length > 0;
+        const prevAny =
+          prevStrokeFilters.length === 1
+            ? prevStrokeFilters[0]
+            : /** @type {any} */ (['any', ...prevStrokeFilters]);
+        const effectiveFilter =
+          rule.else && hasPrev
+            ? /** @type {any} */ (['all', currentFilter, ['!', prevAny]])
+            : currentFilter;
+        prevStrokeFilters.push(effectiveFilter);
+        const needsDiscard = !!rule.filter || (rule.else && hasPrev);
         const lineStyleData = new Float32Array((lineMaxRef + 1) * STYLE_STRIDE);
 
         const patternSrc = style['stroke-pattern-src'];
@@ -1606,7 +1642,7 @@ class VectorStyleRenderer {
         const scratch = new Float32Array(STYLE_STRIDE);
         let strokeShader;
         if (
-          filter ||
+          needsDiscard ||
           (Array.isArray(style['stroke-width']) &&
             style['stroke-width'][0] !== 'get') ||
           (Array.isArray(style['stroke-color']) &&
@@ -1637,8 +1673,8 @@ class VectorStyleRenderer {
               ),
             getVar: (name, type) => this.getVarExpression_(name, type),
           };
-          const discard = filter
-            ? `!(${compileWgslExpression(filter, fragmentCtx, 'bool')})`
+          const discard = needsDiscard
+            ? `!(${compileWgslExpression(effectiveFilter, fragmentCtx, 'bool')})`
             : 'false';
           const widthExpr = Array.isArray(style['stroke-width'])
             ? compileWgslExpression(style['stroke-width'], vertexCtx, 'f32')

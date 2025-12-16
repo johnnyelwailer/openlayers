@@ -11,6 +11,7 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 *   **Icon Sprite Sub-rect Expressions**: WebGPU icon rendering now resolves `icon-size`/`icon-offset` as `literal|get|var` per feature (prevents NaNs in UVs and enables the compat-matrix icon-size coverage).
 *   **Style Resolution Helpers**: Extended WebGPU style-buffer helpers to resolve `['var', …]` and added `resolveSize()` for `SizeExpression` handling (used in the point/icon pipeline).
 *   **Feature Properties Buffer (`get()` in WGSL)**: Added a per-feature `props` storage buffer and switched WGSL `get()` compilation to read from it; enables rule filter discard on points/polygons (not just lines) and supports typed reads (scalars + colors) from feature properties in WebGPU WGSL expressions.
+*   **Rule `else` Semantics (Points + Strokes)**: Implemented `else: true` behavior for point symbolizers and stroke rules by compiling an “effective filter” (`current && !any(prev)`) into shader discard logic.
 *   **Bind Group Caching**: Reduced per-frame overhead by caching bind groups per buffer set (keyed by pipeline + bound resources), instead of creating bind groups on every render call.
 *   **`props` Allocation Optimization**: Avoid allocating/binding the feature-properties buffer for CPU-resolved `get()` usage (e.g. direct `['get', ...]` stroke width/color), while still allocating when WGSL expressions require it (filters/expressions).
 *   **Update Path Allocations Reduced**: Reused scratch arrays for per-feature GPU buffer updates and reused the uniform upload array to reduce GC churn.
@@ -171,9 +172,9 @@ These are follow-up notes after hardening `get()` support in the WGSL backend vi
 - **Auto pipeline layout sensitivity**: Shaders are built with `layout: 'auto'`, so unused bindings are omitted by WebGPU. Binding logic currently relies on scanning WGSL source for `vars[...]` / `props[...]`. This is pragmatic but fragile if shader codegen changes.
 
 ### Performance considerations
-- **Bind group churn**: Bind groups are created inside render loops (per buffer set). Caching bind groups keyed by pipeline + bound resources would reduce CPU overhead on frame-to-frame redraw.
-- **Per-update allocations**: `updateStyle()`/`featureProperties.update()` allocate fresh `Float32Array` records per update. For high-frequency feature updates, this may cause avoidable GC churn; consider pooling or reusing scratch arrays.
-- **Memory scaling**: `featureProperties` scales as `featureCount * propCount * 16 bytes` (vec4f per property slot) and is allocated whenever `propCount > 0`. If many distinct `get()` properties are referenced, memory can grow quickly; avoid allocating/binding `props` unless a compiled shader actually needs it.
+- **Bind group churn**: Bind groups are now cached per buffer set; remaining churn is mostly limited to pipeline/resource changes (e.g. texture changes) rather than per-frame redraw.
+- **Per-update allocations**: Style/props update paths now reuse scratch `Float32Array` instances; remaining allocations are dominated by user expressions/resolvers rather than the renderer’s buffer upload scaffolding.
+- **Memory scaling**: `featureProperties` scales as `featureCount * propCount * 32 bytes` (two `vec4f` slots per property: scalar + color) and is allocated only when WGSL expressions need it (e.g. filters/expressions), not for CPU-only `get()` style fields. If many distinct `get()` properties are referenced, memory can still grow quickly.
 
 ## 7. WebGL → WebGPU Port Completeness Audit
 
@@ -181,11 +182,12 @@ These are follow-up notes after hardening `get()` support in the WGSL backend vi
 
 **Counts (as of 2025-12-16):**
 - WebGL rendering cases: **55**
-- WebGPU rendering cases: **18**
+- WebGPU rendering cases: **19**
 - WebGL cases with a WebGPU equivalent: **16**
 - WebGL cases missing a WebGPU equivalent: **39**
 
 **WebGPU-only cases (no WebGL equivalent):**
+- `webgpu-get-color`
 - `webgpu-vector-opacity`
 - `webgpu-vector-multiple-layers`
 
