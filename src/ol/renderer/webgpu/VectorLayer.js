@@ -91,6 +91,12 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
 
     /**
      * @private
+     * @type {Error|null}
+     */
+    this.error_ = null;
+
+    /**
+     * @private
      * @type {boolean}
      */
     this.initialFeaturesAdded_ = false;
@@ -304,6 +310,7 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
     if (viewNotMoving && (extentChanged || this.geometryDirty_)) {
       this.ready = false;
       this.generatingBuffers_ = true;
+      this.error_ = null;
       const transform = createTransform(); // Placeholder, logic moves to shader mainly, or batch transform.
 
       this.styleRenderer_
@@ -315,12 +322,21 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
           this.geometryDirty_ = false;
           this.styleDirtyRefs_.clear();
           this.getLayer().changed();
+        })
+        .catch((err) => {
+          this.error_ = err instanceof Error ? err : new Error(String(err));
+          this.currentBuffers_ = null;
+          this.ready = false;
+          this.generatingBuffers_ = false;
+          this.geometryDirty_ = false;
+          this.styleDirtyRefs_.clear();
+          this.getLayer().changed();
         });
 
       this.previousExtent_ = frameState.extent.slice();
     }
 
-    if (this.geometryDirty_ || !this.currentBuffers_) {
+    if (!this.error_ && (this.geometryDirty_ || !this.currentBuffers_)) {
       frameState.animate = true;
     }
 

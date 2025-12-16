@@ -61,6 +61,8 @@ class WebGPUVectorLayer extends Layer {
 
     super(baseOptions);
 
+    validateWebGPUStyle_(options.style);
+
     /**
      * @type {import('../style/flat.js').StyleVariables}
      * @private
@@ -103,6 +105,7 @@ class WebGPUVectorLayer extends Layer {
    * @param {import('../style/flat.js').FlatStyleLike} style Layer style.
    */
   setStyle(style) {
+    validateWebGPUStyle_(style);
     this.style_ = style;
     this.clearRenderer();
     this.changed();
@@ -110,3 +113,31 @@ class WebGPUVectorLayer extends Layer {
 }
 
 export default WebGPUVectorLayer;
+
+/**
+ * @param {import('../style/flat.js').FlatStyleLike} style Layer style.
+ * @private
+ */
+function validateWebGPUStyle_(style) {
+  if (!style) {
+    return;
+  }
+  const entries = Array.isArray(style) ? style : [style];
+  for (const entry of entries) {
+    const flatStyle =
+      entry && typeof entry === 'object' && 'style' in entry
+        ? entry.style
+        : entry;
+    if (!flatStyle) {
+      continue;
+    }
+    for (const name of ['icon-src', 'fill-pattern-src', 'stroke-pattern-src']) {
+      const value = flatStyle[name];
+      if (value !== undefined && value !== null && typeof value !== 'string') {
+        throw new Error(
+          `WebGPU layers do not support expressions for the ${name} style property`,
+        );
+      }
+    }
+  }
+}

@@ -177,6 +177,14 @@ These are follow-up notes after hardening `get()` support in the WGSL backend vi
 - **Bind group churn**: Bind groups are now cached per buffer set; remaining churn is mostly limited to pipeline/resource changes (e.g. texture changes) rather than per-frame redraw.
 - **Per-update allocations**: Style/props update paths now reuse scratch `Float32Array` instances; remaining allocations are dominated by user expressions/resolvers rather than the renderer’s buffer upload scaffolding.
 - **Memory scaling**: `featureProperties` scales as `featureCount * propCount * 32 bytes` (two `vec4f` slots per property: scalar + color) and is allocated only when WGSL expressions need it (e.g. filters/expressions), not for CPU-only `get()` style fields. If many distinct `get()` properties are referenced, memory can still grow quickly.
+- **Per-frame GC hitches**: Remaining “micro hitches” are often driven by per-frame allocations (transform/mat4 temporaries, composite bind group creation, cache-key string construction). Reducing allocations in `render()` and caching composite resources tends to smooth fast panning/zooming.
+
+### WebGPU-specific optimization opportunities (future work)
+- **Render bundles**: Record draw calls once for mostly-static layers and replay each frame with only uniform updates; reduces CPU encoding overhead on pan/zoom.
+- **Indirect draws + GPU-driven culling**: Use compute to write `drawIndirect`/`drawIndexedIndirect` command buffers based on view-dependent visibility; reduces CPU-side feature iteration and can reduce draw call count.
+- **Compute for style evaluation/packing**: Move “rapidly changing properties” updates to the GPU by uploading a compact “changed refs” list and letting compute update style/props buffers; reduces many small `queue.writeBuffer()` calls.
+- **GPU hit detection**: Render an ID buffer (or compute a pick buffer) and read back a small pixel/region for `forEachFeatureAtPixel` parity; avoids CPU geometry traversal for picking.
+- **Timestamp queries**: Use GPU timestamps (where available) to separate CPU encoding hitches from GPU execution stalls.
 
 ## 7. WebGL → WebGPU Port Completeness Audit
 

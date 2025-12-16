@@ -12,6 +12,7 @@ import {
 import {
   create as createTransform,
   multiply as multiplyTransform,
+  reset as resetTransform,
   rotate as rotateTransform,
   scale as scaleTransform,
   translate as translateTransform,
@@ -352,6 +353,42 @@ class VectorStyleRenderer {
      * @type {Float32Array|null}
      */
     this.uniformData_ = null;
+
+    /**
+     * @private
+     * @type {import("../../transform.js").Transform}
+     */
+    this.renderTransform_ = createTransform();
+
+    /**
+     * @private
+     * @type {import("../../transform.js").Transform}
+     */
+    this.clipTransform_ = createTransform();
+
+    /**
+     * @private
+     * @type {import("../../vec/mat4.js").Mat4}
+     */
+    this.clipMat4_ = createMat4();
+
+    /**
+     * @private
+     * @type {GPUTextureView|null}
+     */
+    this.offscreenTextureView_ = null;
+
+    /**
+     * @private
+     * @type {WeakMap<GPUTextureView, WeakMap<GPUBuffer, GPUBindGroup>>}
+     */
+    this.compositeBindGroupCache_ = new WeakMap();
+
+    /**
+     * @private
+     * @type {GPUTextureFormat|null}
+     */
+    this.compositePipelineFormat_ = null;
   }
 
   /**
@@ -786,6 +823,15 @@ class VectorStyleRenderer {
 
         // --- Icons ---
         const iconSrc = style['icon-src'];
+        if (
+          iconSrc !== undefined &&
+          iconSrc !== null &&
+          typeof iconSrc !== 'string'
+        ) {
+          throw new Error(
+            'WebGPU layers do not support expressions for the icon-src style property',
+          );
+        }
         const isIcon = typeof iconSrc === 'string';
         const isShape = 'shape-points' in style;
         const isCircle = 'circle-radius' in style;
@@ -2196,8 +2242,12 @@ class VectorStyleRenderer {
         usage: 0x10 | 0x04, // RENDER_ATTACHMENT | TEXTURE_BINDING
       });
       this.offscreenTextureSize_ = [widthPx, heightPx];
+      this.offscreenTextureView_ = null;
     }
-    return this.offscreenTexture_.createView();
+    if (!this.offscreenTextureView_) {
+      this.offscreenTextureView_ = this.offscreenTexture_.createView();
+    }
+    return this.offscreenTextureView_;
   }
 
   /**
@@ -2231,6 +2281,16 @@ class VectorStyleRenderer {
     }
 
     const uniformBuffer = this.getCompositeUniformBuffer_(device, opacity);
+
+    if (
+      this.compositePipeline_ &&
+      this.compositePipelineFormat_ &&
+      this.compositePipelineFormat_ !== format
+    ) {
+      this.compositePipeline_ = null;
+      this.compositePipelineFormat_ = null;
+      this.compositeBindGroupCache_ = new WeakMap();
+    }
 
     if (!this.compositePipeline_) {
       const shader = `
@@ -2306,16 +2366,26 @@ class VectorStyleRenderer {
           topology: 'triangle-strip',
         },
       });
+      this.compositePipelineFormat_ = format;
     }
 
-    const bindGroup = device.createBindGroup({
-      layout: this.compositePipeline_.getBindGroupLayout(0),
-      entries: [
-        {binding: 0, resource: this.compositeSampler_},
-        {binding: 1, resource: srcView},
-        {binding: 2, resource: {buffer: uniformBuffer}},
-      ],
-    });
+    let byUniform = this.compositeBindGroupCache_.get(srcView);
+    if (!byUniform) {
+      byUniform = new WeakMap();
+      this.compositeBindGroupCache_.set(srcView, byUniform);
+    }
+    let bindGroup = byUniform.get(uniformBuffer);
+    if (!bindGroup) {
+      bindGroup = device.createBindGroup({
+        layout: this.compositePipeline_.getBindGroupLayout(0),
+        entries: [
+          {binding: 0, resource: this.compositeSampler_},
+          {binding: 1, resource: srcView},
+          {binding: 2, resource: {buffer: uniformBuffer}},
+        ],
+      });
+      byUniform.set(uniformBuffer, bindGroup);
+    }
 
     const pass = commandEncoder.beginRenderPass({
       colorAttachments: [
@@ -2411,7 +2481,8 @@ class VectorStyleRenderer {
     const center = frameState.viewState.center;
 
     // 1. World -> Pixel
-    const renderTransform = createTransform();
+    const renderTransform = this.renderTransform_;
+    resetTransform(renderTransform);
     translateTransform(renderTransform, width / 2, height / 2);
     scaleTransform(renderTransform, 1 / resolution, -1 / resolution);
     rotateTransform(renderTransform, -rotation);
@@ -2419,16 +2490,13 @@ class VectorStyleRenderer {
 
     // 2. Pixel -> Clip
     // Scale (2/w, -2/h), Translate (-1, 1)
-    const clipTransform = createTransform();
+    const clipTransform = this.clipTransform_;
+    resetTransform(clipTransform);
     translateTransform(clipTransform, -1, 1);
     scaleTransform(clipTransform, 2 / width, -2 / height);
 
     // 3. Combine: Clip * Render
     multiplyTransform(clipTransform, renderTransform);
-
-    // 4. Convert to mat4
-    const mat4Data = createMat4();
-    mat4FromTransform(mat4Data, clipTransform);
 
     // 5. Update Uniform Buffer (re-done inside render to include resolution)
     if (!this.uniformBuffer_) {
@@ -2493,7 +2561,7 @@ class VectorStyleRenderer {
     if (this.uniformBuffer_) {
       const uniformData = this.uniformData_ || new Float32Array(24); // 96 bytes
       this.uniformData_ = uniformData;
-      const mat4Data = createMat4();
+      const mat4Data = this.clipMat4_;
       mat4FromTransform(mat4Data, clipTransform);
       uniformData.set(mat4Data);
       uniformData[16] = resolution;
