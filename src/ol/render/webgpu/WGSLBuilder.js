@@ -34,6 +34,23 @@
  */
 
 /**
+ * @typedef {Object} CircleSymbolShaderOptions
+ * @property {string} [fillColor] WGSL `vec4f` expression for the circle fill color.
+ * @property {string} [strokeColor] WGSL `vec4f` expression for the circle stroke color.
+ */
+
+/**
+ * @typedef {Object} ShapeSymbolShaderOptions
+ * @property {string} [fillColor] WGSL `vec4f` expression for the shape fill color.
+ * @property {string} [strokeColor] WGSL `vec4f` expression for the shape stroke color.
+ */
+
+/**
+ * @typedef {Object} IconSymbolShaderOptions
+ * @property {string} [tint] WGSL `vec4f` expression for the icon tint.
+ */
+
+/**
  * @classdesc
  * A builder class for generating WGSL shaders for WebGPU.
  * This mirrors the functionality of ShaderBuilder (GLSL) but for WGSL.
@@ -691,9 +708,12 @@ export class WGSLBuilder {
   /**
    * Returns a circle symbol shader (vertex + fragment in same module).
    * This mirrors WebGL's circle distance-field approach.
+   * @param {CircleSymbolShaderOptions} [options] Shader options.
    * @return {string} WGSL code.
    */
-  getCircleSymbolShader() {
+  getCircleSymbolShader(options = {}) {
+    const fillColorExpr = options.fillColor || 'style.fillColor';
+    const strokeColorExpr = options.strokeColor || 'style.strokeColor';
     return `
       struct VertexOutput {
         @builtin(position) position : vec4f,
@@ -794,8 +814,8 @@ export class WGSLBuilder {
         output.strokeWidth = style.strokeWidth;
         output.opacity = style.opacity;
         output.scale = style.scale;
-        output.fillColor = style.fillColor;
-        output.strokeColor = style.strokeColor;
+        output.fillColor = ${fillColorExpr};
+        output.strokeColor = ${strokeColorExpr};
 
         // Center in CSS pixels (bottom-left origin), used in fragment to compute coordsPx.
         var centerOffsetPx = style.displacement;
@@ -834,9 +854,11 @@ export class WGSLBuilder {
 
   /**
    * Returns an icon symbol shader (vertex + fragment in same module).
+   * @param {IconSymbolShaderOptions} [options] Shader options.
    * @return {string} WGSL code.
    */
-  getIconSymbolShader() {
+  getIconSymbolShader(options = {}) {
+    const tintExpr = options.tint || 'style.tint';
     return `
       struct VertexOutput {
         @builtin(position) position : vec4f,
@@ -911,7 +933,7 @@ export class WGSLBuilder {
         // WebGPU texture coordinates use a top-left origin, matching DOM image sources.
         let v = style.uvOrigin.y + l.y * style.uvSize.y;
         output.texCoord = vec2f(u, v);
-        output.tint = style.tint;
+        output.tint = ${tintExpr};
         output.opacity = style.opacity;
         return output;
       }
@@ -927,9 +949,12 @@ export class WGSLBuilder {
 
   /**
    * Returns a regular shape / star symbol shader (vertex + fragment in same module).
+   * @param {ShapeSymbolShaderOptions} [options] Shader options.
    * @return {string} WGSL code.
    */
-  getShapeSymbolShader() {
+  getShapeSymbolShader(options = {}) {
+    const fillColorExpr = options.fillColor || 'style.fillColor';
+    const strokeColorExpr = options.strokeColor || 'style.strokeColor';
     return `
       struct VertexOutput {
         @builtin(position) position : vec4f,
@@ -1066,8 +1091,8 @@ export class WGSLBuilder {
         output.points = style.points;
         output.shapeAngle = style.shapeAngle;
         output.scale = style.scale;
-        output.fillColor = style.fillColor;
-        output.strokeColor = style.strokeColor;
+        output.fillColor = ${fillColorExpr};
+        output.strokeColor = ${strokeColorExpr};
 
         var centerOffsetPx = style.displacement;
         let c2 = cos(-angle);

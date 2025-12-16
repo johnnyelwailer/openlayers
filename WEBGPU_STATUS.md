@@ -1,12 +1,19 @@
 # WebGPU Vector Rendering - Implementation Status
 
-**Date:** 2025-12-15
+**Date:** 2025-12-16
 **Branch:** `feature/webgpu-vector` (implied)
 
 ## 1. Executive Summary
 The core infrastructure for WebGPU vector rendering has been implemented, mirroring the architecture of the WebGL renderer. The system compiles and runs without runtime errors or validation crashes.
 
-**Latest Progress (2025-12-15):**
+**Latest Progress (2025-12-16):**
+*   **Compat Matrix Parity (Points)**: Fixed WebGPU “blank output” for `circle-fill-color/var`, `circle-stroke-color/var`, `shape-fill-color/var`, `shape-stroke-color/var`, `icon-color/var`, `icon-size/get`, and `icon-size/var` by resolving `var()` and size expressions for point symbol style buffers.
+*   **Icon Sprite Sub-rect Expressions**: WebGPU icon rendering now resolves `icon-size`/`icon-offset` as `literal|get|var` per feature (prevents NaNs in UVs and enables the compat-matrix icon-size coverage).
+*   **Style Resolution Helpers**: Extended WebGPU style-buffer helpers to resolve `['var', …]` and added `resolveSize()` for `SizeExpression` handling (used in the point/icon pipeline).
+*   **Compatibility Matrix Baseline Updated**: Regenerated `test/compat-matrix/baseline.json` after the above parity fixes.
+*   **Validation (Latest)**: `npm run lint`, `npm run test-node`, `npm run test-rendering -- --match webgpu`, `npm run build-full`, and `node test/compat-matrix/test.js --headless` passing locally.
+
+**Earlier Progress (2025-12-15):**
 *   **Instanced Line Rendering**: Implemented GPU-side line expansion using instanced rendering with `triangle-strip` topology. Lines now correctly respect `stroke-width` style property.
 *   **Stroke Width Support**: The shader now reads `resolution` uniform and expands line segments into quads, enabling variable-width lines that scale correctly with zoom.
 *   **webgpu-vector Test**: ✅ Passing again. Polygons and lines render correctly.
@@ -45,7 +52,7 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
     * WebGL GL spam from intentionally failing capability probes is filtered in `test/compat-matrix/test.js` to keep logs readable (the structured errors remain in the results).
 *   **Compatibility Matrix Viewer (Examples)**: Added `examples/compatibility-matrix.html` / `examples/compatibility-matrix.js` and wired `test/compat-matrix/baseline.json` into `serve-examples` as `resources/compat-matrix/baseline.json`.
     * Table UX: fixed column widths, group-by options, row-click expansion, per-renderer error details in their respective columns, and compact “flat style”/“style variables” previews with a subtle expand button.
-*   **Validation (Latest)**: `npm run lint`, `npm run test-node`, `node test/compat-matrix/test.js --headless`, `node test/compat-matrix/test.js --headless --fix`, and `npm run build-examples` passing locally.
+*   **Validation (Latest)**: `npm run lint`, `npm run test-node`, `npm run test-rendering -- --match webgpu`, `npm run build-full`, `node test/compat-matrix/test.js --headless`, and `node test/compat-matrix/test.js --headless --fix` passing locally.
 
 ## 2. Components Implemented
 
@@ -108,11 +115,11 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 ### Features (Pending)
 - [ ] **Complex Styling**: Full rule support and broader expression coverage (beyond current `webgpu-line-metric` subset).
 - [ ] **Shared Expression Compiler**: Continue expanding the WGSL backend so WebGL/WebGPU share parsing + typing + operator semantics (only backend codegen differs).
-- [ ] **Style Variables (`var()`) Parity**: Extend `var()` usage beyond the current subset and add conformance tests (WebGL vs WebGPU) for operator/property parity.
+- [ ] **Style Variables (`var()`) Parity**: Keep expanding `var()` usage across symbolizers and move more `var()`-driven properties from CPU-computed style buffers to the `vars` storage buffer (so `updateStyleVariables()` does not require re-uploading per-feature style records).
 - [ ] **Compatibility Matrix Expansion**: Add operator-level coverage (interpolate/match/step/etc.), more geometry+symbolizer combinations, and turn the matrix into CI conformance signal (regression-only by default).
 - [ ] **Hit Detection**: `forEachFeatureAtPixel` implementation.
 - [ ] **Texture/Icon Support**: Broaden sprite/atlas + anchor/rotation parity (baseline icon rendering works, but needs deeper style-property coverage).
-- [ ] **Fill Patterns**: Broaden `fill-pattern-src` support and parsing parity (baseline works for the rendering case; not feature-complete yet).
+- [ ] **Fill Patterns**: Broaden fill/stroke pattern support beyond current coverage and add deeper conformance tests (pattern-size/offset as expressions, more symbolizers, edge cases).
 - [ ] **Symbol Rendering**: Expand circles/shapes/icons parity (baseline cases pass; missing many style properties and rule combinations).
 
 ## 5. Files Modified (Debug Logging)

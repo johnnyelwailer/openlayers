@@ -1,6 +1,6 @@
 {
   "meta": {
-    "date": "2025-12-15T19:29:59.236Z",
+    "date": "2025-12-16T08:02:12.671Z",
     "scenarios": 419,
     "renderers": [
       "canvas",
@@ -27262,114 +27262,109 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "circle",
       "scenarioGeometry": "point",
-      "status": "not_supported",
-      "messages": [
-        {
-          "type": "blank",
-          "message": "Rendered blank output"
-        }
-      ],
-      "rendered": false,
-      "differentFraction": 0
-    },
-    {
-      "id": "circle-opacity/literal",
-      "renderer": "canvas",
-      "targetId": "target-canvas",
-      "scenarioGroup": "circle",
-      "scenarioGeometry": "point",
-      "status": "ok",
-      "messages": [],
-      "rendered": true,
-      "differentFraction": 0.133544921875
-    },
-    {
-      "id": "circle-opacity/literal",
-      "renderer": "webgl",
-      "targetId": "target-webgl",
-      "scenarioGroup": "circle",
-      "scenarioGeometry": "point",
-      "status": "ok",
-      "messages": [],
-      "rendered": true,
-      "differentFraction": 0.1326904296875
-    },
-    {
-      "id": "circle-opacity/literal",
-      "renderer": "webgpu",
-      "targetId": "target-webgpu",
-      "scenarioGroup": "circle",
-      "scenarioGeometry": "point",
-      "status": "ok",
-      "messages": [],
-      "rendered": true,
-      "differentFraction": 0.1326904296875
-    },
-    {
-      "id": "circle-opacity/get",
-      "renderer": "canvas",
-      "targetId": "target-canvas",
-      "scenarioGroup": "circle",
-      "scenarioGeometry": "point",
-      "status": "ok",
-      "messages": [],
-      "rendered": true,
-      "differentFraction": 0.133544921875
-    },
-    {
-      "id": "circle-opacity/get",
-      "renderer": "webgl",
-      "targetId": "target-webgl",
-      "scenarioGroup": "circle",
-      "scenarioGeometry": "point",
-      "status": "ok",
-      "messages": [],
-      "rendered": true,
-      "differentFraction": 0.1326904296875
-    },
-    {
-      "id": "circle-opacity/get",
-      "renderer": "webgpu",
-      "targetId": "target-webgpu",
-      "scenarioGroup": "circle",
-      "scenarioGeometry": "point",
-      "status": "ok",
-      "messages": [],
-      "rendered": true,
-      "differentFraction": 0.1326904296875
-    },
-    {
-      "id": "circle-opacity/var",
-      "renderer": "canvas",
-      "targetId": "target-canvas",
-      "scenarioGroup": "circle",
-      "scenarioGeometry": "point",
-      "status": "ok",
-      "messages": [],
-      "rendered": true,
-      "differentFraction": 0.133544921875
-    },
-    {
-      "id": "circle-opacity/var",
-      "renderer": "webgl",
-      "targetId": "target-webgl",
-      "scenarioGroup": "circle",
-      "scenarioGeometry": "point",
-      "status": "ok",
-      "messages": [],
-      "rendered": true,
-      "differentFraction": 0.1326904296875
-    },
-    {
-      "id": "circle-opacity/var",
-      "renderer": "webgpu",
-      "targetId": "target-webgpu",
-      "scenarioGroup": "circle",
-      "scenarioGeometry": "point",
       "status": "ok",
       "messages": [],
       "rendered": true,
       "differentFraction": 0.1328125
+    },
+    {
+      "id": "circle-opacity/literal",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "circle",
+      "scenarioGeometry": "point",
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.133544921875
+    },
+    {
+      "id": "circle-opacity/literal",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "circle",
+      "scenarioGeometry": "point",
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.1326904296875
+    },
+    {
+      "id": "circle-opacity/literal",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "circle",
+      "scenarioGeometry": "point",
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.1326904296875
+    },
+    {
+      "id": "circle-opacity/get",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "circle",
+      "scenarioGeometry": "point",
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.133544921875
+    },
+    {
+      "id": "circle-opacity/get",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "circle",
+      "scenarioGeometry": "point",
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.1326904296875
+    },
+    {
+      "id": "circle-opacity/get",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "circle",
+      "scenarioGeometry": "point",
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.1326904296875
+    },
+    {
+      "id": "circle-opacity/var",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "circle",
+      "scenarioGeometry": "point",
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.133544921875
+    },
+    {
+      "id": "circle-opacity/var",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "circle",
+      "scenarioGeometry": "point",
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.1326904296875
+    },
+    {
+      "id": "circle-opacity/var",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "circle",
+      "scenarioGeometry": "point",
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.1326904296875
     },
     {
       "id": "circle-opacity/arith",
@@ -27506,7 +27501,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.10382080078125
+      "differentFraction": 0.11077880859375
     },
     {
       "id": "circle-radius/arith",
@@ -27747,7 +27742,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.1328125
+      "differentFraction": 0.13250732421875
     },
     {
       "id": "circle-rotation/arith",
@@ -27884,7 +27879,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.1328125
+      "differentFraction": 0.167236328125
     },
     {
       "id": "circle-stroke-color/literal",
@@ -27985,15 +27980,10 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "circle",
       "scenarioGeometry": "point",
-      "status": "not_supported",
-      "messages": [
-        {
-          "type": "blank",
-          "message": "Rendered blank output"
-        }
-      ],
-      "rendered": false,
-      "differentFraction": 0
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.1326904296875
     },
     {
       "id": "circle-stroke-line-cap/literal",
@@ -28683,7 +28673,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.12725830078125
+      "differentFraction": 0.14422607421875
     },
     {
       "id": "circle-stroke-width/arith",
@@ -28746,15 +28736,10 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "fill",
       "scenarioGeometry": "polygon",
-      "status": "not_supported",
-      "messages": [
-        {
-          "type": "blank",
-          "message": "Rendered blank output"
-        }
-      ],
-      "rendered": false,
-      "differentFraction": 0
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.03173828125
     },
     {
       "id": "fill-color/get",
@@ -28822,15 +28807,10 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "fill",
       "scenarioGeometry": "polygon",
-      "status": "not_supported",
-      "messages": [
-        {
-          "type": "blank",
-          "message": "Rendered blank output"
-        }
-      ],
-      "rendered": false,
-      "differentFraction": 0
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.03173828125
     },
     {
       "id": "fill-pattern-offset/literal",
@@ -28860,15 +28840,10 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "fill",
       "scenarioGeometry": "polygon",
-      "status": "not_supported",
-      "messages": [
-        {
-          "type": "blank",
-          "message": "Rendered blank output"
-        }
-      ],
-      "rendered": false,
-      "differentFraction": 0
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.03173828125
     },
     {
       "id": "fill-pattern-offset/get",
@@ -28898,15 +28873,10 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "fill",
       "scenarioGeometry": "polygon",
-      "status": "not_supported",
-      "messages": [
-        {
-          "type": "blank",
-          "message": "Rendered blank output"
-        }
-      ],
-      "rendered": false,
-      "differentFraction": 0
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.03173828125
     },
     {
       "id": "fill-pattern-offset/var",
@@ -28936,15 +28906,10 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "fill",
       "scenarioGeometry": "polygon",
-      "status": "not_supported",
-      "messages": [
-        {
-          "type": "blank",
-          "message": "Rendered blank output"
-        }
-      ],
-      "rendered": false,
-      "differentFraction": 0
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.03173828125
     },
     {
       "id": "fill-pattern-offset-origin/literal",
@@ -28974,15 +28939,10 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "fill",
       "scenarioGeometry": "polygon",
-      "status": "not_supported",
-      "messages": [
-        {
-          "type": "blank",
-          "message": "Rendered blank output"
-        }
-      ],
-      "rendered": false,
-      "differentFraction": 0
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.03173828125
     },
     {
       "id": "fill-pattern-offset-origin/get",
@@ -29012,15 +28972,10 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "fill",
       "scenarioGeometry": "polygon",
-      "status": "not_supported",
-      "messages": [
-        {
-          "type": "blank",
-          "message": "Rendered blank output"
-        }
-      ],
-      "rendered": false,
-      "differentFraction": 0
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.03173828125
     },
     {
       "id": "fill-pattern-offset-origin/var",
@@ -29050,15 +29005,10 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "fill",
       "scenarioGeometry": "polygon",
-      "status": "not_supported",
-      "messages": [
-        {
-          "type": "blank",
-          "message": "Rendered blank output"
-        }
-      ],
-      "rendered": false,
-      "differentFraction": 0
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.03173828125
     },
     {
       "id": "fill-pattern-size/literal",
@@ -29088,15 +29038,10 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "fill",
       "scenarioGeometry": "polygon",
-      "status": "not_supported",
-      "messages": [
-        {
-          "type": "blank",
-          "message": "Rendered blank output"
-        }
-      ],
-      "rendered": false,
-      "differentFraction": 0
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.03173828125
     },
     {
       "id": "fill-pattern-size/get",
@@ -29126,15 +29071,10 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "fill",
       "scenarioGeometry": "polygon",
-      "status": "not_supported",
-      "messages": [
-        {
-          "type": "blank",
-          "message": "Rendered blank output"
-        }
-      ],
-      "rendered": false,
-      "differentFraction": 0
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.03173828125
     },
     {
       "id": "fill-pattern-size/var",
@@ -29164,15 +29104,10 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "fill",
       "scenarioGeometry": "polygon",
-      "status": "not_supported",
-      "messages": [
-        {
-          "type": "blank",
-          "message": "Rendered blank output"
-        }
-      ],
-      "rendered": false,
-      "differentFraction": 0
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.03173828125
     },
     {
       "id": "fill-pattern-src/literal",
@@ -29407,15 +29342,10 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "icon",
       "scenarioGeometry": "point",
-      "status": "not_supported",
-      "messages": [
-        {
-          "type": "blank",
-          "message": "Rendered blank output"
-        }
-      ],
-      "rendered": false,
-      "differentFraction": 0
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.1650390625
     },
     {
       "id": "icon-anchor-origin/literal",
@@ -29848,15 +29778,10 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "icon",
       "scenarioGeometry": "point",
-      "status": "not_supported",
-      "messages": [
-        {
-          "type": "blank",
-          "message": "Rendered blank output"
-        }
-      ],
-      "rendered": false,
-      "differentFraction": 0
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.1650390625
     },
     {
       "id": "icon-cross-origin/literal",
@@ -30898,7 +30823,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.1650390625
+      "differentFraction": 0.1790771484375
     },
     {
       "id": "icon-rotation/arith",
@@ -31035,7 +30960,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.1650390625
+      "differentFraction": 0.2197265625
     },
     {
       "id": "icon-size/literal",
@@ -31103,15 +31028,10 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "icon",
       "scenarioGeometry": "point",
-      "status": "not_supported",
-      "messages": [
-        {
-          "type": "blank",
-          "message": "Rendered blank output"
-        }
-      ],
-      "rendered": false,
-      "differentFraction": 0
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.1181640625
     },
     {
       "id": "icon-size/var",
@@ -31146,15 +31066,10 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "icon",
       "scenarioGeometry": "point",
-      "status": "not_supported",
-      "messages": [
-        {
-          "type": "blank",
-          "message": "Rendered blank output"
-        }
-      ],
-      "rendered": false,
-      "differentFraction": 0
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.1181640625
     },
     {
       "id": "icon-src/literal",
@@ -31539,7 +31454,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.13262939453125
+      "differentFraction": 0.13067626953125
     },
     {
       "id": "shape-angle/arith",
@@ -31901,15 +31816,10 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "shape",
       "scenarioGeometry": "point",
-      "status": "not_supported",
-      "messages": [
-        {
-          "type": "blank",
-          "message": "Rendered blank output"
-        }
-      ],
-      "rendered": false,
-      "differentFraction": 0
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.13262939453125
     },
     {
       "id": "shape-opacity/literal",
@@ -32150,7 +32060,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.120574951171875
+      "differentFraction": 0.135528564453125
     },
     {
       "id": "shape-points/arith",
@@ -32292,7 +32202,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.07916259765625
+      "differentFraction": 0.09295654296875
     },
     {
       "id": "shape-radius/arith",
@@ -32429,7 +32339,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.13262939453125
+      "differentFraction": 0.12567138671875
     },
     {
       "id": "shape-radius2/arith",
@@ -32670,7 +32580,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.13262939453125
+      "differentFraction": 0.1304931640625
     },
     {
       "id": "shape-rotation/arith",
@@ -32807,7 +32717,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.13262939453125
+      "differentFraction": 0.1700439453125
     },
     {
       "id": "shape-stroke-color/literal",
@@ -32908,15 +32818,10 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "shape",
       "scenarioGeometry": "point",
-      "status": "not_supported",
-      "messages": [
-        {
-          "type": "blank",
-          "message": "Rendered blank output"
-        }
-      ],
-      "rendered": false,
-      "differentFraction": 0
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.13262939453125
     },
     {
       "id": "shape-stroke-line-cap/literal",
@@ -33606,7 +33511,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.12744140625
+      "differentFraction": 0.1431884765625
     },
     {
       "id": "shape-stroke-width/arith",
@@ -34978,10 +34883,15 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "stroke",
       "scenarioGeometry": "line",
-      "status": "ok",
-      "messages": [],
-      "rendered": true,
-      "differentFraction": 0.030792236328125
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "blank",
+          "message": "Rendered blank output"
+        }
+      ],
+      "rendered": false,
+      "differentFraction": 0
     },
     {
       "id": "stroke-pattern-src/var",
@@ -35016,10 +34926,15 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "stroke",
       "scenarioGeometry": "line",
-      "status": "ok",
-      "messages": [],
-      "rendered": true,
-      "differentFraction": 0.030792236328125
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "blank",
+          "message": "Rendered blank output"
+        }
+      ],
+      "rendered": false,
+      "differentFraction": 0
     },
     {
       "id": "stroke-pattern-start-offset/literal",

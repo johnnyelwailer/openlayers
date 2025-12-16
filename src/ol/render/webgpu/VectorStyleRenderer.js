@@ -65,11 +65,20 @@ import {
 /**
  * @param {*} value Expression or literal.
  * @param {import("../../Feature.js").default|import("../../render/Feature.js").default} feature Feature.
+ * @param {import("../../style/flat.js").StyleVariables} [variables] Style variables.
  * @return {*} Resolved value.
  */
-function resolveExpression(value, feature) {
+function resolveExpression(value, feature, variables) {
   if (Array.isArray(value) && value.length === 2 && value[0] === 'get') {
     return feature.get(value[1]);
+  }
+  if (
+    Array.isArray(value) &&
+    value.length === 2 &&
+    value[0] === 'var' &&
+    variables
+  ) {
+    return variables[value[1]];
   }
   return value;
 }
@@ -78,10 +87,11 @@ function resolveExpression(value, feature) {
  * @param {*} value Expression or literal.
  * @param {import("../../Feature.js").default|import("../../render/Feature.js").default} feature Feature.
  * @param {number} fallback Fallback.
+ * @param {import("../../style/flat.js").StyleVariables} [variables] Style variables.
  * @return {number} Resolved number.
  */
-function resolveNumber(value, feature, fallback) {
-  const resolved = resolveExpression(value, feature);
+function resolveNumber(value, feature, fallback, variables) {
+  const resolved = resolveExpression(value, feature, variables);
   const num = Number(resolved);
   return Number.isFinite(num) ? num : fallback;
 }
@@ -138,14 +148,15 @@ function maxNumberInExpression(expr) {
  * @param {*} value Expression or literal.
  * @param {import("../../Feature.js").default|import("../../render/Feature.js").default} feature Feature.
  * @param {number} fallback Fallback.
+ * @param {import("../../style/flat.js").StyleVariables} [variables] Style variables.
  * @return {number} Stroke width.
  */
-function resolveStrokeWidth(value, feature, fallback) {
+function resolveStrokeWidth(value, feature, fallback, variables) {
   if (!Array.isArray(value)) {
-    return resolveNumber(value, feature, fallback);
+    return resolveNumber(value, feature, fallback, variables);
   }
   if (value[0] === 'get') {
-    return resolveNumber(value, feature, fallback);
+    return resolveNumber(value, feature, fallback, variables);
   }
   const maxWidth = maxNumberInExpression(value);
   if (Number.isFinite(maxWidth) && maxWidth > 0) {
@@ -158,19 +169,56 @@ function resolveStrokeWidth(value, feature, fallback) {
  * @param {*} value Expression or literal.
  * @param {import("../../Feature.js").default|import("../../render/Feature.js").default} feature Feature.
  * @param {Array<number>} fallback Fallback RGBA (0..1).
+ * @param {import("../../style/flat.js").StyleVariables} [variables] Style variables.
  * @return {Array<number>} Resolved color.
  */
-function resolveColor(value, feature, fallback) {
-  const resolved = resolveExpression(value, feature);
+function resolveColor(value, feature, fallback, variables) {
+  const resolved = resolveExpression(value, feature, variables);
   if (!resolved) {
     return fallback;
   }
   try {
     const c = asArray(resolved);
-    return [c[0] / 255, c[1] / 255, c[2] / 255, c[3]];
+    const r = Number(c[0]);
+    const g = Number(c[1]);
+    const b = Number(c[2]);
+    if (!Number.isFinite(r) || !Number.isFinite(g) || !Number.isFinite(b)) {
+      return fallback;
+    }
+    const max = Math.max(r, g, b);
+    const scale = max > 1.5 ? 1 / 255 : 1;
+    const alpha = c.length > 3 ? Number(c[3]) : 1;
+    return [
+      r * scale,
+      g * scale,
+      b * scale,
+      Number.isFinite(alpha) ? alpha : 1,
+    ];
   } catch {
     return fallback;
   }
+}
+
+/**
+ * @param {*} value Expression or literal.
+ * @param {import("../../Feature.js").default|import("../../render/Feature.js").default} feature Feature.
+ * @param {[number, number]} fallback Fallback size.
+ * @param {import("../../style/flat.js").StyleVariables} [variables] Style variables.
+ * @return {[number, number]} Resolved size.
+ */
+function resolveSize(value, feature, fallback, variables) {
+  const resolved = resolveExpression(value, feature, variables);
+  if (Array.isArray(resolved) && resolved.length >= 2) {
+    const w = Number(resolved[0]);
+    const h = Number(resolved[1]);
+    if (Number.isFinite(w) && Number.isFinite(h)) {
+      return [w, h];
+    }
+  }
+  if (typeof resolved === 'number' && Number.isFinite(resolved)) {
+    return [resolved, resolved];
+  }
+  return fallback;
 }
 
 /**
@@ -603,45 +651,72 @@ class VectorStyleRenderer {
         if (typeof iconSrc === 'string') {
           const texture = await this.getPatternTexture_(iconSrc);
           const textureSize = texture.size;
-          const sampleSize = Array.isArray(style['icon-size'])
-            ? style['icon-size']
-            : textureSize;
-          const baseOffset = Array.isArray(style['icon-offset'])
-            ? style['icon-offset']
-            : [0, 0];
-          const origin = style['icon-offset-origin'] || 'top-left';
-          let offsetX = baseOffset[0] || 0;
-          let offsetY = baseOffset[1] || 0;
-          if (origin === 'top-right') {
-            offsetX = textureSize[0] - sampleSize[0] - offsetX;
-          } else if (origin === 'bottom-left') {
-            offsetY = textureSize[1] - sampleSize[1] - offsetY;
-          } else if (origin === 'bottom-right') {
-            offsetX = textureSize[0] - sampleSize[0] - offsetX;
-            offsetY = textureSize[1] - sampleSize[1] - offsetY;
-          }
-
-          const uvOrigin = [offsetX / textureSize[0], offsetY / textureSize[1]];
-          const uvSize = [
-            sampleSize[0] / textureSize[0],
-            sampleSize[1] / textureSize[1],
-          ];
 
           const writeStyle = (styleData, sIdx, feature) => {
+            const sampleSize = resolveSize(
+              style['icon-size'],
+              feature,
+              textureSize,
+              this.variables_,
+            );
+            const baseOffset = resolveSize(
+              style['icon-offset'],
+              feature,
+              [0, 0],
+              this.variables_,
+            );
+            const origin = String(
+              resolveExpression(
+                style['icon-offset-origin'] || 'top-left',
+                feature,
+                this.variables_,
+              ),
+            );
+            let offsetX = baseOffset[0];
+            let offsetY = baseOffset[1];
+            if (origin === 'top-right') {
+              offsetX = textureSize[0] - sampleSize[0] - offsetX;
+            } else if (origin === 'bottom-left') {
+              offsetY = textureSize[1] - sampleSize[1] - offsetY;
+            } else if (origin === 'bottom-right') {
+              offsetX = textureSize[0] - sampleSize[0] - offsetX;
+              offsetY = textureSize[1] - sampleSize[1] - offsetY;
+            }
+
+            const uvOrigin = [
+              offsetX / textureSize[0],
+              offsetY / textureSize[1],
+            ];
+            const uvSize = [
+              sampleSize[0] / textureSize[0],
+              sampleSize[1] / textureSize[1],
+            ];
+
             const tint = resolveColor(
               style['icon-color'],
               feature,
               [1, 1, 1, 1],
+              this.variables_,
             );
-            const opacity = resolveNumber(style['icon-opacity'], feature, 1.0);
+            const opacity = resolveNumber(
+              style['icon-opacity'],
+              feature,
+              1.0,
+              this.variables_,
+            );
             const rotation = resolveNumber(
               style['icon-rotation'],
               feature,
               0.0,
+              this.variables_,
             );
             const rotateWithView = style['icon-rotate-with-view'] ? 1 : 0;
 
-            const scaleValue = resolveExpression(style['icon-scale'], feature);
+            const scaleValue = resolveExpression(
+              style['icon-scale'],
+              feature,
+              this.variables_,
+            );
             const scale =
               typeof scaleValue === 'number'
                 ? [scaleValue, scaleValue]
@@ -653,6 +728,7 @@ class VectorStyleRenderer {
             const displacement = resolveExpression(
               style['icon-displacement'],
               feature,
+              this.variables_,
             );
             const displacementVec = Array.isArray(displacement)
               ? displacement
@@ -667,6 +743,7 @@ class VectorStyleRenderer {
               const anchorValue = resolveExpression(
                 style['icon-anchor'],
                 feature,
+                this.variables_,
               );
               const anchor = Array.isArray(anchorValue)
                 ? anchorValue
@@ -790,33 +867,57 @@ class VectorStyleRenderer {
         // --- Shapes ---
         if ('shape-points' in style) {
           const writeStyle = (styleData, sIdx, feature) => {
-            const points = resolveNumber(style['shape-points'], feature, 3.0);
+            const points = resolveNumber(
+              style['shape-points'],
+              feature,
+              3.0,
+              this.variables_,
+            );
             const strokeWidth = resolveNumber(
               style['shape-stroke-width'],
               feature,
               0.0,
+              this.variables_,
             );
-            const opacity = resolveNumber(style['shape-opacity'], feature, 1.0);
+            const opacity = resolveNumber(
+              style['shape-opacity'],
+              feature,
+              1.0,
+              this.variables_,
+            );
             const shapeAngle = resolveNumber(
               style['shape-angle'],
               feature,
               0.0,
+              this.variables_,
             );
 
             const fillColor = resolveColor(
               style['shape-fill-color'],
               feature,
               [1, 1, 1, 1],
+              this.variables_,
             );
             let strokeColor = resolveColor(
               style['shape-stroke-color'],
               feature,
               [0, 0, 0, 0],
+              this.variables_,
             );
             const strokeExpr = style['shape-stroke-color'];
             if (Array.isArray(strokeExpr) && strokeExpr[0] === '*') {
-              const a = resolveColor(strokeExpr[1], feature, strokeColor);
-              const b = resolveColor(strokeExpr[2], feature, [1, 1, 1, 1]);
+              const a = resolveColor(
+                strokeExpr[1],
+                feature,
+                strokeColor,
+                this.variables_,
+              );
+              const b = resolveColor(
+                strokeExpr[2],
+                feature,
+                [1, 1, 1, 1],
+                this.variables_,
+              );
               strokeColor = [
                 a[0] * b[0],
                 a[1] * b[1],
@@ -829,10 +930,16 @@ class VectorStyleRenderer {
               style['shape-radius'],
               feature,
               5.0,
+              this.variables_,
             );
             const baseRadius2 =
               'shape-radius2' in style
-                ? resolveNumber(style['shape-radius2'], feature, 0.0)
+                ? resolveNumber(
+                    style['shape-radius2'],
+                    feature,
+                    0.0,
+                    this.variables_,
+                  )
                 : 0.0;
             const radius = baseRadius + strokeWidth * 0.5;
             const radius2 =
@@ -841,6 +948,7 @@ class VectorStyleRenderer {
             const displacement = resolveExpression(
               style['shape-displacement'],
               feature,
+              this.variables_,
             );
             const displacementVec = Array.isArray(displacement)
               ? displacement
@@ -849,10 +957,15 @@ class VectorStyleRenderer {
               style['shape-rotation'],
               feature,
               0.0,
+              this.variables_,
             );
             const rotateWithView = style['shape-rotate-with-view'] ? 1 : 0;
 
-            const scaleValue = resolveExpression(style['shape-scale'], feature);
+            const scaleValue = resolveExpression(
+              style['shape-scale'],
+              feature,
+              this.variables_,
+            );
             const scale =
               typeof scaleValue === 'number'
                 ? [scaleValue, scaleValue]
@@ -933,32 +1046,51 @@ class VectorStyleRenderer {
         // --- Circles ---
         if ('circle-radius' in style) {
           const writeStyle = (styleData, sIdx, feature) => {
-            const radius = resolveNumber(style['circle-radius'], feature, 5.0);
+            const radius = resolveNumber(
+              style['circle-radius'],
+              feature,
+              5.0,
+              this.variables_,
+            );
             const strokeWidth = resolveNumber(
               style['circle-stroke-width'],
               feature,
               0.0,
+              this.variables_,
             );
             const opacity = resolveNumber(
               style['circle-opacity'],
               feature,
               1.0,
+              this.variables_,
             );
 
             const fillColor = resolveColor(
               style['circle-fill-color'],
               feature,
               [1, 1, 1, 1],
+              this.variables_,
             );
             let strokeColor = resolveColor(
               style['circle-stroke-color'],
               feature,
               [0, 0, 0, 0],
+              this.variables_,
             );
             const strokeExpr = style['circle-stroke-color'];
             if (Array.isArray(strokeExpr) && strokeExpr[0] === '*') {
-              const a = resolveColor(strokeExpr[1], feature, strokeColor);
-              const b = resolveColor(strokeExpr[2], feature, [1, 1, 1, 1]);
+              const a = resolveColor(
+                strokeExpr[1],
+                feature,
+                strokeColor,
+                this.variables_,
+              );
+              const b = resolveColor(
+                strokeExpr[2],
+                feature,
+                [1, 1, 1, 1],
+                this.variables_,
+              );
               strokeColor = [
                 a[0] * b[0],
                 a[1] * b[1],
@@ -970,6 +1102,7 @@ class VectorStyleRenderer {
             const displacement = resolveExpression(
               style['circle-displacement'],
               feature,
+              this.variables_,
             );
             const displacementVec = Array.isArray(displacement)
               ? displacement
@@ -978,10 +1111,12 @@ class VectorStyleRenderer {
               style['circle-rotation'],
               feature,
               0.0,
+              this.variables_,
             );
             const scaleValue = resolveExpression(
               style['circle-scale'],
               feature,
+              this.variables_,
             );
             const scale =
               typeof scaleValue === 'number'
@@ -1176,6 +1311,15 @@ class VectorStyleRenderer {
         const hasLimit = getProps.has('limit');
 
         const patternSrc = style['stroke-pattern-src'];
+        if (
+          patternSrc !== undefined &&
+          patternSrc !== null &&
+          typeof patternSrc !== 'string'
+        ) {
+          throw new Error(
+            'WebGPU layers do not support expressions for the stroke-pattern-src style property',
+          );
+        }
         const hasStrokePattern = typeof patternSrc === 'string';
         let patternTexture;
         let patternOptions;
@@ -1375,12 +1519,30 @@ class VectorStyleRenderer {
 
     const polyStyleRule = rules.find((r) => {
       const s = r.style;
-      return (
-        s &&
-        (typeof s['fill-color'] === 'string' ||
-          (Array.isArray(s['fill-color']) && s['fill-color'][0] === 'get') ||
-          typeof s['fill-pattern-src'] === 'string')
-      );
+      if (!s) {
+        return false;
+      }
+
+      const patternSrc = s['fill-pattern-src'];
+      if (
+        patternSrc !== undefined &&
+        patternSrc !== null &&
+        typeof patternSrc !== 'string'
+      ) {
+        throw new Error(
+          'WebGPU layers do not support expressions for the fill-pattern-src style property',
+        );
+      }
+
+      const fillColor = s['fill-color'];
+      const hasFillColor =
+        typeof fillColor === 'string' ||
+        (Array.isArray(fillColor) &&
+          (fillColor[0] === 'get' ||
+            fillColor[0] === 'var' ||
+            typeof fillColor[0] !== 'string'));
+
+      return hasFillColor || typeof patternSrc === 'string';
     });
     if (!polyStyleRule) {
       // No literal fill style: don't render polygons (prevents wrong default fills).
@@ -1403,6 +1565,24 @@ class VectorStyleRenderer {
 
     const fillColorExpr = polyStyle['fill-color'];
     const fallbackTint = hasFillPattern ? [1, 1, 1, 1] : [0, 0, 1, 1];
+
+    const resolveFillColor = (feature) => {
+      if (!fillColorExpr) {
+        return fallbackTint;
+      }
+      if (
+        Array.isArray(fillColorExpr) &&
+        fillColorExpr.length === 2 &&
+        fillColorExpr[0] === 'var'
+      ) {
+        return resolveColor(
+          this.variables_[fillColorExpr[1]],
+          feature,
+          fallbackTint,
+        );
+      }
+      return resolveColor(fillColorExpr, feature, fallbackTint);
+    };
 
     /** @type {StrokePatternTexture|undefined} */
     let fillPatternTexture;
@@ -1444,9 +1624,7 @@ class VectorStyleRenderer {
       const ref = entry.ref || 0;
 
       // Style
-      const fillColor = fillColorExpr
-        ? resolveColor(fillColorExpr, entry.feature, fallbackTint)
-        : fallbackTint;
+      const fillColor = resolveFillColor(entry.feature);
       polyStyleData[ref * 4 + 0] = fillColor[0];
       polyStyleData[ref * 4 + 1] = fillColor[1];
       polyStyleData[ref * 4 + 2] = fillColor[2];
@@ -1536,9 +1714,7 @@ class VectorStyleRenderer {
                 if (!ref) {
                   return;
                 }
-                const fillColor = fillColorExpr
-                  ? resolveColor(fillColorExpr, feature, fallbackTint)
-                  : fallbackTint;
+                const fillColor = resolveFillColor(feature);
                 const record = new Float32Array(fillColor);
                 device.queue.writeBuffer(
                   polyStyleBuffer.getBuffer(),
