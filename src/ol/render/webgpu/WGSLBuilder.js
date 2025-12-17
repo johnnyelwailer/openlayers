@@ -13,6 +13,7 @@
 /**
  * @typedef {Object} FillShaderOptions
  * @property {FillPatternShaderOptions} [pattern] Fill pattern sampling options.
+ * @property {string} [fillColor] WGSL `vec4f` expression for the fill color.
  * @property {string} [discard] WGSL `bool` expression for fragment discard.
  */
 
@@ -121,6 +122,7 @@ export class WGSLBuilder {
    */
   getFillShader(options = {}) {
     const pattern = options.pattern;
+    const fillColorExpr = options.fillColor || 'style.fillColor';
     const discardExpr = options.discard || 'false';
     const patternBindings = pattern
       ? `
@@ -216,7 +218,8 @@ export class WGSLBuilder {
         
         let index = u32(featureIndex);
         let style = styles[index];
-        output.color = style.fillColor;
+        // Ensure styles binding stays used even when fillColorExpr does not reference it.
+        output.color = (${fillColorExpr} + style.fillColor * 0.0);
         output.featureIndex = featureIndex;
         
         return output;

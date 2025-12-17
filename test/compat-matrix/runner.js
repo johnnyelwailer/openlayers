@@ -1156,11 +1156,6 @@ async function main() {
                 zoom: 'uniforms.zoom',
                 time: 'uniforms.time',
                 get: (name, type) => {
-                  if (type === StringType) {
-                    throw new Error(
-                      'WGSL backend does not support string get()',
-                    );
-                  }
                   const offset = alloc(propsLayout, name, type, 'prop');
                   if (type === ColorType) {
                     return `vec4f(props[${offset}], props[${offset + 1}], props[${
@@ -1173,11 +1168,6 @@ async function main() {
                   return `props[${offset}]`;
                 },
                 var: (name, type) => {
-                  if (type === StringType) {
-                    throw new Error(
-                      'WGSL backend does not support string var()',
-                    );
-                  }
                   const offset = alloc(varsLayout, name, type, 'var');
                   if (type === ColorType) {
                     return `vec4f(vars[${offset}], vars[${offset + 1}], vars[${

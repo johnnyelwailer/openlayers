@@ -11,7 +11,7 @@ import {
   StringType,
   isType,
 } from './expression.js';
-import {UNDEFINED_PROP_VALUE} from './gpu.js';
+import {UNDEFINED_PROP_VALUE, getStringNumberEquivalent} from './gpu.js';
 
 /**
  * @typedef {'f32'|'bool'|'vec4f'} WGSLType
@@ -107,12 +107,10 @@ export function compileExpressionToWgsl(expression, ctx, options) {
       );
     }
     if (isType(expression.type, StringType)) {
-      reportUnsupported(
-        Ops.String,
-        'WGSL backend does not support string values',
-        options,
+      // Represent string values as stable numeric ids (WebGL parity).
+      return numberToWgsl(
+        getStringNumberEquivalent(/** @type {string} */ (expression.value)),
       );
-      return defaultForType(expression.type);
     }
     return defaultForType(expression.type);
   }
@@ -336,19 +334,6 @@ export function compileExpressionToWgsl(expression, ctx, options) {
 
   if (op === Ops.Match) {
     const inputExpr = call.args[0];
-    if (isType(inputExpr.type, StringType)) {
-      // String comparisons are not currently supported by the WGSL backend.
-      reportUnsupported(
-        op,
-        'WGSL backend does not support string match() input',
-        options,
-      );
-      return compileExpressionToWgsl(
-        call.args[call.args.length - 1],
-        ctx,
-        options,
-      );
-    }
     const input = compileExpressionToWgsl(inputExpr, ctx, options);
     let result = compileExpressionToWgsl(
       call.args[call.args.length - 1],
@@ -372,9 +357,13 @@ export function compileExpressionToWgsl(expression, ctx, options) {
 
   if (op === Ops.In) {
     const needle = call.args[0];
-    // Only numeric `in` is supported (string matching requires string IDs).
-    if (!isType(needle.type, NumberType)) {
-      reportUnsupported(op, 'WGSL backend only supports numeric in()', options);
+    // Support string `in` by representing strings as stable numeric ids (WebGL parity).
+    if (!isType(needle.type, NumberType) && !isType(needle.type, StringType)) {
+      reportUnsupported(
+        op,
+        'WGSL backend only supports numeric/string in()',
+        options,
+      );
       return 'false';
     }
     const compiledNeedle = compileExpressionToWgsl(needle, ctx, options);

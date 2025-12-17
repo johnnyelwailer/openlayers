@@ -15,9 +15,17 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 *   **WebGPU Pattern Option Hardening**: WebGPU now rejects expressions for `*-pattern-size`, `*-pattern-offset`, `*-pattern-offset-origin`, and stroke `*-pattern-spacing` / `*-pattern-start-offset` with clear errors instead of emitting invalid WGSL.
 *   **Expression + Style Parity**:
     * WGSL now supports `['has', ...]`, and missing feature properties in the WebGPU `props` buffer are encoded with `UNDEFINED_PROP_VALUE = -9999999` (aligns with WebGL “undefined” semantics for numeric reads).
-    * Polygon `fill-color` now supports non-trivial expressions (e.g. `case`/`match`) when they depend only on feature properties and style variables (map-state expressions still not supported for CPU-evaluated fill colors).
+    * Polygon `fill-color` now supports non-trivial expressions (e.g. `case`/`match`/arithmetic) by compiling to WGSL and evaluating per feature.
+    * **String-based expressions (WebGL parity)**: strings are represented as stable numeric ids in WGSL, enabling string comparisons in `filter`, `match`, and `in` (fixes the style-variable + feature-property string filtering used in `examples/icon-sprite-webgpu.html`).
+    * **Polygon fill-color correctness**: polygon `fill-color` expressions are compiled to WGSL when used as expressions (fixes “wrong colors” patterns like `['*', ['get','COLOR'], [220,220,220]]` in `examples/webgpu-vector-layer.html`).
 *   **Compatibility Matrix Baseline Updated**: Regenerated `test/compat-matrix/baseline.json` after the above changes.
 *   **Validation (Latest)**: `npm run lint`, `npm run build-full`, `node test/compat-matrix/test.js --headless`, `node test/compat-matrix/test.js --headless --fix`, `npm run test-node`, and `node test/rendering/test.js --match webgpu` passing locally.
+
+**Notes / Risks (current)**
+*   **String semantics in WGSL**: strings are encoded as stable numeric ids (`getStringNumberEquivalent()`) so shaders can do equality-based operations (`==`, `match`, `in`). This is not “string support” beyond comparisons, and the mapping is runtime-local (not stable across sessions). Large numbers of unique strings can grow the mapping table.
+*   **Feature properties packing overhead**: each `get()` property reserves **two `vec4f` slots** (scalar + color). This is simple and WebGL-parity-friendly, but can be memory-heavy for style sets that reference many properties. Consider a tighter packing if this becomes a bottleneck.
+*   **Icon sprite sub-rect expressions**: `icon-size` / `icon-offset` expressions are evaluated on the CPU to compute sprite UVs (needed before drawing). If used with many features and complex expressions, this can become a CPU hotspot (a future GPU-side approach would need precomputed atlas metadata).
+*   **Fill-color WGSL binding keepalive**: polygon fill shaders force a read of `styles[index]` even when the fill color expression doesn’t reference the style record, to avoid unused-binding validation issues. This is safe but slightly wasteful; a longer-term solution is to generate alternate pipelines with only the bindings actually used.
 
 **Earlier Progress (2025-12-16):**
 *   **Compat Matrix Parity (Points)**: Fixed WebGPU “blank output” for `circle-fill-color/var`, `circle-stroke-color/var`, `shape-fill-color/var`, `shape-stroke-color/var`, `icon-color/var`, `icon-size/get`, and `icon-size/var` by resolving `var()` and size expressions for point symbol style buffers.

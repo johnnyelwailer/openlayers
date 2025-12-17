@@ -5,7 +5,11 @@ import {
   newParsingContext,
   parse,
 } from '../../../../src/ol/expr/expression.js';
-import {compileExpressionToWgsl} from '../../../../src/ol/expr/wgsl.js';
+import {getStringNumberEquivalent} from '../../../../src/ol/expr/gpu.js';
+import {
+  compileExpressionToWgsl,
+  numberToWgsl,
+} from '../../../../src/ol/expr/wgsl.js';
 import expect from '../../expect.js';
 
 describe('ol/expr/wgsl', () => {
@@ -171,6 +175,38 @@ describe('ol/expr/wgsl', () => {
     const expr = parse(['has', 'foo'], BooleanType, parsingContext);
     expect(compileExpressionToWgsl(expr, ctx)).to.be(
       '(get_foo() != -9999999.0)',
+    );
+  });
+
+  it('compiles match() with string input', () => {
+    const parsingContext = newParsingContext();
+    const expr = parse(
+      ['match', ['get', 's'], 'a', 1, 'b', 2, 0],
+      NumberType,
+      parsingContext,
+    );
+    const compiled = compileExpressionToWgsl(expr, ctx);
+    expect(compiled).to.contain(
+      `(get_s() == ${numberToWgsl(getStringNumberEquivalent('a'))})`,
+    );
+    expect(compiled).to.contain(
+      `(get_s() == ${numberToWgsl(getStringNumberEquivalent('b'))})`,
+    );
+  });
+
+  it('compiles in() with string needle', () => {
+    const parsingContext = newParsingContext();
+    const expr = parse(
+      ['in', ['get', 's'], ['literal', ['a', 'b']]],
+      BooleanType,
+      parsingContext,
+    );
+    const compiled = compileExpressionToWgsl(expr, ctx);
+    expect(compiled).to.contain(
+      `${numberToWgsl(getStringNumberEquivalent('a'))}`,
+    );
+    expect(compiled).to.contain(
+      `${numberToWgsl(getStringNumberEquivalent('b'))}`,
     );
   });
 });

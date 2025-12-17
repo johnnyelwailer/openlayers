@@ -11,10 +11,14 @@ import {
   BooleanType,
   ColorType,
   NumberType,
+  SizeType,
   isType,
   newParsingContext,
 } from '../../expr/expression.js';
-import {UNDEFINED_PROP_VALUE} from '../../expr/gpu.js';
+import {
+  UNDEFINED_PROP_VALUE,
+  getStringNumberEquivalent,
+} from '../../expr/gpu.js';
 import {
   create as createTransform,
   multiply as multiplyTransform,
@@ -705,7 +709,7 @@ class VectorStyleRenderer {
           z = c[2] / 255;
           w = c.length > 3 ? c[3] : 1;
         } catch {
-          x = 0;
+          x = getStringNumberEquivalent(value);
         }
       } else if (Array.isArray(value) && value.length >= 3) {
         const a = /** @type {Array<*>} */ (value);
@@ -926,6 +930,12 @@ class VectorStyleRenderer {
       ) {
         collectGetProperties(style['stroke-color'], propsUsed);
       }
+      if (Array.isArray(style['fill-color'])) {
+        collectGetProperties(style['fill-color'], propsUsed);
+      }
+      if (Array.isArray(style['icon-color'])) {
+        collectGetProperties(style['icon-color'], propsUsed);
+      }
     }
     const propNames = Array.from(propsUsed).sort();
     const propIndexByName = new Map();
@@ -1053,22 +1063,101 @@ class VectorStyleRenderer {
           : 'false';
 
         if (typeof iconSrc === 'string') {
+          const tintCtx = {
+            lineMetricVar: '0.0',
+            getProp: (name, type) =>
+              this.getFeaturePropExpression_(
+                name,
+                type,
+                'featureIndex',
+                propIndexByName,
+                propStride,
+              ),
+            getVar: (name, type) => this.getVarExpression_(name, type),
+          };
+          const tintExpr = style['icon-color'];
+          const tint = Array.isArray(tintExpr)
+            ? compileWgslExpression(tintExpr, tintCtx, 'vec4f')
+            : undefined;
+
           const texture = await this.getPatternTexture_(iconSrc);
           const textureSize = texture.size;
 
+          /**
+           * @param {*} value Value.
+           * @param {[number, number]} fallback Fallback.
+           * @param {string} name Name for error messages.
+           * @return {((feature: import(\"../../Feature.js\").default|import(\"../../render/Feature.js\").default) => [number, number])|null} Evaluator.
+           */
+          const tryBuildSizeEvaluator = (value, fallback, name) => {
+            if (!Array.isArray(value) || typeof value[0] !== 'string') {
+              return null;
+            }
+            const parsing = newParsingContext();
+            let evaluator;
+            try {
+              evaluator = buildCpuExpression(value, SizeType, parsing);
+            } catch {
+              return null;
+            }
+            if (parsing.mapState) {
+              throw new Error(
+                `WebGPU layers do not support map-state expressions for the ${name} style property`,
+              );
+            }
+            const evalCtx = newEvaluationContext();
+            evalCtx.variables = this.variables_;
+            evalCtx.resolution = 1;
+            evalCtx.geometryType = 'Point';
+            const propsScratch = {};
+            const propNames = Array.from(parsing.properties);
+            return (feature) => {
+              for (let i = 0; i < propNames.length; i++) {
+                const p = propNames[i];
+                propsScratch[p] = feature.get(p);
+              }
+              evalCtx.properties = propsScratch;
+              evalCtx.featureId = feature.getId?.() ?? null;
+              const result = evaluator(evalCtx);
+              if (Array.isArray(result) && result.length >= 2) {
+                const w = Number(result[0]);
+                const h = Number(result[1]);
+                if (Number.isFinite(w) && Number.isFinite(h)) {
+                  return [w, h];
+                }
+              }
+              return fallback;
+            };
+          };
+
+          const iconSizeEval = tryBuildSizeEvaluator(
+            style['icon-size'],
+            textureSize,
+            'icon-size',
+          );
+          const iconOffsetEval = tryBuildSizeEvaluator(
+            style['icon-offset'],
+            [0, 0],
+            'icon-offset',
+          );
+
           const writeStyle = (styleData, sIdx, feature) => {
-            const sampleSize = resolveSize(
-              style['icon-size'],
-              feature,
-              textureSize,
-              this.variables_,
-            );
-            const baseOffset = resolveSize(
-              style['icon-offset'],
-              feature,
-              [0, 0],
-              this.variables_,
-            );
+            const sampleSize = iconSizeEval
+              ? iconSizeEval(feature)
+              : resolveSize(
+                  style['icon-size'],
+                  feature,
+                  textureSize,
+                  this.variables_,
+                );
+            const baseOffset = iconOffsetEval
+              ? iconOffsetEval(feature)
+              : resolveSize(
+                  style['icon-offset'],
+                  feature,
+                  [0, 0],
+                  this.variables_,
+                );
             const origin = String(
               resolveExpression(
                 style['icon-offset-origin'] || 'top-left',
@@ -1252,8 +1341,13 @@ class VectorStyleRenderer {
           const refsScratch = [];
           const symbolShader =
             discard === 'false'
-              ? baseIconShader
-              : this.styleShaders_[0].builder.getIconSymbolShader({discard});
+              ? tint
+                ? this.styleShaders_[0].builder.getIconSymbolShader({tint})
+                : baseIconShader
+              : this.styleShaders_[0].builder.getIconSymbolShader({
+                  discard,
+                  ...(tint ? {tint} : {}),
+                });
           /** @type {Float32Array|null} */
           let batchScratch = null;
           pointBuffers.push({
@@ -2382,78 +2476,39 @@ class VectorStyleRenderer {
 
           const fillColorExpr = polyStyle['fill-color'];
           const fallbackTint = hasFillPattern ? [1, 1, 1, 1] : [0, 0, 1, 1];
-          const fillColorIsExpression =
-            Array.isArray(fillColorExpr) &&
-            typeof fillColorExpr[0] === 'string';
-          const fillColorNeedsCpuEval =
-            fillColorIsExpression &&
-            fillColorExpr[0] !== 'get' &&
-            fillColorExpr[0] !== 'var';
+          const fillColorWgslExpr =
+            Array.isArray(fillColorExpr) && typeof fillColorExpr[0] === 'string'
+              ? compileWgslExpression(
+                  fillColorExpr,
+                  {
+                    lineMetricVar: '0.0',
+                    getProp: (name, type) =>
+                      this.getFeaturePropExpression_(
+                        name,
+                        type,
+                        'featureIndex',
+                        propIndexByName,
+                        propStride,
+                      ),
+                    getVar: (name, type) => this.getVarExpression_(name, type),
+                  },
+                  'vec4f',
+                )
+              : null;
 
-          /** @type {import("../../expr/cpu.js").ExpressionEvaluator|null} */
-          let fillColorEvaluator = null;
-          /** @type {import("../../expr/cpu.js").EvaluationContext|null} */
-          let fillColorEvalCtx = null;
-          /** @type {Array<string>|null} */
-          let fillColorPropNames = null;
-          /** @type {Object|null} */
-          let fillColorPropsScratch = null;
-
-          if (fillColorNeedsCpuEval) {
-            const parsing = newParsingContext();
-            try {
-              fillColorEvaluator = buildCpuExpression(
-                /** @type {any} */ (fillColorExpr),
-                ColorType,
-                parsing,
-              );
-            } catch (err) {
-              throw new Error(
-                `WebGPU layers do not support this fill-color expression: ${String(
-                  err?.message || err,
-                )}`,
-              );
-            }
-            if (parsing.mapState) {
-              throw new Error(
-                'WebGPU layers do not support map-state expressions for the fill-color style property',
-              );
-            }
-            fillColorEvalCtx = newEvaluationContext();
-            fillColorEvalCtx.variables = this.variables_;
-            fillColorPropNames = Array.from(parsing.properties);
-            fillColorPropsScratch = {};
-          }
-
-          const resolveFillColor = (feature) => {
-            if (!fillColorExpr) {
-              return fallbackTint;
-            }
-            if (fillColorEvaluator && fillColorEvalCtx) {
-              const scratch = fillColorPropsScratch;
-              const propNames = fillColorPropNames;
-              for (let i = 0; i < propNames.length; i++) {
-                const name = propNames[i];
-                scratch[name] = feature.get(name);
-              }
-              fillColorEvalCtx.properties = scratch;
-              fillColorEvalCtx.featureId = feature.getId?.() ?? null;
-              fillColorEvalCtx.geometryType = 'Polygon';
-              const resolved = fillColorEvaluator(fillColorEvalCtx);
-              return resolveColor(
-                resolved,
-                feature,
-                fallbackTint,
-                this.variables_,
-              );
-            }
-            return resolveColor(
-              fillColorExpr,
-              feature,
-              fallbackTint,
-              this.variables_,
-            );
-          };
+          const resolveFillColor = fillColorWgslExpr
+            ? null
+            : (feature) => {
+                if (!fillColorExpr) {
+                  return fallbackTint;
+                }
+                return resolveColor(
+                  fillColorExpr,
+                  feature,
+                  fallbackTint,
+                  this.variables_,
+                );
+              };
 
           /** @type {StrokePatternTexture|undefined} */
           let fillPatternTexture;
@@ -2521,14 +2576,23 @@ class VectorStyleRenderer {
           }
 
           const polyStyleData = new Float32Array((polyMaxRef + 1) * 4); // vec4 per feature ref
-          for (let i = 0; i < polyEntries.length; i++) {
-            const entry = polyEntries[i];
-            const ref = entry.ref || 0;
-            const fillColor = resolveFillColor(entry.feature);
-            polyStyleData[ref * 4 + 0] = fillColor[0];
-            polyStyleData[ref * 4 + 1] = fillColor[1];
-            polyStyleData[ref * 4 + 2] = fillColor[2];
-            polyStyleData[ref * 4 + 3] = fillColor[3];
+          if (resolveFillColor) {
+            for (let i = 0; i < polyEntries.length; i++) {
+              const entry = polyEntries[i];
+              const ref = entry.ref || 0;
+              const fillColor = resolveFillColor(entry.feature);
+              polyStyleData[ref * 4 + 0] = fillColor[0];
+              polyStyleData[ref * 4 + 1] = fillColor[1];
+              polyStyleData[ref * 4 + 2] = fillColor[2];
+              polyStyleData[ref * 4 + 3] = fillColor[3];
+            }
+          } else {
+            for (let ref = 0; ref <= polyMaxRef; ref++) {
+              polyStyleData[ref * 4 + 0] = fallbackTint[0];
+              polyStyleData[ref * 4 + 1] = fallbackTint[1];
+              polyStyleData[ref * 4 + 2] = fallbackTint[2];
+              polyStyleData[ref * 4 + 3] = fallbackTint[3];
+            }
           }
 
           const polyStyleBuffer = new WebGPUBuffer({
@@ -2575,9 +2639,12 @@ class VectorStyleRenderer {
           /** @type {Array<number>} */
           const refsScratch = [];
           const fillShader =
-            hasFillPattern || polyDiscard !== 'false'
+            hasFillPattern ||
+            polyDiscard !== 'false' ||
+            fillColorWgslExpr !== null
               ? this.styleShaders_[0].builder.getFillShader({
                   pattern: fillPatternOptions,
+                  ...(fillColorWgslExpr ? {fillColor: fillColorWgslExpr} : {}),
                   discard: polyDiscard,
                 })
               : undefined;
@@ -2596,7 +2663,7 @@ class VectorStyleRenderer {
               : this.defaultFillShaderUsesProps_,
             pattern: fillPatternTexture,
             updateStyle: (device, ref, feature) => {
-              if (!ref || ref > polyMaxRef) {
+              if (!resolveFillColor || !ref || ref > polyMaxRef) {
                 return;
               }
               const fillColor = resolveFillColor(feature);
@@ -2611,7 +2678,7 @@ class VectorStyleRenderer {
               );
             },
             updateStyleBatch: (device, dirtyRefs) => {
-              if (!dirtyRefs || dirtyRefs.size === 0) {
+              if (!resolveFillColor || !dirtyRefs || dirtyRefs.size === 0) {
                 return;
               }
               const refs = refsScratch;
@@ -2725,8 +2792,7 @@ class VectorStyleRenderer {
             } else if (typeof value === 'boolean') {
               scalar = value ? 1 : 0;
             } else if (typeof value === 'string') {
-              const n = Number(value);
-              scalar = Number.isFinite(n) ? n : 0;
+              scalar = getStringNumberEquivalent(value);
             } else {
               // Preserve existing best-effort behavior: non-numeric values pack as 0
               // (this also makes has() treat the property as present).
@@ -2811,8 +2877,7 @@ class VectorStyleRenderer {
             } else if (typeof value === 'boolean') {
               scalar = value ? 1 : 0;
             } else if (typeof value === 'string') {
-              const n = Number(value);
-              scalar = Number.isFinite(n) ? n : 0;
+              scalar = getStringNumberEquivalent(value);
             } else {
               scalar = 0;
             }

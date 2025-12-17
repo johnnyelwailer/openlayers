@@ -1,5 +1,8 @@
 import {ColorType, NumberType} from '../../../../../src/ol/expr/expression.js';
-import {UNDEFINED_PROP_VALUE} from '../../../../../src/ol/expr/gpu.js';
+import {
+  UNDEFINED_PROP_VALUE,
+  getStringNumberEquivalent,
+} from '../../../../../src/ol/expr/gpu.js';
 import VectorStyleRenderer from '../../../../../src/ol/render/webgpu/VectorStyleRenderer.js';
 import expect from '../../../expect.js';
 
@@ -215,7 +218,7 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
     expect(updateWrites[0].data).to.be(updateWrites[1].data);
   });
 
-  it('ignores non-color string feature properties in props packing', async () => {
+  it('packs numeric feature properties into the scalar slot', async () => {
     const writes = [];
     const device = {
       createBuffer: ({size}) => ({
@@ -248,7 +251,7 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
     );
 
     const feature = {
-      get: (name) => (name === 'limit' ? '5' : undefined),
+      get: (name) => (name === 'limit' ? 5 : undefined),
     };
     const geometryBatch = {
       pointBatch: {
@@ -277,8 +280,75 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
     );
 
     expect(writes.length).to.be.greaterThan(0);
-    // Scalar slot for the only property should get the numeric string value.
+    // Scalar slot for the only property should get the numeric value.
     expect(writes[writes.length - 1].data[0]).to.be(5);
+  });
+
+  it('packs string feature properties as stable numeric ids', async () => {
+    const writes = [];
+    const device = {
+      createBuffer: ({size}) => ({
+        size,
+        getMappedRange: () => new ArrayBuffer(size),
+        unmap: () => {},
+      }),
+      queue: {
+        writeBuffer: (buffer, offset, data) => {
+          writes.push({buffer, offset, data: new Float32Array(data)});
+        },
+      },
+    };
+    const helper = {
+      getDevice: () => device,
+    };
+
+    const renderer = new VectorStyleRenderer(
+      [
+        {
+          style: {
+            'circle-radius': 10,
+            'circle-fill-color': [255, 0, 0, 1],
+          },
+          filter: ['==', ['get', 'shape'], 'circle'],
+        },
+      ],
+      {},
+      /** @type {*} */ (helper),
+    );
+
+    const feature = {
+      get: (name) => (name === 'shape' ? 'circle' : undefined),
+    };
+    const geometryBatch = {
+      pointBatch: {
+        entries: {
+          a: {
+            ref: 1,
+            feature,
+            flatCoordss: [[0, 0]],
+          },
+        },
+      },
+      lineStringBatch: {entries: {}},
+      polygonBatch: {entries: {}},
+    };
+
+    const buffers = await renderer.generateBuffers(
+      /** @type {*} */ (geometryBatch),
+      /** @type {*} */ ([]),
+    );
+
+    expect(buffers.featureProperties).to.not.be(null);
+    buffers.featureProperties.update(
+      /** @type {*} */ (device),
+      1,
+      /** @type {*} */ (feature),
+    );
+
+    expect(writes.length).to.be.greaterThan(0);
+    expect(writes[writes.length - 1].data[0]).to.be(
+      getStringNumberEquivalent('circle'),
+    );
   });
 
   it('packs color feature properties into the color slot', async () => {
@@ -350,7 +420,7 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
 
     const floats = new Float32Array(propsMapped);
     // ref 1 layout is [scalar vec4][color vec4], with a leading ref 0 row.
-    expect(floats[8]).to.be(0);
+    expect(floats[8]).to.be(getStringNumberEquivalent('rgb(255,0,0)'));
     expect(floats[12]).to.be(1);
     expect(floats[13]).to.be(0);
     expect(floats[14]).to.be(0);
@@ -424,24 +494,15 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
     expect(floats[8]).to.be(UNDEFINED_PROP_VALUE);
   });
 
-  it('supports non-trivial fill-color expressions for polygon style buffers', async () => {
-    /** @type {ArrayBuffer|null} */
-    let polyStyleMapped = null;
+  it('compiles fill-color expressions to WGSL for polygons', async () => {
     const writes = [];
 
     const device = {
-      createBuffer: ({size}) => {
-        const mapped = new ArrayBuffer(size);
-        // (polyMaxRef + 1) * vec4f = 2 * 16 bytes
-        if (size === 32) {
-          polyStyleMapped = mapped;
-        }
-        return {
-          size,
-          getMappedRange: () => mapped,
-          unmap: () => {},
-        };
-      },
+      createBuffer: ({size}) => ({
+        size,
+        getMappedRange: () => new ArrayBuffer(size),
+        unmap: () => {},
+      }),
       queue: {
         writeBuffer: (buffer, offset, data) => {
           writes.push({buffer, offset, data});
@@ -456,12 +517,7 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
       [
         {
           style: {
-            'fill-color': [
-              'case',
-              ['==', ['get', 'k'], 1],
-              'rgb(255,0,0)',
-              'rgb(0,0,255)',
-            ],
+            'fill-color': ['*', ['get', 'COLOR'], [220, 220, 220]],
           },
         },
       ],
@@ -469,8 +525,8 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
       /** @type {*} */ (helper),
     );
 
-    const featureA = {
-      get: (name) => (name === 'k' ? 1 : undefined),
+    const feature = {
+      get: (name) => (name === 'COLOR' ? [255, 0, 0] : undefined),
       getId: () => null,
     };
     const geometryBatch = {
@@ -480,7 +536,7 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
         entries: {
           a: {
             ref: 1,
-            feature: featureA,
+            feature,
             flatCoordss: [[0, 0, 10, 0, 10, 10, 0, 10]],
             ringsVerticesCounts: [[4]],
           },
@@ -494,34 +550,17 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
     );
 
     expect(buffers.polygonBuffers.length).to.be(1);
-    expect(polyStyleMapped).to.not.be(null);
-    const floats = new Float32Array(polyStyleMapped);
-    // ref 1 color is stored at offset 4.
-    expect(floats[4]).to.be(1);
-    expect(floats[5]).to.be(0);
-    expect(floats[6]).to.be(0);
-    expect(floats[7]).to.be(1);
+    expect(buffers.polygonBuffers[0].fillShader).to.be.a('string');
+    expect(buffers.polygonBuffers[0].fillShader).to.contain('props[');
+    expect(buffers.polygonBuffers[0].usesProps).to.be(true);
 
-    const featureB = {
-      get: (name) => (name === 'k' ? 2 : undefined),
-      getId: () => null,
-    };
     writes.length = 0;
     buffers.polygonBuffers[0].updateStyle(
       /** @type {*} */ (device),
       1,
-      /** @type {*} */ (featureB),
+      /** @type {*} */ (feature),
     );
-
-    expect(writes.length).to.be.greaterThan(0);
-    const last = writes[writes.length - 1];
-    expect(last.offset).to.be(16);
-    expect(last.data instanceof Float32Array).to.be(true);
-    const updated = /** @type {Float32Array} */ (last.data);
-    expect(updated[0]).to.be(0);
-    expect(updated[1]).to.be(0);
-    expect(updated[2]).to.be(1);
-    expect(updated[3]).to.be(1);
+    expect(writes.length).to.be(0);
   });
 
   it('writes layer opacity to uniform buffer', () => {
@@ -1045,6 +1084,7 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
       w: 5,
       enabled: true,
       tint: '#ff0000',
+      filterShape: 'all',
     };
 
     /** @type {Array<Float32Array>} */
@@ -1068,7 +1108,7 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
       /** @type {*} */ (helper),
     );
 
-    renderer.setVariableNames_(['enabled', 'tint', 'w']);
+    renderer.setVariableNames_(['enabled', 'filterShape', 'tint', 'w']);
     renderer.syncVariables_(/** @type {*} */ (device));
 
     expect(writes.length).to.be.greaterThan(0);
@@ -1080,16 +1120,22 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
     expect(last[2]).to.be(0);
     expect(last[3]).to.be(0);
 
-    // tint stored as RGBA in 0..1
-    expect(last[4]).to.be(1);
+    // filterShape stored as a stable numeric id in x component
+    expect(last[4]).to.be(getStringNumberEquivalent('all'));
     expect(last[5]).to.be(0);
     expect(last[6]).to.be(0);
-    expect(last[7]).to.be(1);
+    expect(last[7]).to.be(0);
 
-    // w (number) stored in x component
-    expect(last[8]).to.be(5);
+    // tint stored as RGBA in 0..1
+    expect(last[8]).to.be(1);
     expect(last[9]).to.be(0);
     expect(last[10]).to.be(0);
-    expect(last[11]).to.be(0);
+    expect(last[11]).to.be(1);
+
+    // w (number) stored in x component
+    expect(last[12]).to.be(5);
+    expect(last[13]).to.be(0);
+    expect(last[14]).to.be(0);
+    expect(last[15]).to.be(0);
   });
 });
