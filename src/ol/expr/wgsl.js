@@ -36,6 +36,7 @@ import {UNDEFINED_PROP_VALUE, getStringNumberEquivalent} from './gpu.js';
  * @property {string} time WGSL expression for time.
  * @property {(name: string, type: number) => string} get WGSL expression for a `get` property.
  * @property {(name: string, type: number) => string} [var] WGSL expression for a style variable (`var`).
+ * @property {(type: number) => string} [id] WGSL expression for the feature id (`id`).
  */
 
 /**
@@ -144,6 +145,18 @@ export function compileExpressionToWgsl(expression, ctx, options) {
       return '0.0';
     }
     return ctx.var(varName, call.type);
+  }
+
+  if (op === Ops.Id) {
+    if (!ctx.id) {
+      reportUnsupported(
+        op,
+        'WGSL backend does not have access to feature ids in this context',
+        options,
+      );
+      return '0.0';
+    }
+    return ctx.id(call.type);
   }
 
   if (op === Ops.LineMetric) {

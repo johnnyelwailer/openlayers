@@ -351,6 +351,76 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
     );
   });
 
+  it('packs feature ids and makes them available to filters', async () => {
+    const writes = [];
+    const device = {
+      createBuffer: ({size}) => ({
+        size,
+        getMappedRange: () => new ArrayBuffer(size),
+        unmap: () => {},
+      }),
+      queue: {
+        writeBuffer: (buffer, offset, data) => {
+          writes.push({buffer, offset, data: new Float32Array(data)});
+        },
+      },
+    };
+    const helper = {
+      getDevice: () => device,
+    };
+
+    const renderer = new VectorStyleRenderer(
+      [
+        {
+          style: {
+            'circle-radius': 10,
+            'circle-fill-color': [255, 0, 0, 1],
+          },
+          filter: ['==', ['var', 'highlightedId'], ['id']],
+        },
+      ],
+      {highlightedId: -1},
+      /** @type {*} */ (helper),
+    );
+
+    const feature = {
+      get: () => undefined,
+      getId: () => 7,
+    };
+    const geometryBatch = {
+      pointBatch: {
+        entries: {
+          a: {
+            ref: 1,
+            feature,
+            flatCoordss: [[0, 0]],
+          },
+        },
+      },
+      lineStringBatch: {entries: {}},
+      polygonBatch: {entries: {}},
+    };
+
+    const buffers = await renderer.generateBuffers(
+      /** @type {*} */ (geometryBatch),
+      /** @type {*} */ ([]),
+    );
+
+    expect(buffers.featureProperties).to.not.be(null);
+    expect(
+      buffers.featureProperties.indexByName.get('__ol_feature_id__'),
+    ).to.be(0);
+    expect(buffers.pointBuffers[0].usesProps).to.be(true);
+
+    buffers.featureProperties.update(
+      /** @type {*} */ (device),
+      1,
+      /** @type {*} */ (feature),
+    );
+    expect(writes.length).to.be.greaterThan(0);
+    expect(writes[writes.length - 1].data[0]).to.be(7);
+  });
+
   it('packs color feature properties into the color slot', async () => {
     /** @type {ArrayBuffer|null} */
     let propsMapped = null;

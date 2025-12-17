@@ -41,6 +41,27 @@ import {
 } from './expr.js';
 
 const BIND_GROUP_CACHE = Symbol('ol/webgpu/VectorStyleRenderer.bindGroupCache');
+const FEATURE_ID_PROP_NAME = '__ol_feature_id__';
+
+/**
+ * @param {*} expr Encoded expression.
+ * @param {string} operator Operator.
+ * @return {boolean} Whether the operator is found in the encoded expression.
+ */
+function expressionUsesOperator(expr, operator) {
+  if (!expr || !Array.isArray(expr)) {
+    return false;
+  }
+  if (expr.length > 0 && expr[0] === operator) {
+    return true;
+  }
+  for (const v of expr) {
+    if (expressionUsesOperator(v, operator)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 /**
  * @typedef {Object} StrokePatternTexture
@@ -898,19 +919,25 @@ class VectorStyleRenderer {
     const alwaysTrueFilter = true;
 
     const varsUsed = new Set();
+    let featureIdUsed = false;
     for (const rule of rules) {
       collectVarNames(rule.filter, varsUsed);
+      featureIdUsed ||= expressionUsesOperator(rule.filter, 'id');
       const style = rule.style;
       if (!style) {
         continue;
       }
       for (const value of Object.values(style)) {
         collectVarNames(value, varsUsed);
+        featureIdUsed ||= expressionUsesOperator(value, 'id');
       }
     }
     this.setVariableNames_(Array.from(varsUsed).sort());
 
     const propsUsed = new Set();
+    if (featureIdUsed) {
+      propsUsed.add(FEATURE_ID_PROP_NAME);
+    }
     for (const rule of rules) {
       collectGetProperties(rule.filter, propsUsed);
       const style = rule.style;
@@ -1056,6 +1083,14 @@ class VectorStyleRenderer {
               propStride,
             ),
           getVar: (name, type) => this.getVarExpression_(name, type),
+          getId: (type) =>
+            this.getFeaturePropExpression_(
+              FEATURE_ID_PROP_NAME,
+              type,
+              'input.featureIndex',
+              propIndexByName,
+              propStride,
+            ),
         };
         const needsDiscard = !!rule.filter || (rule.else && hasPrev);
         const discard = needsDiscard
@@ -1074,6 +1109,14 @@ class VectorStyleRenderer {
                 propStride,
               ),
             getVar: (name, type) => this.getVarExpression_(name, type),
+            getId: (type) =>
+              this.getFeaturePropExpression_(
+                FEATURE_ID_PROP_NAME,
+                type,
+                'featureIndex',
+                propIndexByName,
+                propStride,
+              ),
           };
           const tintExpr = style['icon-color'];
           const tint = Array.isArray(tintExpr)
@@ -2248,6 +2291,14 @@ class VectorStyleRenderer {
                 propStride,
               ),
             getVar: (name, type) => this.getVarExpression_(name, type),
+            getId: (type) =>
+              this.getFeaturePropExpression_(
+                FEATURE_ID_PROP_NAME,
+                type,
+                'featureIndex',
+                propIndexByName,
+                propStride,
+              ),
           };
           const fragmentCtx = {
             lineMetricVar: 'lineMetric',
@@ -2260,6 +2311,14 @@ class VectorStyleRenderer {
                 propStride,
               ),
             getVar: (name, type) => this.getVarExpression_(name, type),
+            getId: (type) =>
+              this.getFeaturePropExpression_(
+                FEATURE_ID_PROP_NAME,
+                type,
+                'input.featureIndex',
+                propIndexByName,
+                propStride,
+              ),
           };
           const discard = needsDiscard
             ? `!(${compileWgslExpression(effectiveFilter, fragmentCtx, 'bool')})`
@@ -2491,6 +2550,14 @@ class VectorStyleRenderer {
                         propStride,
                       ),
                     getVar: (name, type) => this.getVarExpression_(name, type),
+                    getId: (type) =>
+                      this.getFeaturePropExpression_(
+                        FEATURE_ID_PROP_NAME,
+                        type,
+                        'featureIndex',
+                        propIndexByName,
+                        propStride,
+                      ),
                   },
                   'vec4f',
                 )
@@ -2629,6 +2696,14 @@ class VectorStyleRenderer {
                 propStride,
               ),
             getVar: (name, type) => this.getVarExpression_(name, type),
+            getId: (type) =>
+              this.getFeaturePropExpression_(
+                FEATURE_ID_PROP_NAME,
+                type,
+                'input.featureIndex',
+                propIndexByName,
+                propStride,
+              ),
           };
           const needsDiscard = !!rule.filter || (rule.else && hasPrev);
           const polyDiscard = needsDiscard
@@ -2784,7 +2859,12 @@ class VectorStyleRenderer {
         }
         for (let i = 0; i < propCount; i++) {
           const name = propNames[i];
-          const value = feature.get(name);
+          const value =
+            name === FEATURE_ID_PROP_NAME
+              ? typeof feature.getId === 'function'
+                ? feature.getId()
+                : null
+              : feature.get(name);
           let scalar = UNDEFINED_PROP_VALUE;
           if (value !== undefined && value !== null) {
             if (typeof value === 'number') {
@@ -2869,7 +2949,12 @@ class VectorStyleRenderer {
         dst.fill(0, base, base + rowStrideFloats);
         for (let i = 0; i < propCount; i++) {
           const name = propNames[i];
-          const value = feature.get(name);
+          const value =
+            name === FEATURE_ID_PROP_NAME
+              ? typeof feature.getId === 'function'
+                ? feature.getId()
+                : null
+              : feature.get(name);
           let scalar = UNDEFINED_PROP_VALUE;
           if (value !== undefined && value !== null) {
             if (typeof value === 'number') {

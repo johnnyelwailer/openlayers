@@ -1179,6 +1179,10 @@ async function main() {
                   }
                   return `vars[${offset}]`;
                 },
+                id: (type) => {
+                  const offset = alloc(propsLayout, '__id__', type, 'prop');
+                  return `props[${offset}]`;
+                },
               },
               {strict: true, diagnostics},
             );

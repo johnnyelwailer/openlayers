@@ -15,6 +15,7 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 *   **WebGPU Pattern Option Hardening**: WebGPU now rejects expressions for `*-pattern-size`, `*-pattern-offset`, `*-pattern-offset-origin`, and stroke `*-pattern-spacing` / `*-pattern-start-offset` with clear errors instead of emitting invalid WGSL.
 *   **Expression + Style Parity**:
     * WGSL now supports `['has', ...]`, and missing feature properties in the WebGPU `props` buffer are encoded with `UNDEFINED_PROP_VALUE = -9999999` (aligns with WebGL “undefined” semantics for numeric reads).
+    * WGSL now supports `['id']` by packing feature ids into the `props` buffer (strings encoded as stable numeric ids); enables `updateStyleVariables()`-driven hover/highlight filters like `examples/webgpu-vector-layer.html`.
     * Polygon `fill-color` now supports non-trivial expressions (e.g. `case`/`match`/arithmetic) by compiling to WGSL and evaluating per feature.
     * **String-based expressions (WebGL parity)**: strings are represented as stable numeric ids in WGSL, enabling string comparisons in `filter`, `match`, and `in` (fixes the style-variable + feature-property string filtering used in `examples/icon-sprite-webgpu.html`).
     * **Polygon fill-color correctness**: polygon `fill-color` expressions are compiled to WGSL when used as expressions (fixes “wrong colors” patterns like `['*', ['get','COLOR'], [220,220,220]]` in `examples/webgpu-vector-layer.html`).
