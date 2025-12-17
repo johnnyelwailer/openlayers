@@ -2,6 +2,7 @@
  * @module ol/renderer/webgpu/VectorLayer
  */
 import ViewHint from '../../ViewHint.js';
+import {assert} from '../../asserts.js';
 import {listen, unlistenByKey} from '../../events.js';
 import {buffer, createEmpty, equals, getWidth} from '../../extent.js';
 import BaseVector from '../../layer/BaseVector.js';
@@ -17,6 +18,10 @@ import VectorEventType from '../../source/VectorEventType.js';
 import {create as createTransform} from '../../transform.js';
 import {getUid} from '../../util.js';
 import WebGPULayerRenderer from './Layer.js';
+import {
+  computeHitDetectionPadding,
+  forEachFeatureAtCoordinateCPU,
+} from './hitdetect.js';
 
 /**
  * Compute world params (wrapX rendering).
@@ -134,6 +139,25 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
      * @type {Map<number, import("../../Feature.js").default|import("../../render/Feature.js").default>}
      */
     this.styleDirtyRefs_ = new Map();
+
+    /**
+     * @private
+     * @type {boolean}
+     */
+    this.hitDetectionEnabled_ = !options.disableHitDetection;
+
+    const hitPadding = computeHitDetectionPadding(this.styles_);
+    /**
+     * @private
+     * @type {number}
+     */
+    this.hitDetectionPointRadiusPx_ = hitPadding.pointRadiusPx;
+
+    /**
+     * @private
+     * @type {number}
+     */
+    this.hitDetectionStrokeHalfWidthPx_ = hitPadding.strokeHalfWidthPx;
   }
 
   /**
@@ -400,6 +424,49 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
     }
 
     return this.helper.getCanvas();
+  }
+
+  /**
+   * @param {import("../../coordinate.js").Coordinate} coordinate Coordinate.
+   * @param {import("../../Map.js").FrameState} frameState Frame state.
+   * @param {number} hitTolerance Hit tolerance in pixels.
+   * @param {import("../vector.js").FeatureCallback<T>} callback Feature callback.
+   * @param {Array<import("../Map.js").HitMatch<T>>} matches The hit detected matches with tolerance.
+   * @return {T|undefined} Callback result.
+   * @template T
+   * @override
+   */
+  forEachFeatureAtCoordinate(
+    coordinate,
+    frameState,
+    hitTolerance,
+    callback,
+    matches,
+  ) {
+    assert(
+      this.hitDetectionEnabled_,
+      '`forEachFeatureAtCoordinate` cannot be used on a WebGPU layer if the hit detection logic has been disabled using the `disableHitDetection: true` option.',
+    );
+    if (!this.hitDetectionEnabled_) {
+      return undefined;
+    }
+
+    const layer = this.getLayer();
+    const source = layer.getSource();
+    if (!source) {
+      return undefined;
+    }
+    return forEachFeatureAtCoordinateCPU(
+      layer,
+      source,
+      coordinate,
+      frameState,
+      hitTolerance,
+      this.hitDetectionPointRadiusPx_,
+      this.hitDetectionStrokeHalfWidthPx_,
+      callback,
+      matches,
+    );
   }
 
   /**

@@ -17,6 +17,17 @@ import {
  */
 
 /**
+ * @typedef {Object} WgslCompileDiagnostics
+ * @property {Array<{op: string, message: string}>} issues Issues found during compilation.
+ */
+
+/**
+ * @typedef {Object} WgslCompileOptions
+ * @property {boolean} [strict] Throw on unsupported operators/constructs.
+ * @property {WgslCompileDiagnostics} [diagnostics] Optional diagnostics collector.
+ */
+
+/**
  * @typedef {Object} CompileWgslContext
  * @property {string} lineMetric WGSL expression for line metric.
  * @property {string} resolution WGSL expression for resolution.
@@ -25,6 +36,20 @@ import {
  * @property {(name: string, type: number) => string} get WGSL expression for a `get` property.
  * @property {(name: string, type: number) => string} [var] WGSL expression for a style variable (`var`).
  */
+
+/**
+ * @param {string} op Operator.
+ * @param {string} message Message.
+ * @param {WgslCompileOptions|undefined} options Options.
+ */
+function reportUnsupported(op, message, options) {
+  if (options?.diagnostics) {
+    options.diagnostics.issues.push({op, message});
+  }
+  if (options?.strict) {
+    throw new Error(message);
+  }
+}
 
 /**
  * @param {number} v Number.
@@ -50,9 +75,10 @@ export function colorToWgsl(color) {
 /**
  * @param {import('./expression.js').Expression} expression Parsed expression.
  * @param {CompileWgslContext} ctx Compilation context.
+ * @param {WgslCompileOptions} [options] Options.
  * @return {string} WGSL code.
  */
-export function compileExpressionToWgsl(expression, ctx) {
+export function compileExpressionToWgsl(expression, ctx, options) {
   /**
    * @param {number} type Expression type.
    * @return {string} WGSL literal for a safe default value.
@@ -79,6 +105,14 @@ export function compileExpressionToWgsl(expression, ctx) {
         /** @type {import("../color.js").Color} */ (expression.value),
       );
     }
+    if (isType(expression.type, StringType)) {
+      reportUnsupported(
+        Ops.String,
+        'WGSL backend does not support string values',
+        options,
+      );
+      return defaultForType(expression.type);
+    }
     return defaultForType(expression.type);
   }
 
@@ -95,6 +129,11 @@ export function compileExpressionToWgsl(expression, ctx) {
     const firstArg = /** @type {LiteralExpression} */ (call.args[0]);
     const varName = /** @type {string} */ (firstArg.value);
     if (!ctx.var) {
+      reportUnsupported(
+        op,
+        'WGSL backend does not have access to style variables in this context',
+        options,
+      );
       return '0.0';
     }
     return ctx.var(varName, call.type);
@@ -117,7 +156,9 @@ export function compileExpressionToWgsl(expression, ctx) {
   }
 
   if (op === Ops.Any || op === Ops.All) {
-    const compiled = call.args.map((arg) => compileExpressionToWgsl(arg, ctx));
+    const compiled = call.args.map((arg) =>
+      compileExpressionToWgsl(arg, ctx, options),
+    );
     if (compiled.length === 0) {
       return defaultForType(call.type);
     }
@@ -125,7 +166,7 @@ export function compileExpressionToWgsl(expression, ctx) {
   }
 
   if (op === Ops.Not) {
-    const v = compileExpressionToWgsl(call.args[0], ctx);
+    const v = compileExpressionToWgsl(call.args[0], ctx, options);
     return `(!${v})`;
   }
 
@@ -136,7 +177,9 @@ export function compileExpressionToWgsl(expression, ctx) {
     op === Ops.Divide ||
     op === Ops.Pow
   ) {
-    const compiled = call.args.map((arg) => compileExpressionToWgsl(arg, ctx));
+    const compiled = call.args.map((arg) =>
+      compileExpressionToWgsl(arg, ctx, options),
+    );
     if (compiled.length === 0) {
       return defaultForType(call.type);
     }
@@ -154,67 +197,69 @@ export function compileExpressionToWgsl(expression, ctx) {
   }
 
   if (op === Ops.Mod) {
-    const a = compileExpressionToWgsl(call.args[0], ctx);
-    const b = compileExpressionToWgsl(call.args[1], ctx);
+    const a = compileExpressionToWgsl(call.args[0], ctx, options);
+    const b = compileExpressionToWgsl(call.args[1], ctx, options);
     // WGSL remainder operator (%) is integer-only; emulate GLSL `mod(a, b)` for floats:
     // mod(a, b) = a - b * floor(a / b)
     return `(${a} - (${b} * floor(${a} / ${b})))`;
   }
 
   if (op === Ops.Clamp) {
-    const v = compileExpressionToWgsl(call.args[0], ctx);
-    const min = compileExpressionToWgsl(call.args[1], ctx);
-    const max = compileExpressionToWgsl(call.args[2], ctx);
+    const v = compileExpressionToWgsl(call.args[0], ctx, options);
+    const min = compileExpressionToWgsl(call.args[1], ctx, options);
+    const max = compileExpressionToWgsl(call.args[2], ctx, options);
     return `clamp(${v}, ${min}, ${max})`;
   }
 
   if (op === Ops.Abs) {
-    const v = compileExpressionToWgsl(call.args[0], ctx);
+    const v = compileExpressionToWgsl(call.args[0], ctx, options);
     return `abs(${v})`;
   }
 
   if (op === Ops.Floor) {
-    const v = compileExpressionToWgsl(call.args[0], ctx);
+    const v = compileExpressionToWgsl(call.args[0], ctx, options);
     return `floor(${v})`;
   }
 
   if (op === Ops.Ceil) {
-    const v = compileExpressionToWgsl(call.args[0], ctx);
+    const v = compileExpressionToWgsl(call.args[0], ctx, options);
     return `ceil(${v})`;
   }
 
   if (op === Ops.Round) {
-    const v = compileExpressionToWgsl(call.args[0], ctx);
+    const v = compileExpressionToWgsl(call.args[0], ctx, options);
     // Match the existing GLSL backend behavior (floor(x + 0.5)).
     return `floor(${v} + 0.5)`;
   }
 
   if (op === Ops.Sin) {
-    const v = compileExpressionToWgsl(call.args[0], ctx);
+    const v = compileExpressionToWgsl(call.args[0], ctx, options);
     return `sin(${v})`;
   }
 
   if (op === Ops.Cos) {
-    const v = compileExpressionToWgsl(call.args[0], ctx);
+    const v = compileExpressionToWgsl(call.args[0], ctx, options);
     return `cos(${v})`;
   }
 
   if (op === Ops.Atan) {
-    const a = compileExpressionToWgsl(call.args[0], ctx);
+    const a = compileExpressionToWgsl(call.args[0], ctx, options);
     if (call.args.length > 1) {
-      const b = compileExpressionToWgsl(call.args[1], ctx);
+      const b = compileExpressionToWgsl(call.args[1], ctx, options);
       return `atan2(${a}, ${b})`;
     }
     return `atan(${a})`;
   }
 
   if (op === Ops.Sqrt) {
-    const v = compileExpressionToWgsl(call.args[0], ctx);
+    const v = compileExpressionToWgsl(call.args[0], ctx, options);
     return `sqrt(${v})`;
   }
 
   if (op === Ops.Color) {
-    const args = call.args.map((arg) => compileExpressionToWgsl(arg, ctx));
+    const args = call.args.map((arg) =>
+      compileExpressionToWgsl(arg, ctx, options),
+    );
     const r = args[0] || '0.0';
     const g = args[1] || r;
     const b = args[2] || r;
@@ -230,14 +275,14 @@ export function compileExpressionToWgsl(expression, ctx) {
     op === Ops.Equal ||
     op === Ops.NotEqual
   ) {
-    const a = compileExpressionToWgsl(call.args[0], ctx);
-    const b = compileExpressionToWgsl(call.args[1], ctx);
+    const a = compileExpressionToWgsl(call.args[0], ctx, options);
+    const b = compileExpressionToWgsl(call.args[1], ctx, options);
     return `(${a} ${op} ${b})`;
   }
 
   if (op === Ops.Case) {
     const compiledArgs = call.args.map((arg) =>
-      compileExpressionToWgsl(arg, ctx),
+      compileExpressionToWgsl(arg, ctx, options),
     );
     if (compiledArgs.length === 0) {
       return defaultForType(call.type);
@@ -256,10 +301,10 @@ export function compileExpressionToWgsl(expression, ctx) {
     const exponent = /** @type {number} */ (exponentExpr.value);
     const exp = numberToWgsl(exponent);
 
-    const input = compileExpressionToWgsl(call.args[1], ctx);
+    const input = compileExpressionToWgsl(call.args[1], ctx, options);
     const stopsAndOutputs = call.args
       .slice(2)
-      .map((arg) => compileExpressionToWgsl(arg, ctx));
+      .map((arg) => compileExpressionToWgsl(arg, ctx, options));
 
     // Match the existing GLSL backend: chain `mix()` between successive stops.
     let result = '';
@@ -284,22 +329,35 @@ export function compileExpressionToWgsl(expression, ctx) {
     const inputExpr = call.args[0];
     if (isType(inputExpr.type, StringType)) {
       // String comparisons are not currently supported by the WGSL backend.
-      return compileExpressionToWgsl(call.args[call.args.length - 1], ctx);
+      reportUnsupported(
+        op,
+        'WGSL backend does not support string match() input',
+        options,
+      );
+      return compileExpressionToWgsl(
+        call.args[call.args.length - 1],
+        ctx,
+        options,
+      );
     }
-    const input = compileExpressionToWgsl(inputExpr, ctx);
-    let result = compileExpressionToWgsl(call.args[call.args.length - 1], ctx); // fallback
+    const input = compileExpressionToWgsl(inputExpr, ctx, options);
+    let result = compileExpressionToWgsl(
+      call.args[call.args.length - 1],
+      ctx,
+      options,
+    ); // fallback
     for (let i = call.args.length - 3; i >= 1; i -= 2) {
-      const match = compileExpressionToWgsl(call.args[i], ctx);
-      const output = compileExpressionToWgsl(call.args[i + 1], ctx);
+      const match = compileExpressionToWgsl(call.args[i], ctx, options);
+      const output = compileExpressionToWgsl(call.args[i + 1], ctx, options);
       result = `select(${result}, ${output}, (${input} == ${match}))`;
     }
     return result;
   }
 
   if (op === Ops.Between) {
-    const v = compileExpressionToWgsl(call.args[0], ctx);
-    const min = compileExpressionToWgsl(call.args[1], ctx);
-    const max = compileExpressionToWgsl(call.args[2], ctx);
+    const v = compileExpressionToWgsl(call.args[0], ctx, options);
+    const min = compileExpressionToWgsl(call.args[1], ctx, options);
+    const max = compileExpressionToWgsl(call.args[2], ctx, options);
     return `(${v} >= ${min} && ${v} <= ${max})`;
   }
 
@@ -307,16 +365,23 @@ export function compileExpressionToWgsl(expression, ctx) {
     const needle = call.args[0];
     // Only numeric `in` is supported (string matching requires string IDs).
     if (!isType(needle.type, NumberType)) {
+      reportUnsupported(op, 'WGSL backend only supports numeric in()', options);
       return 'false';
     }
-    const compiledNeedle = compileExpressionToWgsl(needle, ctx);
+    const compiledNeedle = compileExpressionToWgsl(needle, ctx, options);
     const tests = call.args
       .slice(1)
       .map(
-        (arg) => `(${compiledNeedle} == ${compileExpressionToWgsl(arg, ctx)})`,
+        (arg) =>
+          `(${compiledNeedle} == ${compileExpressionToWgsl(
+            arg,
+            ctx,
+            options,
+          )})`,
       );
     return tests.length ? `(${tests.join(' || ')})` : 'false';
   }
 
+  reportUnsupported(op, `WGSL backend does not support ${op}()`, options);
   return defaultForType(call.type);
 }

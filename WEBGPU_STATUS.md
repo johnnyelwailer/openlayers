@@ -17,6 +17,7 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 *   **Update Path Allocations Reduced**: Reused scratch arrays for per-feature GPU buffer updates and reused the uniform upload array to reduce GC churn.
 *   **Batched Dirty Ref Updates**: Coalesced consecutive “dirty ref” style/props updates into contiguous `queue.writeBuffer()` uploads to reduce per-frame CPU overhead for rapidly changing feature properties.
 *   **`time` Expression Parity**: Added support for `['time']` in WebGPU via a real uniform (WebGL parity), sourcing from `frameState.time` / `performance.now()` to avoid epoch mismatches.
+*   **CPU Hit Detection (Sync)**: Implemented a first-pass, synchronous `forEachFeatureAtPixel` path for WebGPU vector layers using source spatial indexing + CPU geometry distance checks (best-effort tolerance derived from literal style values); see `src/ol/renderer/webgpu/hitdetect.js`.
 *   **Compatibility Matrix Baseline Updated**: Regenerated `test/compat-matrix/baseline.json` after the above parity fixes.
 *   **Validation (Latest)**: `npm run lint`, `node test/rendering/test.js --match webgpu`, `npm run build-full`, and `node test/compat-matrix/test.js --headless` passing locally.
 
@@ -202,7 +203,7 @@ WebGPU changes the trade space: readback is *asynchronous* (`copyTextureToBuffer
    - **Cons**: Increases per-frame GPU cost for all users (even if no picking happens), and making it synchronous would still require readback or a redesign that keeps pick results GPU-side (not currently compatible with `forEachFeatureAtPixel`).
 
 #### Recommendation (pragmatic path)
-- **Near-term**: Implement **CPU hit detection** for WebGPU vector so `forEachFeatureAtPixel` parity is possible without changing public APIs; make it fast via spatial indexing + early-out ordering heuristics.
+- **Near-term**: Implement **CPU hit detection** for WebGPU vector so `forEachFeatureAtPixel` parity is possible without changing public APIs; make it fast via spatial indexing + early-out ordering heuristics. (Initial implementation is in place, but does not yet match all style-dependent semantics.)
 - **Optional (higher fidelity / future)**: Add a **GPU pick path** behind an async API surface (e.g. `layer.getFeatures(pixel)` for WebGPU renderers, or a new async map-level method) and/or as an internal refinement step where latency is acceptable (hover/tooltips).
 
 ## 6.1 Review Notes (2025-12-16)
@@ -216,6 +217,7 @@ These are follow-up notes after hardening `get()` support in the WGSL backend vi
 - **Boolean literal filters in WGSL**: `compileWgslExpression()` does not currently compile top-level `true`/`false` literals for `expected === 'bool'` (it falls back to `false`). Call sites use a workaround like `['==', 1, 1]` for “always true”; this should be fixed in the compiler.
 - **Polygon rule support gaps**: Polygons now support multiple fill rules with filters and `else: true` semantics, but fill style evaluation is still largely CPU-side (`literal|get|var` subsets) and lacks full WebGL rule parsing parity.
 - **`time` epoch mismatches**: WebGPU’s `['time']` uniform is sourced from `frameState.time` (RAF/performance epoch) with a `performance.now()` fallback; mixing `Date.now()` and RAF time can yield huge negative/positive deltas, so the time source must remain consistent across frames.
+- **CPU hit detection fidelity**: The current WebGPU hit detection (`src/ol/renderer/webgpu/hitdetect.js`) is CPU-based and sync, but it is not style-accurate for shader discard/alpha masks, patterns, icon image alpha, and expression-driven sizes; it uses geometry distance checks with best-effort padding from literal style values.
 
 ### Performance considerations
 - **Bind group churn**: Bind groups are now cached per buffer set; remaining churn is mostly limited to pipeline/resource changes (e.g. texture changes) rather than per-frame redraw.

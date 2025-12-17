@@ -1,3 +1,15 @@
+import {buildExpression as buildCpuExpression} from '../../src/ol/expr/cpu.js';
+import {
+  BooleanType,
+  ColorType,
+  NumberType,
+  StringType,
+  newParsingContext,
+  parse,
+} from '../../src/ol/expr/expression.js';
+import {buildExpression, newCompilationContext} from '../../src/ol/expr/gpu.js';
+import {compileExpressionToWgsl} from '../../src/ol/expr/wgsl.js';
+
 const ol = globalThis.ol;
 
 const RENDERERS = /** @type {const} */ (['canvas', 'webgl', 'webgpu']);
@@ -825,6 +837,120 @@ function generateScenarios(properties) {
     'stroke-width': ['time'],
   });
 
+  // Expression backend probes (compile-time coverage, not rendering-based).
+  // These scenarios validate whether the expression compilers can handle specific
+  // operators/types, independently of any particular style property pipeline.
+  /**
+   * @param {string} suffix Scenario suffix.
+   * @param {number} expectedType Expression expected type.
+   * @param {any} expr Encoded expression.
+   */
+  function pushExprProbe(suffix, expectedType, expr) {
+    scenarios.push({
+      id: `capabilities/expr-operators/${suffix}`,
+      group: 'capability',
+      geometry: 'none',
+      capabilityKind: 'expr-operators',
+      capabilityCount: 1,
+      capabilityVarsUsed: 0,
+      capabilityGetsUsed: 0,
+      kind: 'expr-probe',
+      expectedType,
+      expr,
+      needsGet: false,
+      needsVar: false,
+      style: null,
+    });
+  }
+
+  // Reading operators.
+  pushExprProbe('get-number', NumberType, ['get', 'x']);
+  pushExprProbe('var-number', NumberType, ['var', 'v']);
+  pushExprProbe('resolution', NumberType, ['resolution']);
+  pushExprProbe('zoom', NumberType, ['zoom']);
+  pushExprProbe('time', NumberType, ['time']);
+  pushExprProbe('line-metric', NumberType, ['line-metric']);
+  pushExprProbe('geometry-type', StringType, ['geometry-type']);
+  pushExprProbe('id', StringType | NumberType, ['id']);
+  pushExprProbe('has', BooleanType, ['has', 'x']);
+
+  // Boolean ops.
+  pushExprProbe('not', BooleanType, ['!', true]);
+  pushExprProbe('any', BooleanType, ['any', false, true]);
+  pushExprProbe('all', BooleanType, ['all', true, true]);
+
+  // Comparisons.
+  pushExprProbe('lt', BooleanType, ['<', 1, 2]);
+  pushExprProbe('lte', BooleanType, ['<=', 1, 2]);
+  pushExprProbe('gt', BooleanType, ['>', 2, 1]);
+  pushExprProbe('gte', BooleanType, ['>=', 2, 1]);
+  pushExprProbe('eq', BooleanType, ['==', 1, 1]);
+  pushExprProbe('neq', BooleanType, ['!=', 1, 2]);
+
+  // Math ops.
+  pushExprProbe('add', NumberType, ['+', 1, 2, 3]);
+  pushExprProbe('sub', NumberType, ['-', 2, 1]);
+  pushExprProbe('mul', NumberType, ['*', 2, 3]);
+  pushExprProbe('div', NumberType, ['/', 2, 1]);
+  pushExprProbe('pow', NumberType, ['^', 2, 3]);
+  pushExprProbe('mod', NumberType, ['%', 5, 2]);
+  pushExprProbe('clamp', NumberType, ['clamp', 2, 0, 1]);
+  pushExprProbe('abs', NumberType, ['abs', -1]);
+  pushExprProbe('floor', NumberType, ['floor', 1.9]);
+  pushExprProbe('ceil', NumberType, ['ceil', 1.1]);
+  pushExprProbe('round', NumberType, ['round', 1.5]);
+  pushExprProbe('sin', NumberType, ['sin', 1]);
+  pushExprProbe('cos', NumberType, ['cos', 1]);
+  pushExprProbe('atan', NumberType, ['atan', 1]);
+  pushExprProbe('atan2', NumberType, ['atan', 1, 2]);
+  pushExprProbe('sqrt', NumberType, ['sqrt', 4]);
+
+  // Transform ops.
+  pushExprProbe('case', NumberType, ['case', true, 1, 0]);
+  pushExprProbe('interpolate-linear', NumberType, [
+    'interpolate',
+    ['linear'],
+    0.5,
+    0,
+    0,
+    1,
+    1,
+  ]);
+  pushExprProbe('match-number', NumberType, [
+    'match',
+    ['get', 'x'],
+    1,
+    0,
+    2,
+    0,
+    3,
+    1,
+    0,
+  ]);
+  pushExprProbe('match-string', NumberType, [
+    'match',
+    ['get', 's'],
+    'a',
+    0,
+    'b',
+    1,
+    0,
+  ]);
+  pushExprProbe('between', BooleanType, ['between', 2, 1, 3]);
+  pushExprProbe('in-number', BooleanType, ['in', 2, [1, 2, 3]]);
+  pushExprProbe('in-string', BooleanType, [
+    'in',
+    ['get', 's'],
+    ['literal', ['a', 'b']],
+  ]);
+
+  // Conversion/assertion ops (supported by the expression language, but backend-specific).
+  pushExprProbe('number', NumberType, ['number', 1, '1']);
+  pushExprProbe('string', StringType, ['string', 1, 'a']);
+  pushExprProbe('concat', StringType, ['concat', 'a', 'b']);
+  pushExprProbe('coalesce', NumberType, ['coalesce', ['get', 'missing'], 1]);
+  pushExprProbe('to-string', StringType, ['to-string', 1]);
+
   return scenarios;
 }
 
@@ -901,6 +1027,197 @@ async function main() {
         messages: [],
       };
 
+      if (scenario.kind === 'expr-probe') {
+        try {
+          if (renderer === 'canvas') {
+            const parsingContext = newParsingContext();
+            buildCpuExpression(
+              scenario.expr,
+              scenario.expectedType,
+              parsingContext,
+            );
+          } else if (renderer === 'webgl') {
+            const parsingContext = newParsingContext();
+            const compilationContext = newCompilationContext();
+            buildExpression(
+              scenario.expr,
+              scenario.expectedType,
+              parsingContext,
+              compilationContext,
+            );
+          } else {
+            if (!navigator.gpu) {
+              entry.status = 'unavailable';
+              entry.messages.push({
+                type: 'unavailable',
+                message: 'WebGPU unavailable',
+              });
+              results.push(entry);
+              continue;
+            }
+
+            const parsingContext = newParsingContext();
+            const parsed = parse(
+              scenario.expr,
+              scenario.expectedType,
+              parsingContext,
+            );
+
+            /** @type {Map<string, {offset: number, type: number}>} */
+            const propsLayout = new Map();
+            /** @type {Map<string, {offset: number, type: number}>} */
+            const varsLayout = new Map();
+            let nextPropOffset = 0;
+            let nextVarOffset = 0;
+
+            /**
+             * @param {Map<string, {offset: number, type: number}>} layout Layout map.
+             * @param {string} name Key name.
+             * @param {number} type Value type.
+             * @param {'prop'|'var'} kind Kind.
+             * @return {number} f32 offset.
+             */
+            function alloc(layout, name, type, kind) {
+              const existing = layout.get(name);
+              if (existing) {
+                return existing.offset;
+              }
+              const stride = type === ColorType ? 4 : 1;
+              const offset = kind === 'prop' ? nextPropOffset : nextVarOffset;
+              if (kind === 'prop') {
+                nextPropOffset += stride;
+              } else {
+                nextVarOffset += stride;
+              }
+              layout.set(name, {offset, type});
+              return offset;
+            }
+
+            const diagnostics = {issues: []};
+            const compiled = compileExpressionToWgsl(
+              parsed,
+              {
+                lineMetric: 'currentLineMetric',
+                resolution: 'uniforms.resolution',
+                zoom: 'uniforms.zoom',
+                time: 'uniforms.time',
+                get: (name, type) => {
+                  if (type === StringType) {
+                    throw new Error(
+                      'WGSL backend does not support string get()',
+                    );
+                  }
+                  const offset = alloc(propsLayout, name, type, 'prop');
+                  if (type === ColorType) {
+                    return `vec4f(props[${offset}], props[${offset + 1}], props[${
+                      offset + 2
+                    }], props[${offset + 3}])`;
+                  }
+                  if (type === BooleanType) {
+                    return `(props[${offset}] > 0.0)`;
+                  }
+                  return `props[${offset}]`;
+                },
+                var: (name, type) => {
+                  if (type === StringType) {
+                    throw new Error(
+                      'WGSL backend does not support string var()',
+                    );
+                  }
+                  const offset = alloc(varsLayout, name, type, 'var');
+                  if (type === ColorType) {
+                    return `vec4f(vars[${offset}], vars[${offset + 1}], vars[${
+                      offset + 2
+                    }], vars[${offset + 3}])`;
+                  }
+                  if (type === BooleanType) {
+                    return `(vars[${offset}] > 0.0)`;
+                  }
+                  return `vars[${offset}]`;
+                },
+              },
+              {strict: true, diagnostics},
+            );
+
+            // Validate that the compiled expression produces valid WGSL by compiling it into a minimal compute module.
+            const device =
+              runCtx?.layer?.getRenderer?.()?.helper?.getDevice?.() ||
+              (await (await navigator.gpu.requestAdapter())?.requestDevice());
+            if (!device) {
+              entry.status = 'unavailable';
+              entry.messages.push({
+                type: 'unavailable',
+                message: 'No WebGPU device available',
+              });
+              results.push(entry);
+              continue;
+            }
+
+            const wgsl = `
+struct Uniforms {
+  resolution: f32,
+  zoom: f32,
+  time: f32,
+};
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+@group(0) @binding(1) var<storage, read> props: array<f32>;
+@group(0) @binding(2) var<storage, read> vars: array<f32>;
+var<private> currentLineMetric: f32 = 0.0;
+
+@compute @workgroup_size(1)
+fn main() {
+  let _unused = ${compiled};
+}
+`;
+
+            device.pushErrorScope('validation');
+            let module;
+            try {
+              module = device.createShaderModule({code: wgsl});
+              if (module.getCompilationInfo) {
+                const info = await module.getCompilationInfo();
+                const errors = info.messages?.filter((m) => m.type === 'error');
+                if (errors?.length) {
+                  throw new Error(errors.map((e) => e.message).join('\n'));
+                }
+              }
+              device.createComputePipeline({
+                layout: 'auto',
+                compute: {module, entryPoint: 'main'},
+              });
+            } catch (err) {
+              entry.status = 'not_supported';
+              entry.messages.push({
+                type: 'expr',
+                message: String(err?.message || err),
+              });
+            }
+            const scopeErr = await device.popErrorScope();
+            if (scopeErr) {
+              entry.status = 'not_supported';
+              entry.messages.push({
+                type: 'validation',
+                message: scopeErr.message,
+              });
+            }
+            for (const issue of diagnostics.issues) {
+              entry.messages.push({
+                type: 'expr',
+                message: `${issue.op}: ${issue.message}`,
+              });
+            }
+          }
+        } catch (err) {
+          entry.status = 'not_supported';
+          entry.messages.push({
+            type: 'expr',
+            message: String(err?.message || err),
+          });
+        }
+        results.push(entry);
+        continue;
+      }
+
       const capability = parseCapabilityId(scenario.id);
       if (capability) {
         const key = `${renderer}|${capability.prefix}`;
@@ -934,7 +1251,24 @@ async function main() {
         continue;
       }
 
+      /** @type {GPUDevice|undefined} */
+      let device;
+      /** @type {boolean} */
+      let webgpuScoped = false;
       try {
+        if (renderer === 'webgpu') {
+          try {
+            device = runCtx?.layer?.getRenderer?.()?.helper?.getDevice?.();
+            if (device) {
+              // Capture validation errors that might not produce a blank frame (more actionable than pixel diffs).
+              device.pushErrorScope('validation');
+              webgpuScoped = true;
+            }
+          } catch {
+            // ignore
+          }
+        }
+
         const features = runCtx.features;
         if (scenario.needsGet) {
           const keys = scenario.featureProps || [scenario.getKey];
@@ -994,6 +1328,26 @@ async function main() {
           Object.assign(entry, renderInfo);
         }
       } finally {
+        if (webgpuScoped && device) {
+          try {
+            // Ensure work is submitted before popping error scope.
+            await device.queue.onSubmittedWorkDone();
+          } catch {
+            // ignore
+          }
+          try {
+            const scopeErr = await device.popErrorScope();
+            if (scopeErr) {
+              entry.status = 'not_supported';
+              entry.messages.push({
+                type: 'validation',
+                message: scopeErr.message,
+              });
+            }
+          } catch {
+            // ignore
+          }
+        }
         if (
           renderer === 'webgl' &&
           runCtx?.map &&
@@ -1039,8 +1393,11 @@ async function main() {
       prop: s.prop,
       group: s.group,
       geometry: s.geometry,
+      kind: s.kind,
       type: s.type,
       style: s.style,
+      expr: s.expr,
+      expectedType: s.expectedType,
       variables: s.variables,
       needsGet: s.needsGet,
       needsVar: s.needsVar,

@@ -83,6 +83,8 @@ function serve(options) {
   return new Promise((resolve, reject) => {
     const app = express();
     app.use(serveStatic(buildFullDir));
+    // Serve source modules for browser-side probes (e.g. expression compiler coverage).
+    app.use('/src', serveStatic(path.join(repoRoot, 'src')));
     app.get('/compat-matrix/properties.json', (req, res) => {
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({properties: getFlatStyleProperties()}, null, 2));

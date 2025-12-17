@@ -1,7 +1,7 @@
 {
   "meta": {
-    "date": "2025-12-16T10:08:14.384Z",
-    "scenarios": 435,
+    "date": "2025-12-17T08:24:21.437Z",
+    "scenarios": 482,
     "renderers": [
       "canvas",
       "webgl",
@@ -27539,6 +27539,924 @@
       "capabilityCount": 1,
       "capabilityVarsUsed": 0,
       "capabilityGetsUsed": 1
+    },
+    {
+      "id": "capabilities/operators/time",
+      "group": "capability",
+      "geometry": "line",
+      "style": {
+        "stroke-color": [
+          0,
+          0,
+          255,
+          1
+        ],
+        "stroke-width": [
+          "time"
+        ],
+        "stroke-line-cap": "round",
+        "stroke-line-join": "round"
+      },
+      "needsGet": false,
+      "needsVar": false,
+      "getKey": null,
+      "varKey": null,
+      "literal": null,
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/get-number",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "get",
+        "x"
+      ],
+      "expectedType": 2,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/var-number",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "var",
+        "v"
+      ],
+      "expectedType": 2,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/resolution",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "resolution"
+      ],
+      "expectedType": 2,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/zoom",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "zoom"
+      ],
+      "expectedType": 2,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/time",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "time"
+      ],
+      "expectedType": 2,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/line-metric",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "line-metric"
+      ],
+      "expectedType": 2,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/geometry-type",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "geometry-type"
+      ],
+      "expectedType": 4,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/id",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "id"
+      ],
+      "expectedType": 6,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/has",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "has",
+        "x"
+      ],
+      "expectedType": 1,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/not",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "!",
+        true
+      ],
+      "expectedType": 1,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/any",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "any",
+        false,
+        true
+      ],
+      "expectedType": 1,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/all",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "all",
+        true,
+        true
+      ],
+      "expectedType": 1,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/lt",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "<",
+        1,
+        2
+      ],
+      "expectedType": 1,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/lte",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "<=",
+        1,
+        2
+      ],
+      "expectedType": 1,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/gt",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        ">",
+        2,
+        1
+      ],
+      "expectedType": 1,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/gte",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        ">=",
+        2,
+        1
+      ],
+      "expectedType": 1,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/eq",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "==",
+        1,
+        1
+      ],
+      "expectedType": 1,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/neq",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "!=",
+        1,
+        2
+      ],
+      "expectedType": 1,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/add",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "+",
+        1,
+        2,
+        3
+      ],
+      "expectedType": 2,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/sub",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "-",
+        2,
+        1
+      ],
+      "expectedType": 2,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/mul",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "*",
+        2,
+        3
+      ],
+      "expectedType": 2,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/div",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "/",
+        2,
+        1
+      ],
+      "expectedType": 2,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/pow",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "^",
+        2,
+        3
+      ],
+      "expectedType": 2,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/mod",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "%",
+        5,
+        2
+      ],
+      "expectedType": 2,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/clamp",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "clamp",
+        2,
+        0,
+        1
+      ],
+      "expectedType": 2,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/abs",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "abs",
+        -1
+      ],
+      "expectedType": 2,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/floor",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "floor",
+        1.9
+      ],
+      "expectedType": 2,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/ceil",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "ceil",
+        1.1
+      ],
+      "expectedType": 2,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/round",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "round",
+        1.5
+      ],
+      "expectedType": 2,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/sin",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "sin",
+        1
+      ],
+      "expectedType": 2,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/cos",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "cos",
+        1
+      ],
+      "expectedType": 2,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/atan",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "atan",
+        1
+      ],
+      "expectedType": 2,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/atan2",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "atan",
+        1,
+        2
+      ],
+      "expectedType": 2,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/sqrt",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "sqrt",
+        4
+      ],
+      "expectedType": 2,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/case",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "case",
+        true,
+        1,
+        0
+      ],
+      "expectedType": 2,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/interpolate-linear",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "interpolate",
+        [
+          "linear"
+        ],
+        0.5,
+        0,
+        0,
+        1,
+        1
+      ],
+      "expectedType": 2,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/match-number",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "match",
+        [
+          "get",
+          "x"
+        ],
+        1,
+        0,
+        2,
+        0,
+        3,
+        1,
+        0
+      ],
+      "expectedType": 2,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/match-string",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "match",
+        [
+          "get",
+          "s"
+        ],
+        "a",
+        0,
+        "b",
+        1,
+        0
+      ],
+      "expectedType": 2,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/between",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "between",
+        2,
+        1,
+        3
+      ],
+      "expectedType": 1,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/in-number",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "in",
+        2,
+        [
+          1,
+          2,
+          3
+        ]
+      ],
+      "expectedType": 1,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/in-string",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "in",
+        [
+          "get",
+          "s"
+        ],
+        [
+          "literal",
+          [
+            "a",
+            "b"
+          ]
+        ]
+      ],
+      "expectedType": 1,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/number",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "number",
+        1,
+        "1"
+      ],
+      "expectedType": 2,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/string",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "string",
+        1,
+        "a"
+      ],
+      "expectedType": 4,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/concat",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "concat",
+        "a",
+        "b"
+      ],
+      "expectedType": 4,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/coalesce",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "coalesce",
+        [
+          "get",
+          "missing"
+        ],
+        1
+      ],
+      "expectedType": 2,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/to-string",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "to-string",
+        1
+      ],
+      "expectedType": 4,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
     }
   ],
   "results": [
@@ -29780,12 +30698,12 @@
       "status": "not_supported",
       "messages": [
         {
-          "type": "blank",
-          "message": "Rendered blank output"
+          "type": "error",
+          "message": "WebGPU layers do not support expressions for the fill-pattern-src style property"
         }
       ],
-      "rendered": false,
-      "differentFraction": 0
+      "rendered": true,
+      "differentFraction": 0.03173828125
     },
     {
       "id": "fill-pattern-src/var",
@@ -29828,12 +30746,12 @@
       "status": "not_supported",
       "messages": [
         {
-          "type": "blank",
-          "message": "Rendered blank output"
+          "type": "error",
+          "message": "WebGPU layers do not support expressions for the fill-pattern-src style property"
         }
       ],
-      "rendered": false,
-      "differentFraction": 0
+      "rendered": true,
+      "differentFraction": 0.03173828125
     },
     {
       "id": "icon-anchor/literal",
@@ -31747,12 +32665,12 @@
       "status": "not_supported",
       "messages": [
         {
-          "type": "blank",
-          "message": "Rendered blank output"
+          "type": "error",
+          "message": "WebGPU layers do not support expressions for the icon-src style property"
         }
       ],
-      "rendered": false,
-      "differentFraction": 0
+      "rendered": true,
+      "differentFraction": 0.1650390625
     },
     {
       "id": "icon-src/var",
@@ -31795,12 +32713,12 @@
       "status": "not_supported",
       "messages": [
         {
-          "type": "blank",
-          "message": "Rendered blank output"
+          "type": "error",
+          "message": "WebGPU layers do not support expressions for the icon-src style property"
         }
       ],
-      "rendered": false,
-      "differentFraction": 0
+      "rendered": true,
+      "differentFraction": 0.1650390625
     },
     {
       "id": "icon-width/literal",
@@ -35488,12 +36406,12 @@
       "status": "not_supported",
       "messages": [
         {
-          "type": "blank",
-          "message": "Rendered blank output"
+          "type": "error",
+          "message": "WebGPU layers do not support expressions for the stroke-pattern-src style property"
         }
       ],
-      "rendered": false,
-      "differentFraction": 0
+      "rendered": true,
+      "differentFraction": 0.030792236328125
     },
     {
       "id": "stroke-pattern-src/var",
@@ -35531,12 +36449,12 @@
       "status": "not_supported",
       "messages": [
         {
-          "type": "blank",
-          "message": "Rendered blank output"
+          "type": "error",
+          "message": "WebGPU layers do not support expressions for the stroke-pattern-src style property"
         }
       ],
-      "rendered": false,
-      "differentFraction": 0
+      "rendered": true,
+      "differentFraction": 0.030792236328125
     },
     {
       "id": "stroke-pattern-start-offset/literal",
@@ -35805,7 +36723,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.003570556640625
+      "differentFraction": 0.0341796875
     },
     {
       "id": "text-align/literal",
@@ -43328,7 +44246,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.10382080078125
+      "differentFraction": 0.0019378662109375
     },
     {
       "id": "capabilities/max-rule-filters/2",
@@ -43373,7 +44291,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.10382080078125
+      "differentFraction": 0.0037384033203125
     },
     {
       "id": "capabilities/max-rule-filters/3",
@@ -43418,7 +44336,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.10382080078125
+      "differentFraction": 0.0054931640625
     },
     {
       "id": "capabilities/max-rule-filters/4",
@@ -43463,7 +44381,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.10382080078125
+      "differentFraction": 0.007232666015625
     },
     {
       "id": "capabilities/max-rule-filters/5",
@@ -43508,7 +44426,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.10382080078125
+      "differentFraction": 0.0089569091796875
     },
     {
       "id": "capabilities/max-rule-filters/6",
@@ -43553,7 +44471,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.10382080078125
+      "differentFraction": 0.010772705078125
     },
     {
       "id": "capabilities/max-rule-filters/7",
@@ -43598,7 +44516,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.10382080078125
+      "differentFraction": 0.0125274658203125
     },
     {
       "id": "capabilities/max-rule-filters/8",
@@ -43643,7 +44561,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.10382080078125
+      "differentFraction": 0.014251708984375
     },
     {
       "id": "capabilities/max-rule-filters/9",
@@ -43688,7 +44606,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.10382080078125
+      "differentFraction": 0.01605224609375
     },
     {
       "id": "capabilities/max-rule-filters/10",
@@ -43733,7 +44651,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.10382080078125
+      "differentFraction": 0.0177764892578125
     },
     {
       "id": "capabilities/max-rule-filters/11",
@@ -43778,7 +44696,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.10382080078125
+      "differentFraction": 0.019378662109375
     },
     {
       "id": "capabilities/max-rule-filters/12",
@@ -43823,7 +44741,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.10382080078125
+      "differentFraction": 0.020965576171875
     },
     {
       "id": "capabilities/max-rule-filters/13",
@@ -43868,7 +44786,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.10382080078125
+      "differentFraction": 0.0225372314453125
     },
     {
       "id": "capabilities/max-rule-filters/14",
@@ -43913,7 +44831,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.10382080078125
+      "differentFraction": 0.0242156982421875
     },
     {
       "id": "capabilities/max-rule-filters/15",
@@ -43958,7 +44876,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.10382080078125
+      "differentFraction": 0.025848388671875
     },
     {
       "id": "capabilities/max-rule-filters/16",
@@ -44003,7 +44921,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.10382080078125
+      "differentFraction": 0.0274658203125
     },
     {
       "id": "capabilities/max-rule-filters/32",
@@ -44048,7 +44966,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.10382080078125
+      "differentFraction": 0.052734375
     },
     {
       "id": "capabilities/max-rule-filters/64",
@@ -44819,6 +45737,1940 @@
       "messages": [],
       "rendered": true,
       "differentFraction": 0.030792236328125
+    },
+    {
+      "id": "capabilities/operators/time",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "error",
+          "message": "Unsupported operator time"
+        }
+      ],
+      "rendered": true,
+      "differentFraction": 0.030853271484375
+    },
+    {
+      "id": "capabilities/operators/time",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.003570556640625
+    },
+    {
+      "id": "capabilities/operators/time",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "line",
+      "capabilityKind": "operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": [],
+      "rendered": true,
+      "differentFraction": 0.003570556640625
+    },
+    {
+      "id": "capabilities/expr-operators/get-number",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/get-number",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/get-number",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/var-number",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/var-number",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/var-number",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/resolution",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/resolution",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/resolution",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/zoom",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "expr",
+          "message": "Unsupported operator zoom"
+        }
+      ]
+    },
+    {
+      "id": "capabilities/expr-operators/zoom",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/zoom",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/time",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "expr",
+          "message": "Unsupported operator time"
+        }
+      ]
+    },
+    {
+      "id": "capabilities/expr-operators/time",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/time",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/line-metric",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "expr",
+          "message": "Unsupported operator line-metric"
+        }
+      ]
+    },
+    {
+      "id": "capabilities/expr-operators/line-metric",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/line-metric",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/geometry-type",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/geometry-type",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/geometry-type",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "expr",
+          "message": "WGSL backend does not support geometry-type()"
+        }
+      ]
+    },
+    {
+      "id": "capabilities/expr-operators/id",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/id",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/id",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "expr",
+          "message": "WGSL backend does not support id()"
+        }
+      ]
+    },
+    {
+      "id": "capabilities/expr-operators/has",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/has",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/has",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "expr",
+          "message": "WGSL backend does not support has()"
+        }
+      ]
+    },
+    {
+      "id": "capabilities/expr-operators/not",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/not",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/not",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/any",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/any",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/any",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/all",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/all",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/all",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/lt",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/lt",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/lt",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/lte",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/lte",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/lte",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/gt",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/gt",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/gt",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/gte",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/gte",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/gte",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/eq",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/eq",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/eq",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/neq",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/neq",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/neq",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/add",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/add",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/add",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/sub",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/sub",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/sub",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/mul",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/mul",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/mul",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/div",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/div",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/div",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/pow",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/pow",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/pow",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/mod",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/mod",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/mod",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/clamp",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/clamp",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/clamp",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/abs",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/abs",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/abs",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/floor",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/floor",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/floor",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/ceil",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/ceil",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/ceil",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/round",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/round",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/round",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/sin",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/sin",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/sin",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/cos",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/cos",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/cos",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/atan",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/atan",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/atan",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/atan2",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/atan2",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/atan2",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/sqrt",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/sqrt",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/sqrt",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/case",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/case",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/case",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/interpolate-linear",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/interpolate-linear",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/interpolate-linear",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/match-number",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/match-number",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/match-number",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/match-string",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/match-string",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/match-string",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "expr",
+          "message": "WGSL backend does not support string values"
+        }
+      ]
+    },
+    {
+      "id": "capabilities/expr-operators/between",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/between",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/between",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/in-number",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/in-number",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/in-number",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/in-string",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/in-string",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/in-string",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "expr",
+          "message": "WGSL backend only supports numeric in()"
+        }
+      ]
+    },
+    {
+      "id": "capabilities/expr-operators/number",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/number",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "expr",
+          "message": "No compiler defined for this operator: \"number\""
+        }
+      ]
+    },
+    {
+      "id": "capabilities/expr-operators/number",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "expr",
+          "message": "WGSL backend does not support number()"
+        }
+      ]
+    },
+    {
+      "id": "capabilities/expr-operators/string",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/string",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "expr",
+          "message": "No compiler defined for this operator: \"string\""
+        }
+      ]
+    },
+    {
+      "id": "capabilities/expr-operators/string",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "expr",
+          "message": "WGSL backend does not support string()"
+        }
+      ]
+    },
+    {
+      "id": "capabilities/expr-operators/concat",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/concat",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "expr",
+          "message": "No compiler defined for this operator: \"concat\""
+        }
+      ]
+    },
+    {
+      "id": "capabilities/expr-operators/concat",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "expr",
+          "message": "WGSL backend does not support concat()"
+        }
+      ]
+    },
+    {
+      "id": "capabilities/expr-operators/coalesce",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/coalesce",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "expr",
+          "message": "No compiler defined for this operator: \"coalesce\""
+        }
+      ]
+    },
+    {
+      "id": "capabilities/expr-operators/coalesce",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "expr",
+          "message": "WGSL backend does not support coalesce()"
+        }
+      ]
+    },
+    {
+      "id": "capabilities/expr-operators/to-string",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/to-string",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "expr",
+          "message": "No compiler defined for this operator: \"to-string\""
+        }
+      ]
+    },
+    {
+      "id": "capabilities/expr-operators/to-string",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "expr",
+          "message": "WGSL backend does not support to-string()"
+        }
+      ]
     }
   ]
 }
