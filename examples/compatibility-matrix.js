@@ -550,13 +550,19 @@ function renderTable(scenarios, query, groupBy, showDiagnostics, definitions) {
     }
 
     const styleSnippet =
-      def?.style !== undefined
+      def?.style !== undefined && def.style !== null
         ? formatJsonCompact(truncateForDisplay(def.style))
         : '';
     const variablesSnippet =
       def?.variables && Object.keys(def.variables).length
         ? formatJsonCompact(truncateForDisplay(def.variables))
         : '';
+    const exprSnippet =
+      def?.expr !== undefined
+        ? formatJsonCompact(truncateForDisplay(def.expr))
+        : '';
+    const expectedTypeSnippet =
+      def?.expectedType !== undefined ? String(def.expectedType) : '';
 
     const infoCell = document.createElement('td');
     infoCell.innerHTML = `<div class="small fw-semibold">${escapeHtml(
@@ -575,6 +581,10 @@ function renderTable(scenarios, query, groupBy, showDiagnostics, definitions) {
       'Style variables',
       variablesSnippet,
       `${s.id}::vars`,
+    )}${renderExpandablePre('Expression', exprSnippet, `${s.id}::expr`)}${renderExpandablePre(
+      'Expected type',
+      expectedTypeSnippet,
+      `${s.id}::expectedType`,
     )}`;
     detailsRow.appendChild(infoCell);
 
@@ -649,18 +659,11 @@ loadBaseline()
     renderSummary(scenarios);
     const definitions = new Map((data.scenarios || []).map((d) => [d.id, d]));
     const rerender = () => {
-      renderTable(
-        scenarios,
-        filterEl.value,
-        groupEl.value,
-        diagnosticsEl.checked,
-        definitions,
-      );
+      renderTable(scenarios, filterEl.value, groupEl.value, false, definitions);
     };
     rerender();
     filterEl.addEventListener('input', rerender);
     groupEl.addEventListener('change', rerender);
-    diagnosticsEl.addEventListener('change', rerender);
   })
   .catch((err) => {
     metaEl.textContent = err instanceof Error ? err.message : String(err);

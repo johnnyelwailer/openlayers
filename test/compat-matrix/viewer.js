@@ -41,6 +41,7 @@ async function load() {
  */
 function render(data, query) {
   const results = data.results || [];
+  const definitions = new Map((data.scenarios || []).map((d) => [d.id, d]));
   const byScenario = new Map();
   for (const r of results) {
     const key = r.id;
@@ -88,8 +89,28 @@ function render(data, query) {
         const s = e.status;
         const details = formatMessages(e.messages);
         const label = s === 'not_supported' ? 'not supported' : s;
-        const detailsHtml = details
-          ? `<div class="details">${escapeHtml(details)}</div>`
+        const def = definitions.get(id) || null;
+        const defDetails = def
+          ? formatMessages(
+              [
+                def.style !== undefined && def.style !== null
+                  ? {type: 'flat style', message: JSON.stringify(def.style)}
+                  : null,
+                def.variables && Object.keys(def.variables).length
+                  ? {
+                      type: 'style variables',
+                      message: JSON.stringify(def.variables),
+                    }
+                  : null,
+                def.expr !== undefined
+                  ? {type: 'expression', message: JSON.stringify(def.expr)}
+                  : null,
+              ].filter(Boolean),
+            )
+          : '';
+        const allDetails = [details, defDetails].filter(Boolean).join('\n');
+        const detailsHtml = allDetails
+          ? `<div class="details">${escapeHtml(allDetails)}</div>`
           : '';
         td.innerHTML = `<div class="cell ${statusClass(s)}">${label}</div>${detailsHtml}`;
       }
