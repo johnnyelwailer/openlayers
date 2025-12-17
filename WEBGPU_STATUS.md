@@ -15,6 +15,8 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 *   **Bind Group Caching**: Reduced per-frame overhead by caching bind groups per buffer set (keyed by pipeline + bound resources), instead of creating bind groups on every render call.
 *   **`props` Allocation Optimization**: Avoid allocating/binding the feature-properties buffer for CPU-resolved `get()` usage (e.g. direct `['get', ...]` stroke width/color), while still allocating when WGSL expressions require it (filters/expressions).
 *   **Update Path Allocations Reduced**: Reused scratch arrays for per-feature GPU buffer updates and reused the uniform upload array to reduce GC churn.
+*   **Batched Dirty Ref Updates**: Coalesced consecutive “dirty ref” style/props updates into contiguous `queue.writeBuffer()` uploads to reduce per-frame CPU overhead for rapidly changing feature properties.
+*   **`time` Expression Parity**: Added support for `['time']` in WebGPU via a real uniform (WebGL parity), sourcing from `frameState.time` / `performance.now()` to avoid epoch mismatches.
 *   **Compatibility Matrix Baseline Updated**: Regenerated `test/compat-matrix/baseline.json` after the above parity fixes.
 *   **Validation (Latest)**: `npm run lint`, `node test/rendering/test.js --match webgpu`, `npm run build-full`, and `node test/compat-matrix/test.js --headless` passing locally.
 
@@ -213,10 +215,12 @@ These are follow-up notes after hardening `get()` support in the WGSL backend vi
 - **Auto pipeline layout sensitivity**: Shaders are built with `layout: 'auto'`, so unused bindings are omitted by WebGPU. Binding logic currently relies on scanning WGSL source for `vars[...]` / `props[...]`. This is pragmatic but fragile if shader codegen changes.
 - **Boolean literal filters in WGSL**: `compileWgslExpression()` does not currently compile top-level `true`/`false` literals for `expected === 'bool'` (it falls back to `false`). Call sites use a workaround like `['==', 1, 1]` for “always true”; this should be fixed in the compiler.
 - **Polygon rule support gaps**: Polygons now support multiple fill rules with filters and `else: true` semantics, but fill style evaluation is still largely CPU-side (`literal|get|var` subsets) and lacks full WebGL rule parsing parity.
+- **`time` epoch mismatches**: WebGPU’s `['time']` uniform is sourced from `frameState.time` (RAF/performance epoch) with a `performance.now()` fallback; mixing `Date.now()` and RAF time can yield huge negative/positive deltas, so the time source must remain consistent across frames.
 
 ### Performance considerations
 - **Bind group churn**: Bind groups are now cached per buffer set; remaining churn is mostly limited to pipeline/resource changes (e.g. texture changes) rather than per-frame redraw.
 - **Per-update allocations**: Style/props update paths now reuse scratch `Float32Array` instances; remaining allocations are dominated by user expressions/resolvers rather than the renderer’s buffer upload scaffolding.
+- **Dirty ref batching**: When many features update in a frame, the renderer batches consecutive refs into contiguous GPU writes to reduce `queue.writeBuffer()` call counts.
 - **Memory scaling**: `featureProperties` scales as `featureCount * propCount * 32 bytes` (two `vec4f` slots per property: scalar + color) and is allocated only when WGSL expressions need it (e.g. filters/expressions), not for CPU-only `get()` style fields. If many distinct `get()` properties are referenced, memory can still grow quickly.
 - **Per-frame GC hitches**: Remaining “micro hitches” are often driven by per-frame allocations (transform/mat4 temporaries, composite bind group creation, cache-key string construction). Reducing allocations in `render()` and caching composite resources tends to smooth fast panning/zooming.
 - **Cache key allocations**: Avoid allocating string cache keys in hot render loops (bind groups and pipeline caches) by caching with nested `Map`s keyed by stable object ids / shader code strings.
@@ -391,6 +395,8 @@ These are follow-up notes after hardening `get()` support in the WGSL backend vi
 **Not started / missing equivalents (larger scope items):**
 - WebGPU tile rendering (`WebGLTile` parity): data tiles, reprojection, palette/band GPU expressions, tile-specific tests/examples.
 - WebGPU vector tiles (`WebGLVectorTile` parity): masking, patterns, tile lifecycle and cache integration.
+
+Related design notes: `WEBGPU_VECTOR_TILES_PORT.md`.
 - WebGPU points-only layer (`WebGLPoints` parity): separate pipeline + hit detection.
 - Hit detection / `forEachFeatureAtPixel` parity for WebGPU vector (`WebGLVector` has this).
 - Post-processing / render targets parity where applicable.

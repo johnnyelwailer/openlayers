@@ -347,6 +347,7 @@ export class WGSLBuilder {
         rotation : f32,
         zoom : f32,
         padding : vec2f,
+        time : f32,
       };
 
       struct Style {

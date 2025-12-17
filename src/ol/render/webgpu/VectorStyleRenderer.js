@@ -1221,6 +1221,8 @@ class VectorStyleRenderer {
 
           const strideBytes = STYLE_STRIDE * 4;
           const scratch = new Float32Array(STYLE_STRIDE);
+          /** @type {Array<number>} */
+          const refsScratch = [];
           const symbolShader =
             discard === 'false'
               ? baseIconShader
@@ -1249,8 +1251,8 @@ class VectorStyleRenderer {
               if (!dirtyRefs || dirtyRefs.size === 0) {
                 return;
               }
-              /** @type {Array<number>} */
-              const refs = [];
+              const refs = refsScratch;
+              refs.length = 0;
               for (const ref of dirtyRefs.keys()) {
                 if (ref && ref <= pointMaxRef) {
                   refs.push(ref);
@@ -1291,7 +1293,11 @@ class VectorStyleRenderer {
                   if (!feature) {
                     continue;
                   }
-                  writeStyle(batchScratch, (r - runStart) * STYLE_STRIDE, feature);
+                  writeStyle(
+                    batchScratch,
+                    (r - runStart) * STYLE_STRIDE,
+                    feature,
+                  );
                 }
                 device.queue.writeBuffer(
                   styleBuffer.getBuffer(),
@@ -1469,6 +1475,8 @@ class VectorStyleRenderer {
 
           const strideBytes = STYLE_STRIDE * 4;
           const scratch = new Float32Array(STYLE_STRIDE);
+          /** @type {Array<number>} */
+          const refsScratch = [];
           const symbolShader =
             discard === 'false'
               ? baseShapeShader
@@ -1496,8 +1504,8 @@ class VectorStyleRenderer {
               if (!dirtyRefs || dirtyRefs.size === 0) {
                 return;
               }
-              /** @type {Array<number>} */
-              const refs = [];
+              const refs = refsScratch;
+              refs.length = 0;
               for (const ref of dirtyRefs.keys()) {
                 if (ref && ref <= pointMaxRef) {
                   refs.push(ref);
@@ -1538,7 +1546,11 @@ class VectorStyleRenderer {
                   if (!feature) {
                     continue;
                   }
-                  writeStyle(batchScratch, (r - runStart) * STYLE_STRIDE, feature);
+                  writeStyle(
+                    batchScratch,
+                    (r - runStart) * STYLE_STRIDE,
+                    feature,
+                  );
                 }
                 device.queue.writeBuffer(
                   styleBuffer.getBuffer(),
@@ -1684,6 +1696,8 @@ class VectorStyleRenderer {
 
           const strideBytes = STYLE_STRIDE * 4;
           const scratch = new Float32Array(STYLE_STRIDE);
+          /** @type {Array<number>} */
+          const refsScratch = [];
           const symbolShader =
             discard === 'false'
               ? baseCircleShader
@@ -1713,8 +1727,8 @@ class VectorStyleRenderer {
               if (!dirtyRefs || dirtyRefs.size === 0) {
                 return;
               }
-              /** @type {Array<number>} */
-              const refs = [];
+              const refs = refsScratch;
+              refs.length = 0;
               for (const ref of dirtyRefs.keys()) {
                 if (ref && ref <= pointMaxRef) {
                   refs.push(ref);
@@ -1755,7 +1769,11 @@ class VectorStyleRenderer {
                   if (!feature) {
                     continue;
                   }
-                  writeStyle(batchScratch, (r - runStart) * STYLE_STRIDE, feature);
+                  writeStyle(
+                    batchScratch,
+                    (r - runStart) * STYLE_STRIDE,
+                    feature,
+                  );
                 }
                 device.queue.writeBuffer(
                   styleBuffer.getBuffer(),
@@ -2038,6 +2056,8 @@ class VectorStyleRenderer {
 
         const strideBytes = STYLE_STRIDE * 4;
         const scratch = new Float32Array(STYLE_STRIDE);
+        /** @type {Array<number>} */
+        const refsScratch = [];
         let strokeShader;
         if (
           needsDiscard ||
@@ -2117,8 +2137,8 @@ class VectorStyleRenderer {
             if (!dirtyRefs || dirtyRefs.size === 0) {
               return;
             }
-            /** @type {Array<number>} */
-            const refs = [];
+            const refs = refsScratch;
+            refs.length = 0;
             for (const ref of dirtyRefs.keys()) {
               if (ref && ref <= lineMaxRef) {
                 refs.push(ref);
@@ -2159,7 +2179,11 @@ class VectorStyleRenderer {
                 if (!feature) {
                   continue;
                 }
-                writeStyle(batchScratch, (r - runStart) * STYLE_STRIDE, feature);
+                writeStyle(
+                  batchScratch,
+                  (r - runStart) * STYLE_STRIDE,
+                  feature,
+                );
               }
               device.queue.writeBuffer(
                 lineStyleBuffer.getBuffer(),
@@ -2388,6 +2412,8 @@ class VectorStyleRenderer {
             : 'false';
 
           const scratch = new Float32Array(4);
+          /** @type {Array<number>} */
+          const refsScratch = [];
           const fillShader =
             hasFillPattern || polyDiscard !== 'false'
               ? this.styleShaders_[0].builder.getFillShader({
@@ -2428,8 +2454,8 @@ class VectorStyleRenderer {
               if (!dirtyRefs || dirtyRefs.size === 0) {
                 return;
               }
-              /** @type {Array<number>} */
-              const refs = [];
+              const refs = refsScratch;
+              refs.length = 0;
               for (const ref of dirtyRefs.keys()) {
                 if (ref && ref <= polyMaxRef) {
                   refs.push(ref);
@@ -2603,6 +2629,8 @@ class VectorStyleRenderer {
       const strideBytes = propStride * 16;
       const rowStrideFloats = propStride * 4;
       const scratch = new Float32Array(rowStrideFloats);
+      /** @type {Array<number>} */
+      const refsScratch = [];
       /** @type {Float32Array|null} */
       let batchScratch = null;
       const writeRow = (dst, base, feature) => {
@@ -2625,7 +2653,11 @@ class VectorStyleRenderer {
             const r = Number(value[0]);
             const g = Number(value[1]);
             const b = Number(value[2]);
-            if (Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(b)) {
+            if (
+              Number.isFinite(r) &&
+              Number.isFinite(g) &&
+              Number.isFinite(b)
+            ) {
               const max = Math.max(r, g, b);
               const scale = max > 1.5 ? 1 / 255 : 1;
               const a = value.length > 3 ? Number(value[3]) : 1;
@@ -2642,7 +2674,11 @@ class VectorStyleRenderer {
               const r = Number(rgba[0]);
               const g = Number(rgba[1]);
               const b = Number(rgba[2]);
-              if (Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(b)) {
+              if (
+                Number.isFinite(r) &&
+                Number.isFinite(g) &&
+                Number.isFinite(b)
+              ) {
                 const max = Math.max(r, g, b);
                 const scale = max > 1.5 ? 1 / 255 : 1;
                 const a = rgba.length > 3 ? Number(rgba[3]) : 1;
@@ -2679,8 +2715,8 @@ class VectorStyleRenderer {
           if (!dirtyRefs || dirtyRefs.size === 0) {
             return;
           }
-          /** @type {Array<number>} */
-          const refs = [];
+          const refs = refsScratch;
+          refs.length = 0;
           for (const ref of dirtyRefs.keys()) {
             if (ref && ref < featureCount) {
               refs.push(ref);
@@ -2821,7 +2857,10 @@ class VectorStyleRenderer {
     }
 
     buffers.featureProperties?.updateBatch?.(device, dirtyRefs);
-    if (!buffers.featureProperties?.updateBatch && buffers.featureProperties?.update) {
+    if (
+      !buffers.featureProperties?.updateBatch &&
+      buffers.featureProperties?.update
+    ) {
       for (const [ref, feature] of dirtyRefs) {
         buffers.featureProperties.update(device, ref, feature);
       }
@@ -3182,7 +3221,12 @@ class VectorStyleRenderer {
       uniformData[22] = 0;
       uniformData[23] = 0;
       const now =
-        typeof frameState.time === 'number' ? frameState.time : Date.now();
+        typeof frameState.time === 'number'
+          ? frameState.time
+          : typeof performance !== 'undefined' &&
+              typeof performance.now === 'function'
+            ? performance.now()
+            : Date.now();
       if (this.startTime_ === null) {
         this.startTime_ = now;
       }

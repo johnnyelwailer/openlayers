@@ -796,6 +796,82 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
     expect(propsCalled.feature).to.be(feature);
   });
 
+  it('batches feature style updates for consecutive dirty refs', async () => {
+    /** @type {Array<{buffer: *, offset: number, data: *}>} */
+    const writes = [];
+    const device = {
+      createBuffer: ({size}) => ({
+        size,
+        getMappedRange: () => new ArrayBuffer(size),
+        unmap: () => {},
+      }),
+      queue: {
+        writeBuffer: (buffer, offset, data) => {
+          writes.push({buffer, offset, data});
+        },
+      },
+    };
+    const helper = {
+      getDevice: () => device,
+    };
+
+    const renderer = new VectorStyleRenderer(
+      [
+        {
+          style: {
+            'circle-radius': ['get', 'radius'],
+            'circle-fill-color': [255, 0, 0, 1],
+          },
+          filter: ['==', ['get', 'limit'], 1],
+        },
+      ],
+      {},
+      /** @type {*} */ (helper),
+    );
+
+    const feature1 = {
+      get: (name) => (name === 'radius' ? 1 : name === 'limit' ? 1 : 0),
+    };
+    const feature2 = {
+      get: (name) => (name === 'radius' ? 2 : name === 'limit' ? 1 : 0),
+    };
+    const feature3 = {
+      get: (name) => (name === 'radius' ? 3 : name === 'limit' ? 1 : 0),
+    };
+
+    const geometryBatch = {
+      pointBatch: {
+        entries: {
+          a: {ref: 1, feature: feature1, flatCoordss: [[0, 0]]},
+          b: {ref: 2, feature: feature2, flatCoordss: [[1, 1]]},
+          c: {ref: 3, feature: feature3, flatCoordss: [[2, 2]]},
+        },
+      },
+      lineStringBatch: {entries: {}},
+      polygonBatch: {entries: {}},
+    };
+
+    const buffers = await renderer.generateBuffers(
+      /** @type {*} */ (geometryBatch),
+      /** @type {*} */ ([]),
+    );
+
+    writes.length = 0;
+    renderer.updateFeatureStylesBatch(
+      buffers,
+      new Map([
+        [1, /** @type {*} */ (feature1)],
+        [2, /** @type {*} */ (feature2)],
+        [3, /** @type {*} */ (feature3)],
+      ]),
+    );
+
+    const floatWrites = writes.filter((w) => w.data instanceof Float32Array);
+    expect(floatWrites.length).to.be(2);
+    expect(floatWrites[0].data.length).to.be(60); // 3 refs * 20 floats
+    expect(floatWrites[1].data.length).to.be(24); // 3 refs * 8 floats
+  });
+
   it('syncs style variables to the GPU buffer', () => {
     const variables = {
       w: 5,
