@@ -246,11 +246,11 @@ class VectorStyleRenderer {
     this.helper_ = helper;
     this.styles_ = styles;
     this.variables_ = variables || {};
-    /** @type {Map<string, GPURenderPipeline>} */
+    /** @type {Map<string, Map<string, GPURenderPipeline>>} */
     this.strokePipelineCache_ = new Map();
-    /** @type {Map<string, GPURenderPipeline>} */
+    /** @type {Map<string, Map<string, GPURenderPipeline>>} */
     this.fillPipelineCache_ = new Map();
-    /** @type {Map<string, GPURenderPipeline>} */
+    /** @type {Map<string, Map<string, GPURenderPipeline>>} */
     this.symbolPipelineCache_ = new Map();
     /** @type {Map<string, Promise<StrokePatternTexture>>} */
     this.patternTextureCache_ = new Map();
@@ -299,6 +299,72 @@ class VectorStyleRenderer {
         uniforms: {},
       },
     ];
+
+    /**
+     * @private
+     * @type {string}
+     */
+    this.defaultFillShader_ = builder.getFillShader();
+
+    /**
+     * @private
+     * @type {string}
+     */
+    this.defaultStrokeShader_ = builder.getStrokeShader();
+
+    /**
+     * @private
+     * @type {string}
+     */
+    this.defaultCircleSymbolShader_ = builder.getCircleSymbolShader();
+
+    /**
+     * @private
+     * @type {boolean}
+     */
+    this.defaultFillShaderUsesVars_ = this.shaderUsesVars_(
+      this.defaultFillShader_,
+    );
+
+    /**
+     * @private
+     * @type {boolean}
+     */
+    this.defaultFillShaderUsesProps_ = this.shaderUsesProps_(
+      this.defaultFillShader_,
+    );
+
+    /**
+     * @private
+     * @type {boolean}
+     */
+    this.defaultStrokeShaderUsesVars_ = this.shaderUsesVars_(
+      this.defaultStrokeShader_,
+    );
+
+    /**
+     * @private
+     * @type {boolean}
+     */
+    this.defaultStrokeShaderUsesProps_ = this.shaderUsesProps_(
+      this.defaultStrokeShader_,
+    );
+
+    /**
+     * @private
+     * @type {boolean}
+     */
+    this.defaultCircleSymbolShaderUsesVars_ = this.shaderUsesVars_(
+      this.defaultCircleSymbolShader_,
+    );
+
+    /**
+     * @private
+     * @type {boolean}
+     */
+    this.defaultCircleSymbolShaderUsesProps_ = this.shaderUsesProps_(
+      this.defaultCircleSymbolShader_,
+    );
 
     /**
      * @private
@@ -416,7 +482,7 @@ class VectorStyleRenderer {
 
   /**
    * @param {Object} buffers Current buffers.
-   * @return {Map<string, GPUBindGroup>} Bind group cache.
+   * @return {Map<number, *>} Bind group cache.
    * @private
    */
   getBindGroupCache_(buffers) {
@@ -426,6 +492,91 @@ class VectorStyleRenderer {
       buffers[BIND_GROUP_CACHE] = cache;
     }
     return cache;
+  }
+
+  /**
+   * @param {Map<string, Map<string, GPURenderPipeline>>} cache Cache.
+   * @param {string} format Format.
+   * @param {string} code WGSL code.
+   * @param {() => GPURenderPipeline} create Create callback.
+   * @return {GPURenderPipeline} Pipeline.
+   * @private
+   */
+  getPipeline_(cache, format, code, create) {
+    let byFormat = cache.get(format);
+    if (!byFormat) {
+      byFormat = new Map();
+      cache.set(format, byFormat);
+    }
+    let pipeline = byFormat.get(code);
+    if (!pipeline) {
+      pipeline = create();
+      byFormat.set(code, pipeline);
+    }
+    return pipeline;
+  }
+
+  /**
+   * Cache bind groups without allocating string keys in render loops.
+   * @param {Map<number, *>} cache Cache root.
+   * @param {number} pipelineId Pipeline id.
+   * @param {number} styleBufferId Style buffer id.
+   * @param {number} uniformsBufferId Uniform buffer id.
+   * @param {number} patternSamplerId Pattern sampler id.
+   * @param {number} patternViewId Pattern view id.
+   * @param {number} varsBufferId Vars buffer id.
+   * @param {number} propsBufferId Props buffer id.
+   * @param {() => GPUBindGroup} create Create callback.
+   * @return {GPUBindGroup} Cached bind group.
+   * @private
+   */
+  getCachedBindGroup_(
+    cache,
+    pipelineId,
+    styleBufferId,
+    uniformsBufferId,
+    patternSamplerId,
+    patternViewId,
+    varsBufferId,
+    propsBufferId,
+    create,
+  ) {
+    let m1 = cache.get(pipelineId);
+    if (!m1) {
+      m1 = new Map();
+      cache.set(pipelineId, m1);
+    }
+    let m2 = m1.get(styleBufferId);
+    if (!m2) {
+      m2 = new Map();
+      m1.set(styleBufferId, m2);
+    }
+    let m3 = m2.get(uniformsBufferId);
+    if (!m3) {
+      m3 = new Map();
+      m2.set(uniformsBufferId, m3);
+    }
+    let m4 = m3.get(patternSamplerId);
+    if (!m4) {
+      m4 = new Map();
+      m3.set(patternSamplerId, m4);
+    }
+    let m5 = m4.get(patternViewId);
+    if (!m5) {
+      m5 = new Map();
+      m4.set(patternViewId, m5);
+    }
+    let m6 = m5.get(varsBufferId);
+    if (!m6) {
+      m6 = new Map();
+      m5.set(varsBufferId, m6);
+    }
+    let bindGroup = m6.get(propsBufferId);
+    if (!bindGroup) {
+      bindGroup = create();
+      m6.set(propsBufferId, bindGroup);
+    }
+    return bindGroup;
   }
 
   /**
@@ -1070,13 +1221,18 @@ class VectorStyleRenderer {
 
           const strideBytes = STYLE_STRIDE * 4;
           const scratch = new Float32Array(STYLE_STRIDE);
+          const symbolShader =
+            discard === 'false'
+              ? baseIconShader
+              : this.styleShaders_[0].builder.getIconSymbolShader({discard});
+          /** @type {Float32Array|null} */
+          let batchScratch = null;
           pointBuffers.push({
             vertex: pointBuffer,
             style: styleBuffer,
-            symbolShader:
-              discard === 'false'
-                ? baseIconShader
-                : this.styleShaders_[0].builder.getIconSymbolShader({discard}),
+            symbolShader,
+            usesVars: this.shaderUsesVars_(symbolShader),
+            usesProps: this.shaderUsesProps_(symbolShader),
             pattern: texture,
             updateStyle: (device, ref, feature) => {
               if (!ref || ref > pointMaxRef) {
@@ -1088,6 +1244,66 @@ class VectorStyleRenderer {
                 ref * strideBytes,
                 scratch,
               );
+            },
+            updateStyleBatch: (device, dirtyRefs) => {
+              if (!dirtyRefs || dirtyRefs.size === 0) {
+                return;
+              }
+              /** @type {Array<number>} */
+              const refs = [];
+              for (const ref of dirtyRefs.keys()) {
+                if (ref && ref <= pointMaxRef) {
+                  refs.push(ref);
+                }
+              }
+              if (refs.length === 0) {
+                return;
+              }
+              if (refs.length === 1) {
+                const ref = refs[0];
+                const feature = dirtyRefs.get(ref);
+                if (feature) {
+                  writeStyle(scratch, 0, feature);
+                  device.queue.writeBuffer(
+                    styleBuffer.getBuffer(),
+                    ref * strideBytes,
+                    scratch,
+                  );
+                }
+                return;
+              }
+              refs.sort((a, b) => a - b);
+              let runStart = refs[0];
+              let prev = refs[0];
+              for (let i = 1; i <= refs.length; i++) {
+                const ref = i < refs.length ? refs[i] : null;
+                if (ref !== null && ref === prev + 1) {
+                  prev = ref;
+                  continue;
+                }
+                const runLen = prev - runStart + 1;
+                const needed = runLen * STYLE_STRIDE;
+                if (!batchScratch || batchScratch.length < needed) {
+                  batchScratch = new Float32Array(needed);
+                }
+                for (let r = runStart; r <= prev; r++) {
+                  const feature = dirtyRefs.get(r);
+                  if (!feature) {
+                    continue;
+                  }
+                  writeStyle(batchScratch, (r - runStart) * STYLE_STRIDE, feature);
+                }
+                device.queue.writeBuffer(
+                  styleBuffer.getBuffer(),
+                  runStart * strideBytes,
+                  batchScratch.subarray(0, needed),
+                );
+                if (ref === null) {
+                  break;
+                }
+                runStart = ref;
+                prev = ref;
+              }
             },
           });
           continue;
@@ -1253,13 +1469,18 @@ class VectorStyleRenderer {
 
           const strideBytes = STYLE_STRIDE * 4;
           const scratch = new Float32Array(STYLE_STRIDE);
+          const symbolShader =
+            discard === 'false'
+              ? baseShapeShader
+              : this.styleShaders_[0].builder.getShapeSymbolShader({discard});
+          /** @type {Float32Array|null} */
+          let batchScratch = null;
           pointBuffers.push({
             vertex: pointBuffer,
             style: styleBuffer,
-            symbolShader:
-              discard === 'false'
-                ? baseShapeShader
-                : this.styleShaders_[0].builder.getShapeSymbolShader({discard}),
+            symbolShader,
+            usesVars: this.shaderUsesVars_(symbolShader),
+            usesProps: this.shaderUsesProps_(symbolShader),
             updateStyle: (device, ref, feature) => {
               if (!ref || ref > pointMaxRef) {
                 return;
@@ -1270,6 +1491,66 @@ class VectorStyleRenderer {
                 ref * strideBytes,
                 scratch,
               );
+            },
+            updateStyleBatch: (device, dirtyRefs) => {
+              if (!dirtyRefs || dirtyRefs.size === 0) {
+                return;
+              }
+              /** @type {Array<number>} */
+              const refs = [];
+              for (const ref of dirtyRefs.keys()) {
+                if (ref && ref <= pointMaxRef) {
+                  refs.push(ref);
+                }
+              }
+              if (refs.length === 0) {
+                return;
+              }
+              if (refs.length === 1) {
+                const ref = refs[0];
+                const feature = dirtyRefs.get(ref);
+                if (feature) {
+                  writeStyle(scratch, 0, feature);
+                  device.queue.writeBuffer(
+                    styleBuffer.getBuffer(),
+                    ref * strideBytes,
+                    scratch,
+                  );
+                }
+                return;
+              }
+              refs.sort((a, b) => a - b);
+              let runStart = refs[0];
+              let prev = refs[0];
+              for (let i = 1; i <= refs.length; i++) {
+                const ref = i < refs.length ? refs[i] : null;
+                if (ref !== null && ref === prev + 1) {
+                  prev = ref;
+                  continue;
+                }
+                const runLen = prev - runStart + 1;
+                const needed = runLen * STYLE_STRIDE;
+                if (!batchScratch || batchScratch.length < needed) {
+                  batchScratch = new Float32Array(needed);
+                }
+                for (let r = runStart; r <= prev; r++) {
+                  const feature = dirtyRefs.get(r);
+                  if (!feature) {
+                    continue;
+                  }
+                  writeStyle(batchScratch, (r - runStart) * STYLE_STRIDE, feature);
+                }
+                device.queue.writeBuffer(
+                  styleBuffer.getBuffer(),
+                  runStart * strideBytes,
+                  batchScratch.subarray(0, needed),
+                );
+                if (ref === null) {
+                  break;
+                }
+                runStart = ref;
+                prev = ref;
+              }
             },
           });
           continue;
@@ -1403,15 +1684,20 @@ class VectorStyleRenderer {
 
           const strideBytes = STYLE_STRIDE * 4;
           const scratch = new Float32Array(STYLE_STRIDE);
+          const symbolShader =
+            discard === 'false'
+              ? baseCircleShader
+              : this.styleShaders_[0].builder.getCircleSymbolShader({
+                  discard,
+                });
+          /** @type {Float32Array|null} */
+          let batchScratch = null;
           pointBuffers.push({
             vertex: pointBuffer,
             style: styleBuffer,
-            symbolShader:
-              discard === 'false'
-                ? baseCircleShader
-                : this.styleShaders_[0].builder.getCircleSymbolShader({
-                    discard,
-                  }),
+            symbolShader,
+            usesVars: this.shaderUsesVars_(symbolShader),
+            usesProps: this.shaderUsesProps_(symbolShader),
             updateStyle: (device, ref, feature) => {
               if (!ref || ref > pointMaxRef) {
                 return;
@@ -1422,6 +1708,66 @@ class VectorStyleRenderer {
                 ref * strideBytes,
                 scratch,
               );
+            },
+            updateStyleBatch: (device, dirtyRefs) => {
+              if (!dirtyRefs || dirtyRefs.size === 0) {
+                return;
+              }
+              /** @type {Array<number>} */
+              const refs = [];
+              for (const ref of dirtyRefs.keys()) {
+                if (ref && ref <= pointMaxRef) {
+                  refs.push(ref);
+                }
+              }
+              if (refs.length === 0) {
+                return;
+              }
+              if (refs.length === 1) {
+                const ref = refs[0];
+                const feature = dirtyRefs.get(ref);
+                if (feature) {
+                  writeStyle(scratch, 0, feature);
+                  device.queue.writeBuffer(
+                    styleBuffer.getBuffer(),
+                    ref * strideBytes,
+                    scratch,
+                  );
+                }
+                return;
+              }
+              refs.sort((a, b) => a - b);
+              let runStart = refs[0];
+              let prev = refs[0];
+              for (let i = 1; i <= refs.length; i++) {
+                const ref = i < refs.length ? refs[i] : null;
+                if (ref !== null && ref === prev + 1) {
+                  prev = ref;
+                  continue;
+                }
+                const runLen = prev - runStart + 1;
+                const needed = runLen * STYLE_STRIDE;
+                if (!batchScratch || batchScratch.length < needed) {
+                  batchScratch = new Float32Array(needed);
+                }
+                for (let r = runStart; r <= prev; r++) {
+                  const feature = dirtyRefs.get(r);
+                  if (!feature) {
+                    continue;
+                  }
+                  writeStyle(batchScratch, (r - runStart) * STYLE_STRIDE, feature);
+                }
+                device.queue.writeBuffer(
+                  styleBuffer.getBuffer(),
+                  runStart * strideBytes,
+                  batchScratch.subarray(0, needed),
+                );
+                if (ref === null) {
+                  break;
+                }
+                runStart = ref;
+                prev = ref;
+              }
             },
           });
         }
@@ -1742,10 +2088,19 @@ class VectorStyleRenderer {
           });
         }
 
+        const strokeCode = strokeShader || this.defaultStrokeShader_;
+        /** @type {Float32Array|null} */
+        let batchScratch = null;
         lineStringBuffers.push({
           vertex: lineBuffer,
           style: lineStyleBuffer,
           strokeShader,
+          usesVars: strokeShader
+            ? this.shaderUsesVars_(strokeCode)
+            : this.defaultStrokeShaderUsesVars_,
+          usesProps: strokeShader
+            ? this.shaderUsesProps_(strokeCode)
+            : this.defaultStrokeShaderUsesProps_,
           pattern: patternTexture,
           updateStyle: (device, ref, feature) => {
             if (!ref || ref > lineMaxRef) {
@@ -1757,6 +2112,66 @@ class VectorStyleRenderer {
               ref * strideBytes,
               scratch,
             );
+          },
+          updateStyleBatch: (device, dirtyRefs) => {
+            if (!dirtyRefs || dirtyRefs.size === 0) {
+              return;
+            }
+            /** @type {Array<number>} */
+            const refs = [];
+            for (const ref of dirtyRefs.keys()) {
+              if (ref && ref <= lineMaxRef) {
+                refs.push(ref);
+              }
+            }
+            if (refs.length === 0) {
+              return;
+            }
+            if (refs.length === 1) {
+              const ref = refs[0];
+              const feature = dirtyRefs.get(ref);
+              if (feature) {
+                writeStyle(scratch, 0, feature);
+                device.queue.writeBuffer(
+                  lineStyleBuffer.getBuffer(),
+                  ref * strideBytes,
+                  scratch,
+                );
+              }
+              return;
+            }
+            refs.sort((a, b) => a - b);
+            let runStart = refs[0];
+            let prev = refs[0];
+            for (let i = 1; i <= refs.length; i++) {
+              const ref = i < refs.length ? refs[i] : null;
+              if (ref !== null && ref === prev + 1) {
+                prev = ref;
+                continue;
+              }
+              const runLen = prev - runStart + 1;
+              const needed = runLen * STYLE_STRIDE;
+              if (!batchScratch || batchScratch.length < needed) {
+                batchScratch = new Float32Array(needed);
+              }
+              for (let r = runStart; r <= prev; r++) {
+                const feature = dirtyRefs.get(r);
+                if (!feature) {
+                  continue;
+                }
+                writeStyle(batchScratch, (r - runStart) * STYLE_STRIDE, feature);
+              }
+              device.queue.writeBuffer(
+                lineStyleBuffer.getBuffer(),
+                runStart * strideBytes,
+                batchScratch.subarray(0, needed),
+              );
+              if (ref === null) {
+                break;
+              }
+              runStart = ref;
+              prev = ref;
+            }
           },
         });
       }
@@ -1973,16 +2388,26 @@ class VectorStyleRenderer {
             : 'false';
 
           const scratch = new Float32Array(4);
+          const fillShader =
+            hasFillPattern || polyDiscard !== 'false'
+              ? this.styleShaders_[0].builder.getFillShader({
+                  pattern: fillPatternOptions,
+                  discard: polyDiscard,
+                })
+              : undefined;
+          const fillCode = fillShader || this.defaultFillShader_;
+          /** @type {Float32Array|null} */
+          let batchScratch = null;
           polygonBuffers.push({
             vertex: polyBuffer,
             style: polyStyleBuffer,
-            fillShader:
-              hasFillPattern || polyDiscard !== 'false'
-                ? this.styleShaders_[0].builder.getFillShader({
-                    pattern: fillPatternOptions,
-                    discard: polyDiscard,
-                  })
-                : undefined,
+            fillShader,
+            usesVars: fillShader
+              ? this.shaderUsesVars_(fillCode)
+              : this.defaultFillShaderUsesVars_,
+            usesProps: fillShader
+              ? this.shaderUsesProps_(fillCode)
+              : this.defaultFillShaderUsesProps_,
             pattern: fillPatternTexture,
             updateStyle: (device, ref, feature) => {
               if (!ref || ref > polyMaxRef) {
@@ -1998,6 +2423,75 @@ class VectorStyleRenderer {
                 ref * 16,
                 scratch,
               );
+            },
+            updateStyleBatch: (device, dirtyRefs) => {
+              if (!dirtyRefs || dirtyRefs.size === 0) {
+                return;
+              }
+              /** @type {Array<number>} */
+              const refs = [];
+              for (const ref of dirtyRefs.keys()) {
+                if (ref && ref <= polyMaxRef) {
+                  refs.push(ref);
+                }
+              }
+              if (refs.length === 0) {
+                return;
+              }
+              if (refs.length === 1) {
+                const ref = refs[0];
+                const feature = dirtyRefs.get(ref);
+                if (feature) {
+                  const fillColor = resolveFillColor(feature);
+                  scratch[0] = fillColor[0];
+                  scratch[1] = fillColor[1];
+                  scratch[2] = fillColor[2];
+                  scratch[3] = fillColor[3];
+                  device.queue.writeBuffer(
+                    polyStyleBuffer.getBuffer(),
+                    ref * 16,
+                    scratch,
+                  );
+                }
+                return;
+              }
+              refs.sort((a, b) => a - b);
+              let runStart = refs[0];
+              let prev = refs[0];
+              for (let i = 1; i <= refs.length; i++) {
+                const ref = i < refs.length ? refs[i] : null;
+                if (ref !== null && ref === prev + 1) {
+                  prev = ref;
+                  continue;
+                }
+                const runLen = prev - runStart + 1;
+                const needed = runLen * 4;
+                if (!batchScratch || batchScratch.length < needed) {
+                  batchScratch = new Float32Array(needed);
+                }
+                for (let r = runStart; r <= prev; r++) {
+                  const feature = dirtyRefs.get(r);
+                  if (!feature) {
+                    continue;
+                  }
+                  const fillColor = resolveFillColor(feature);
+                  const base = (r - runStart) * 4;
+                  batchScratch[base + 0] = fillColor[0];
+                  batchScratch[base + 1] = fillColor[1];
+                  batchScratch[base + 2] = fillColor[2];
+                  batchScratch[base + 3] = fillColor[3];
+                }
+                device.queue.writeBuffer(
+                  polyStyleBuffer.getBuffer(),
+                  runStart * 16,
+                  batchScratch.subarray(0, needed),
+                );
+                if (ref === null) {
+                  break;
+                }
+                runStart = ref;
+                prev = ref;
+              }
             },
           });
         }
@@ -2107,7 +2601,64 @@ class VectorStyleRenderer {
       propsBuffer.getBuffer().unmap();
 
       const strideBytes = propStride * 16;
-      const scratch = new Float32Array(propStride * 4);
+      const rowStrideFloats = propStride * 4;
+      const scratch = new Float32Array(rowStrideFloats);
+      /** @type {Float32Array|null} */
+      let batchScratch = null;
+      const writeRow = (dst, base, feature) => {
+        dst.fill(0, base, base + rowStrideFloats);
+        for (let i = 0; i < propCount; i++) {
+          const name = propNames[i];
+          const value = feature.get(name);
+          let scalar = 0;
+          if (typeof value === 'number') {
+            scalar = Number.isFinite(value) ? value : 0;
+          } else if (typeof value === 'boolean') {
+            scalar = value ? 1 : 0;
+          } else if (typeof value === 'string') {
+            const n = Number(value);
+            scalar = Number.isFinite(n) ? n : 0;
+          }
+          dst[base + i * 8] = scalar;
+
+          if (Array.isArray(value)) {
+            const r = Number(value[0]);
+            const g = Number(value[1]);
+            const b = Number(value[2]);
+            if (Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(b)) {
+              const max = Math.max(r, g, b);
+              const scale = max > 1.5 ? 1 / 255 : 1;
+              const a = value.length > 3 ? Number(value[3]) : 1;
+              const alpha = Number.isFinite(a) ? a : 1;
+              const colorOffset = base + i * 8 + 4;
+              dst[colorOffset] = r * scale;
+              dst[colorOffset + 1] = g * scale;
+              dst[colorOffset + 2] = b * scale;
+              dst[colorOffset + 3] = alpha;
+            }
+          } else if (typeof value === 'string') {
+            try {
+              const rgba = asArray(value);
+              const r = Number(rgba[0]);
+              const g = Number(rgba[1]);
+              const b = Number(rgba[2]);
+              if (Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(b)) {
+                const max = Math.max(r, g, b);
+                const scale = max > 1.5 ? 1 / 255 : 1;
+                const a = rgba.length > 3 ? Number(rgba[3]) : 1;
+                const alpha = Number.isFinite(a) ? a : 1;
+                const colorOffset = base + i * 8 + 4;
+                dst[colorOffset] = r * scale;
+                dst[colorOffset + 1] = g * scale;
+                dst[colorOffset + 2] = b * scale;
+                dst[colorOffset + 3] = alpha;
+              }
+            } catch {
+              // ignore invalid colors
+            }
+          }
+        }
+      };
       featureProperties = {
         buffer: propsBuffer,
         propNames,
@@ -2117,71 +2668,72 @@ class VectorStyleRenderer {
           if (!ref || ref >= featureCount) {
             return;
           }
-          scratch.fill(0);
-          for (let i = 0; i < propCount; i++) {
-            const name = propNames[i];
-            const value = feature.get(name);
-            let scalar = 0;
-            if (typeof value === 'number') {
-              scalar = Number.isFinite(value) ? value : 0;
-            } else if (typeof value === 'boolean') {
-              scalar = value ? 1 : 0;
-            } else if (typeof value === 'string') {
-              const n = Number(value);
-              scalar = Number.isFinite(n) ? n : 0;
-            }
-            scratch[i * 8] = scalar;
-
-            if (Array.isArray(value)) {
-              const r = Number(value[0]);
-              const g = Number(value[1]);
-              const b = Number(value[2]);
-              if (
-                Number.isFinite(r) &&
-                Number.isFinite(g) &&
-                Number.isFinite(b)
-              ) {
-                const max = Math.max(r, g, b);
-                const scale = max > 1.5 ? 1 / 255 : 1;
-                const a = value.length > 3 ? Number(value[3]) : 1;
-                const alpha = Number.isFinite(a) ? a : 1;
-                const colorOffset = i * 8 + 4;
-                scratch[colorOffset] = r * scale;
-                scratch[colorOffset + 1] = g * scale;
-                scratch[colorOffset + 2] = b * scale;
-                scratch[colorOffset + 3] = alpha;
-              }
-            } else if (typeof value === 'string') {
-              try {
-                const rgba = asArray(value);
-                const r = Number(rgba[0]);
-                const g = Number(rgba[1]);
-                const b = Number(rgba[2]);
-                if (
-                  Number.isFinite(r) &&
-                  Number.isFinite(g) &&
-                  Number.isFinite(b)
-                ) {
-                  const max = Math.max(r, g, b);
-                  const scale = max > 1.5 ? 1 / 255 : 1;
-                  const a = rgba.length > 3 ? Number(rgba[3]) : 1;
-                  const alpha = Number.isFinite(a) ? a : 1;
-                  const colorOffset = i * 8 + 4;
-                  scratch[colorOffset] = r * scale;
-                  scratch[colorOffset + 1] = g * scale;
-                  scratch[colorOffset + 2] = b * scale;
-                  scratch[colorOffset + 3] = alpha;
-                }
-              } catch {
-                // ignore invalid colors
-              }
-            }
-          }
+          writeRow(scratch, 0, feature);
           device.queue.writeBuffer(
             propsBuffer.getBuffer(),
             ref * strideBytes,
             scratch,
           );
+        },
+        updateBatch: (device, dirtyRefs) => {
+          if (!dirtyRefs || dirtyRefs.size === 0) {
+            return;
+          }
+          /** @type {Array<number>} */
+          const refs = [];
+          for (const ref of dirtyRefs.keys()) {
+            if (ref && ref < featureCount) {
+              refs.push(ref);
+            }
+          }
+          if (refs.length === 0) {
+            return;
+          }
+          if (refs.length === 1) {
+            const ref = refs[0];
+            const feature = dirtyRefs.get(ref);
+            if (feature) {
+              writeRow(scratch, 0, feature);
+              device.queue.writeBuffer(
+                propsBuffer.getBuffer(),
+                ref * strideBytes,
+                scratch,
+              );
+            }
+            return;
+          }
+          refs.sort((a, b) => a - b);
+          let runStart = refs[0];
+          let prev = refs[0];
+          for (let i = 1; i <= refs.length; i++) {
+            const ref = i < refs.length ? refs[i] : null;
+            if (ref !== null && ref === prev + 1) {
+              prev = ref;
+              continue;
+            }
+            const runLen = prev - runStart + 1;
+            const needed = runLen * rowStrideFloats;
+            if (!batchScratch || batchScratch.length < needed) {
+              batchScratch = new Float32Array(needed);
+            }
+            for (let r = runStart; r <= prev; r++) {
+              const feature = dirtyRefs.get(r);
+              if (!feature) {
+                continue;
+              }
+              writeRow(batchScratch, (r - runStart) * rowStrideFloats, feature);
+            }
+            device.queue.writeBuffer(
+              propsBuffer.getBuffer(),
+              runStart * strideBytes,
+              batchScratch.subarray(0, needed),
+            );
+            if (ref === null) {
+              break;
+            }
+            runStart = ref;
+            prev = ref;
+          }
         },
       };
     }
@@ -2223,6 +2775,57 @@ class VectorStyleRenderer {
     }
 
     buffers.featureProperties?.update?.(device, ref, feature);
+  }
+
+  /**
+   * Batch update per-feature style data without regenerating geometry buffers.
+   * This reduces CPU overhead when many features change at once by coalescing
+   * GPU writes for consecutive refs.
+   * @param {Object} buffers Current buffers as returned by `generateBuffers()`.
+   * @param {Map<number, import("../../Feature.js").default|import("../../render/Feature.js").default>} dirtyRefs Dirty refs.
+   */
+  updateFeatureStylesBatch(buffers, dirtyRefs) {
+    const device = this.helper_.getDevice();
+    if (!device || !buffers || !dirtyRefs || dirtyRefs.size === 0) {
+      return;
+    }
+
+    const pointBuffers = buffers.pointBuffers || [];
+    for (const set of pointBuffers) {
+      set.updateStyleBatch?.(device, dirtyRefs);
+      if (!set.updateStyleBatch && set.updateStyle) {
+        for (const [ref, feature] of dirtyRefs) {
+          set.updateStyle(device, ref, feature);
+        }
+      }
+    }
+
+    const lineBuffers = buffers.lineStringBuffers || [];
+    for (const set of lineBuffers) {
+      set.updateStyleBatch?.(device, dirtyRefs);
+      if (!set.updateStyleBatch && set.updateStyle) {
+        for (const [ref, feature] of dirtyRefs) {
+          set.updateStyle(device, ref, feature);
+        }
+      }
+    }
+
+    const polyBuffers = buffers.polygonBuffers || [];
+    for (const set of polyBuffers) {
+      set.updateStyleBatch?.(device, dirtyRefs);
+      if (!set.updateStyleBatch && set.updateStyle) {
+        for (const [ref, feature] of dirtyRefs) {
+          set.updateStyle(device, ref, feature);
+        }
+      }
+    }
+
+    buffers.featureProperties?.updateBatch?.(device, dirtyRefs);
+    if (!buffers.featureProperties?.updateBatch && buffers.featureProperties?.update) {
+      for (const [ref, feature] of dirtyRefs) {
+        buffers.featureProperties.update(device, ref, feature);
+      }
+    }
   }
 
   /**
@@ -2600,73 +3203,76 @@ class VectorStyleRenderer {
         const styleBuffer = bufferSet.style.getBuffer();
         const count = vertexBuffer.size / 12;
 
-        const fillCode =
-          bufferSet.fillShader || this.styleShaders_[0].builder.getFillShader();
-        const fillCacheKey = `${format}|fill|${fillCode}`;
-        let pipeline = this.fillPipelineCache_.get(fillCacheKey);
-        if (!pipeline) {
-          const shaderModule = device.createShaderModule({code: fillCode});
-          pipeline = device.createRenderPipeline({
-            layout: 'auto',
-            vertex: {
-              module: shaderModule,
-              entryPoint: 'vs_main',
-              buffers: [
-                {
-                  arrayStride: 12, // 3 floats
-                  attributes: [
-                    {
-                      shaderLocation: 0,
-                      offset: 0,
-                      format: 'float32x2', // position
-                    },
-                    {
-                      shaderLocation: 1,
-                      offset: 8,
-                      format: 'float32', // featureIndex
-                    },
-                  ],
-                },
-              ],
-            },
-            fragment: {
-              module: shaderModule,
-              entryPoint: 'fs_main',
-              targets: [
-                {
-                  format,
-                  blend: {
-                    color: {
-                      srcFactor: 'one',
-                      dstFactor: 'one-minus-src-alpha',
-                      operation: 'add',
-                    },
-                    alpha: {
-                      srcFactor: 'one',
-                      dstFactor: 'one-minus-src-alpha',
-                      operation: 'add',
+        const fillCode = bufferSet.fillShader || this.defaultFillShader_;
+        const pipeline = this.getPipeline_(
+          this.fillPipelineCache_,
+          format,
+          fillCode,
+          () => {
+            const shaderModule = device.createShaderModule({code: fillCode});
+            return device.createRenderPipeline({
+              layout: 'auto',
+              vertex: {
+                module: shaderModule,
+                entryPoint: 'vs_main',
+                buffers: [
+                  {
+                    arrayStride: 12, // 3 floats
+                    attributes: [
+                      {
+                        shaderLocation: 0,
+                        offset: 0,
+                        format: 'float32x2', // position
+                      },
+                      {
+                        shaderLocation: 1,
+                        offset: 8,
+                        format: 'float32', // featureIndex
+                      },
+                    ],
+                  },
+                ],
+              },
+              fragment: {
+                module: shaderModule,
+                entryPoint: 'fs_main',
+                targets: [
+                  {
+                    format,
+                    blend: {
+                      color: {
+                        srcFactor: 'one',
+                        dstFactor: 'one-minus-src-alpha',
+                        operation: 'add',
+                      },
+                      alpha: {
+                        srcFactor: 'one',
+                        dstFactor: 'one-minus-src-alpha',
+                        operation: 'add',
+                      },
                     },
                   },
-                },
-              ],
-            },
-            primitive: {
-              topology: 'triangle-list',
-            },
-          });
-          this.fillPipelineCache_.set(fillCacheKey, pipeline);
-        }
+                ],
+              },
+              primitive: {
+                topology: 'triangle-list',
+              },
+            });
+          },
+        );
 
-        const varsBuffer = this.shaderUsesVars_(fillCode)
-          ? this.getVariablesBuffer_(device)
-          : null;
+        const usesVars = bufferSet.usesVars ?? this.shaderUsesVars_(fillCode);
+        const varsBuffer = usesVars ? this.getVariablesBuffer_(device) : null;
+        const usesProps =
+          bufferSet.usesProps ?? this.shaderUsesProps_(fillCode);
         const propsBuffer =
-          buffers.featureProperties && this.shaderUsesProps_(fillCode)
+          buffers.featureProperties && usesProps
             ? buffers.featureProperties.buffer.getBuffer()
             : null;
         const patternSampler = bufferSet.pattern?.sampler || null;
         const patternView = bufferSet.pattern?.view || null;
-        const bindGroupKey = [
+        const bindGroup = this.getCachedBindGroup_(
+          bindGroupCache,
           this.getObjectId_(pipeline),
           this.getObjectId_(styleBuffer),
           this.getObjectId_(this.uniformBuffer_),
@@ -2674,60 +3280,57 @@ class VectorStyleRenderer {
           this.getObjectId_(patternView),
           this.getObjectId_(varsBuffer),
           this.getObjectId_(propsBuffer),
-        ].join('|');
-        let bindGroup = bindGroupCache.get(bindGroupKey);
-        if (!bindGroup) {
-          bindGroup = device.createBindGroup({
-            layout: pipeline.getBindGroupLayout(0),
-            entries: [
-              {
-                binding: 0,
-                resource: {
-                  buffer: styleBuffer,
+          () =>
+            device.createBindGroup({
+              layout: pipeline.getBindGroupLayout(0),
+              entries: [
+                {
+                  binding: 0,
+                  resource: {
+                    buffer: styleBuffer,
+                  },
                 },
-              },
-              {
-                binding: 1,
-                resource: {
-                  buffer: this.uniformBuffer_,
+                {
+                  binding: 1,
+                  resource: {
+                    buffer: this.uniformBuffer_,
+                  },
                 },
-              },
-              ...(bufferSet.pattern
-                ? [
-                    {
-                      binding: 2,
-                      resource: bufferSet.pattern.sampler,
-                    },
-                    {
-                      binding: 3,
-                      resource: bufferSet.pattern.view,
-                    },
-                  ]
-                : []),
-              ...(varsBuffer
-                ? [
-                    {
-                      binding: 4,
-                      resource: {
-                        buffer: varsBuffer,
+                ...(bufferSet.pattern
+                  ? [
+                      {
+                        binding: 2,
+                        resource: bufferSet.pattern.sampler,
                       },
-                    },
-                  ]
-                : []),
-              ...(propsBuffer
-                ? [
-                    {
-                      binding: 5,
-                      resource: {
-                        buffer: propsBuffer,
+                      {
+                        binding: 3,
+                        resource: bufferSet.pattern.view,
                       },
-                    },
-                  ]
-                : []),
-            ],
-          });
-          bindGroupCache.set(bindGroupKey, bindGroup);
-        }
+                    ]
+                  : []),
+                ...(varsBuffer
+                  ? [
+                      {
+                        binding: 4,
+                        resource: {
+                          buffer: varsBuffer,
+                        },
+                      },
+                    ]
+                  : []),
+                ...(propsBuffer
+                  ? [
+                      {
+                        binding: 5,
+                        resource: {
+                          buffer: propsBuffer,
+                        },
+                      },
+                    ]
+                  : []),
+              ],
+            }),
+        );
 
         passEncoder.setPipeline(pipeline);
         passEncoder.setBindGroup(0, bindGroup);
@@ -2744,110 +3347,112 @@ class VectorStyleRenderer {
         // 12 floats per instance (see generation above)
         const count = vertexBuffer.size / (12 * 4);
 
-        const strokeCode =
-          bufferSet.strokeShader ||
-          this.styleShaders_[0].builder.getStrokeShader();
-        const cacheKey = `${format}|${strokeCode}`;
-        let pipeline = this.strokePipelineCache_.get(cacheKey);
-        if (!pipeline) {
-          const shaderModule = device.createShaderModule({code: strokeCode});
-          pipeline = device.createRenderPipeline({
-            layout: 'auto',
-            vertex: {
-              module: shaderModule,
-              entryPoint: 'vs_main',
-              buffers: [
-                {
-                  arrayStride: 48, // 12 floats per instance
-                  stepMode: 'instance',
-                  attributes: [
-                    {
-                      shaderLocation: 0,
-                      offset: 0,
-                      format: 'float32x2', // segmentStart
-                    },
-                    {
-                      shaderLocation: 1,
-                      offset: 8,
-                      format: 'float32', // measureStart
-                    },
-                    {
-                      shaderLocation: 2,
-                      offset: 12,
-                      format: 'float32x2', // segmentEnd
-                    },
-                    {
-                      shaderLocation: 3,
-                      offset: 20,
-                      format: 'float32', // measureEnd
-                    },
-                    {
-                      shaderLocation: 4,
-                      offset: 24,
-                      format: 'float32x2', // joinAngles (start,end)
-                    },
-                    {
-                      shaderLocation: 5,
-                      offset: 32,
-                      format: 'float32', // distanceLow
-                    },
-                    {
-                      shaderLocation: 6,
-                      offset: 36,
-                      format: 'float32', // distanceHigh
-                    },
-                    {
-                      shaderLocation: 7,
-                      offset: 40,
-                      format: 'float32', // angleTangentSum
-                    },
-                    {
-                      shaderLocation: 8,
-                      offset: 44,
-                      format: 'float32', // featureIndex
-                    },
-                  ],
-                },
-              ],
-            },
-            fragment: {
-              module: shaderModule,
-              entryPoint: 'fs_main',
-              targets: [
-                {
-                  format,
-                  blend: {
-                    color: {
-                      srcFactor: 'one',
-                      dstFactor: 'one-minus-src-alpha',
-                      operation: 'add',
-                    },
-                    alpha: {
-                      srcFactor: 'one',
-                      dstFactor: 'one-minus-src-alpha',
-                      operation: 'add',
+        const strokeCode = bufferSet.strokeShader || this.defaultStrokeShader_;
+        const pipeline = this.getPipeline_(
+          this.strokePipelineCache_,
+          format,
+          strokeCode,
+          () => {
+            const shaderModule = device.createShaderModule({code: strokeCode});
+            return device.createRenderPipeline({
+              layout: 'auto',
+              vertex: {
+                module: shaderModule,
+                entryPoint: 'vs_main',
+                buffers: [
+                  {
+                    arrayStride: 48, // 12 floats per instance
+                    stepMode: 'instance',
+                    attributes: [
+                      {
+                        shaderLocation: 0,
+                        offset: 0,
+                        format: 'float32x2', // segmentStart
+                      },
+                      {
+                        shaderLocation: 1,
+                        offset: 8,
+                        format: 'float32', // measureStart
+                      },
+                      {
+                        shaderLocation: 2,
+                        offset: 12,
+                        format: 'float32x2', // segmentEnd
+                      },
+                      {
+                        shaderLocation: 3,
+                        offset: 20,
+                        format: 'float32', // measureEnd
+                      },
+                      {
+                        shaderLocation: 4,
+                        offset: 24,
+                        format: 'float32x2', // joinAngles (start,end)
+                      },
+                      {
+                        shaderLocation: 5,
+                        offset: 32,
+                        format: 'float32', // distanceLow
+                      },
+                      {
+                        shaderLocation: 6,
+                        offset: 36,
+                        format: 'float32', // distanceHigh
+                      },
+                      {
+                        shaderLocation: 7,
+                        offset: 40,
+                        format: 'float32', // angleTangentSum
+                      },
+                      {
+                        shaderLocation: 8,
+                        offset: 44,
+                        format: 'float32', // featureIndex
+                      },
+                    ],
+                  },
+                ],
+              },
+              fragment: {
+                module: shaderModule,
+                entryPoint: 'fs_main',
+                targets: [
+                  {
+                    format,
+                    blend: {
+                      color: {
+                        srcFactor: 'one',
+                        dstFactor: 'one-minus-src-alpha',
+                        operation: 'add',
+                      },
+                      alpha: {
+                        srcFactor: 'one',
+                        dstFactor: 'one-minus-src-alpha',
+                        operation: 'add',
+                      },
                     },
                   },
-                },
-              ],
-            },
-            primitive: {
-              topology: 'triangle-strip',
-            },
-          });
-          this.strokePipelineCache_.set(cacheKey, pipeline);
-        }
+                ],
+              },
+              primitive: {
+                topology: 'triangle-strip',
+              },
+            });
+          },
+        );
 
-        const varsBuffer = this.shaderUsesVars_(strokeCode)
-          ? this.getVariablesBuffer_(device)
-          : null;
+        const usesVars = bufferSet.usesVars ?? this.shaderUsesVars_(strokeCode);
+        const varsBuffer = usesVars ? this.getVariablesBuffer_(device) : null;
+        const usesProps =
+          bufferSet.usesProps ?? this.shaderUsesProps_(strokeCode);
         const propsBuffer =
-          buffers.featureProperties && this.shaderUsesProps_(strokeCode)
+          buffers.featureProperties && usesProps
             ? buffers.featureProperties.buffer.getBuffer()
             : null;
         const patternSampler = bufferSet.pattern?.sampler || null;
         const patternView = bufferSet.pattern?.view || null;
-        const bindGroupKey = [
+        const bindGroup = this.getCachedBindGroup_(
+          bindGroupCache,
           this.getObjectId_(pipeline),
           this.getObjectId_(styleBuffer),
           this.getObjectId_(this.uniformBuffer_),
@@ -2855,60 +3460,57 @@ class VectorStyleRenderer {
           this.getObjectId_(patternView),
           this.getObjectId_(varsBuffer),
           this.getObjectId_(propsBuffer),
-        ].join('|');
-        let bindGroup = bindGroupCache.get(bindGroupKey);
-        if (!bindGroup) {
-          bindGroup = device.createBindGroup({
-            layout: pipeline.getBindGroupLayout(0),
-            entries: [
-              {
-                binding: 0,
-                resource: {
-                  buffer: styleBuffer,
+          () =>
+            device.createBindGroup({
+              layout: pipeline.getBindGroupLayout(0),
+              entries: [
+                {
+                  binding: 0,
+                  resource: {
+                    buffer: styleBuffer,
+                  },
                 },
-              },
-              {
-                binding: 1,
-                resource: {
-                  buffer: this.uniformBuffer_,
+                {
+                  binding: 1,
+                  resource: {
+                    buffer: this.uniformBuffer_,
+                  },
                 },
-              },
-              ...(bufferSet.pattern
-                ? [
-                    {
-                      binding: 2,
-                      resource: bufferSet.pattern.sampler,
-                    },
-                    {
-                      binding: 3,
-                      resource: bufferSet.pattern.view,
-                    },
-                  ]
-                : []),
-              ...(varsBuffer
-                ? [
-                    {
-                      binding: 4,
-                      resource: {
-                        buffer: varsBuffer,
+                ...(bufferSet.pattern
+                  ? [
+                      {
+                        binding: 2,
+                        resource: bufferSet.pattern.sampler,
                       },
-                    },
-                  ]
-                : []),
-              ...(propsBuffer
-                ? [
-                    {
-                      binding: 5,
-                      resource: {
-                        buffer: propsBuffer,
+                      {
+                        binding: 3,
+                        resource: bufferSet.pattern.view,
                       },
-                    },
-                  ]
-                : []),
-            ],
-          });
-          bindGroupCache.set(bindGroupKey, bindGroup);
-        }
+                    ]
+                  : []),
+                ...(varsBuffer
+                  ? [
+                      {
+                        binding: 4,
+                        resource: {
+                          buffer: varsBuffer,
+                        },
+                      },
+                    ]
+                  : []),
+                ...(propsBuffer
+                  ? [
+                      {
+                        binding: 5,
+                        resource: {
+                          buffer: propsBuffer,
+                        },
+                      },
+                    ]
+                  : []),
+              ],
+            }),
+        );
 
         passEncoder.setPipeline(pipeline);
         passEncoder.setBindGroup(0, bindGroup);
@@ -2925,74 +3527,77 @@ class VectorStyleRenderer {
         const instanceCount = vertexBuffer.size / 12;
 
         const symbolCode =
-          bufferSet.symbolShader ||
-          this.styleShaders_[0].builder.getCircleSymbolShader();
-        const symbolCacheKey = `${format}|symbol|${symbolCode}`;
-        let pipeline = this.symbolPipelineCache_.get(symbolCacheKey);
-        if (!pipeline) {
-          const shaderModule = device.createShaderModule({code: symbolCode});
-          pipeline = device.createRenderPipeline({
-            layout: 'auto',
-            vertex: {
-              module: shaderModule,
-              entryPoint: 'vs_main',
-              buffers: [
-                {
-                  arrayStride: 12,
-                  stepMode: 'instance',
-                  attributes: [
-                    {
-                      shaderLocation: 0,
-                      offset: 0,
-                      format: 'float32x2',
-                    },
-                    {
-                      shaderLocation: 1,
-                      offset: 8,
-                      format: 'float32',
-                    },
-                  ],
-                },
-              ],
-            },
-            fragment: {
-              module: shaderModule,
-              entryPoint: 'fs_main',
-              targets: [
-                {
-                  format,
-                  blend: {
-                    color: {
-                      srcFactor: 'one',
-                      dstFactor: 'one-minus-src-alpha',
-                      operation: 'add',
-                    },
-                    alpha: {
-                      srcFactor: 'one',
-                      dstFactor: 'one-minus-src-alpha',
-                      operation: 'add',
+          bufferSet.symbolShader || this.defaultCircleSymbolShader_;
+        const pipeline = this.getPipeline_(
+          this.symbolPipelineCache_,
+          format,
+          symbolCode,
+          () => {
+            const shaderModule = device.createShaderModule({code: symbolCode});
+            return device.createRenderPipeline({
+              layout: 'auto',
+              vertex: {
+                module: shaderModule,
+                entryPoint: 'vs_main',
+                buffers: [
+                  {
+                    arrayStride: 12,
+                    stepMode: 'instance',
+                    attributes: [
+                      {
+                        shaderLocation: 0,
+                        offset: 0,
+                        format: 'float32x2',
+                      },
+                      {
+                        shaderLocation: 1,
+                        offset: 8,
+                        format: 'float32',
+                      },
+                    ],
+                  },
+                ],
+              },
+              fragment: {
+                module: shaderModule,
+                entryPoint: 'fs_main',
+                targets: [
+                  {
+                    format,
+                    blend: {
+                      color: {
+                        srcFactor: 'one',
+                        dstFactor: 'one-minus-src-alpha',
+                        operation: 'add',
+                      },
+                      alpha: {
+                        srcFactor: 'one',
+                        dstFactor: 'one-minus-src-alpha',
+                        operation: 'add',
+                      },
                     },
                   },
-                },
-              ],
-            },
-            primitive: {
-              topology: 'triangle-strip',
-            },
-          });
-          this.symbolPipelineCache_.set(symbolCacheKey, pipeline);
-        }
+                ],
+              },
+              primitive: {
+                topology: 'triangle-strip',
+              },
+            });
+          },
+        );
 
-        const varsBuffer = this.shaderUsesVars_(symbolCode)
-          ? this.getVariablesBuffer_(device)
-          : null;
+        const usesVars = bufferSet.usesVars ?? this.shaderUsesVars_(symbolCode);
+        const varsBuffer = usesVars ? this.getVariablesBuffer_(device) : null;
+        const usesProps =
+          bufferSet.usesProps ?? this.shaderUsesProps_(symbolCode);
         const propsBuffer =
-          buffers.featureProperties && this.shaderUsesProps_(symbolCode)
+          buffers.featureProperties && usesProps
             ? buffers.featureProperties.buffer.getBuffer()
             : null;
         const patternSampler = bufferSet.pattern?.sampler || null;
         const patternView = bufferSet.pattern?.view || null;
-        const bindGroupKey = [
+        const bindGroup = this.getCachedBindGroup_(
+          bindGroupCache,
           this.getObjectId_(pipeline),
           this.getObjectId_(styleBuffer),
           this.getObjectId_(this.uniformBuffer_),
@@ -3000,60 +3605,57 @@ class VectorStyleRenderer {
           this.getObjectId_(patternView),
           this.getObjectId_(varsBuffer),
           this.getObjectId_(propsBuffer),
-        ].join('|');
-        let bindGroup = bindGroupCache.get(bindGroupKey);
-        if (!bindGroup) {
-          bindGroup = device.createBindGroup({
-            layout: pipeline.getBindGroupLayout(0),
-            entries: [
-              {
-                binding: 0,
-                resource: {
-                  buffer: styleBuffer,
+          () =>
+            device.createBindGroup({
+              layout: pipeline.getBindGroupLayout(0),
+              entries: [
+                {
+                  binding: 0,
+                  resource: {
+                    buffer: styleBuffer,
+                  },
                 },
-              },
-              {
-                binding: 1,
-                resource: {
-                  buffer: this.uniformBuffer_,
+                {
+                  binding: 1,
+                  resource: {
+                    buffer: this.uniformBuffer_,
+                  },
                 },
-              },
-              ...(bufferSet.pattern
-                ? [
-                    {
-                      binding: 2,
-                      resource: bufferSet.pattern.sampler,
-                    },
-                    {
-                      binding: 3,
-                      resource: bufferSet.pattern.view,
-                    },
-                  ]
-                : []),
-              ...(varsBuffer
-                ? [
-                    {
-                      binding: 4,
-                      resource: {
-                        buffer: varsBuffer,
+                ...(bufferSet.pattern
+                  ? [
+                      {
+                        binding: 2,
+                        resource: bufferSet.pattern.sampler,
                       },
-                    },
-                  ]
-                : []),
-              ...(propsBuffer
-                ? [
-                    {
-                      binding: 5,
-                      resource: {
-                        buffer: propsBuffer,
+                      {
+                        binding: 3,
+                        resource: bufferSet.pattern.view,
                       },
-                    },
-                  ]
-                : []),
-            ],
-          });
-          bindGroupCache.set(bindGroupKey, bindGroup);
-        }
+                    ]
+                  : []),
+                ...(varsBuffer
+                  ? [
+                      {
+                        binding: 4,
+                        resource: {
+                          buffer: varsBuffer,
+                        },
+                      },
+                    ]
+                  : []),
+                ...(propsBuffer
+                  ? [
+                      {
+                        binding: 5,
+                        resource: {
+                          buffer: propsBuffer,
+                        },
+                      },
+                    ]
+                  : []),
+              ],
+            }),
+        );
 
         passEncoder.setPipeline(pipeline);
         passEncoder.setBindGroup(0, bindGroup);

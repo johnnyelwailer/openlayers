@@ -363,12 +363,19 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
 
     if (this.currentBuffers_) {
       if (this.styleDirtyRefs_.size > 0) {
-        for (const [ref, feature] of this.styleDirtyRefs_) {
-          this.styleRenderer_.updateFeatureStyles(
+        if (this.styleRenderer_.updateFeatureStylesBatch) {
+          this.styleRenderer_.updateFeatureStylesBatch(
             this.currentBuffers_,
-            ref,
-            feature,
+            this.styleDirtyRefs_,
           );
+        } else {
+          for (const [ref, feature] of this.styleDirtyRefs_) {
+            this.styleRenderer_.updateFeatureStyles(
+              this.currentBuffers_,
+              ref,
+              feature,
+            );
+          }
         }
         this.styleDirtyRefs_.clear();
       }

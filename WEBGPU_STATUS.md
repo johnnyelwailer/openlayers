@@ -219,6 +219,7 @@ These are follow-up notes after hardening `get()` support in the WGSL backend vi
 - **Per-update allocations**: Style/props update paths now reuse scratch `Float32Array` instances; remaining allocations are dominated by user expressions/resolvers rather than the renderer’s buffer upload scaffolding.
 - **Memory scaling**: `featureProperties` scales as `featureCount * propCount * 32 bytes` (two `vec4f` slots per property: scalar + color) and is allocated only when WGSL expressions need it (e.g. filters/expressions), not for CPU-only `get()` style fields. If many distinct `get()` properties are referenced, memory can still grow quickly.
 - **Per-frame GC hitches**: Remaining “micro hitches” are often driven by per-frame allocations (transform/mat4 temporaries, composite bind group creation, cache-key string construction). Reducing allocations in `render()` and caching composite resources tends to smooth fast panning/zooming.
+- **Cache key allocations**: Avoid allocating string cache keys in hot render loops (bind groups and pipeline caches) by caching with nested `Map`s keyed by stable object ids / shader code strings.
 
 ### WebGPU-specific optimization opportunities (future work)
 - **Render bundles**: Record draw calls once for mostly-static layers and replay each frame with only uniform updates; reduces CPU encoding overhead on pan/zoom.
