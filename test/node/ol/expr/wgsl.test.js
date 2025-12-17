@@ -165,4 +165,12 @@ describe('ol/expr/wgsl', () => {
       '(2.0 >= 1.0 && 2.0 <= 3.0)',
     );
   });
+
+  it('compiles has()', () => {
+    const parsingContext = newParsingContext();
+    const expr = parse(['has', 'foo'], BooleanType, parsingContext);
+    expect(compileExpressionToWgsl(expr, ctx)).to.be(
+      '(get_foo() != -9999999.0)',
+    );
+  });
 });

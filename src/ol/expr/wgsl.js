@@ -11,6 +11,7 @@ import {
   StringType,
   isType,
 } from './expression.js';
+import {UNDEFINED_PROP_VALUE} from './gpu.js';
 
 /**
  * @typedef {'f32'|'bool'|'vec4f'} WGSLType
@@ -123,6 +124,14 @@ export function compileExpressionToWgsl(expression, ctx, options) {
     const firstArg = /** @type {LiteralExpression} */ (call.args[0]);
     const propName = /** @type {string} */ (firstArg.value);
     return ctx.get(propName, call.type);
+  }
+
+  if (op === Ops.Has) {
+    const firstArg = /** @type {LiteralExpression} */ (call.args[0]);
+    const propName = /** @type {string} */ (firstArg.value);
+    return `(${ctx.get(propName, NumberType)} != ${numberToWgsl(
+      UNDEFINED_PROP_VALUE,
+    )})`;
   }
 
   if (op === Ops.Var) {

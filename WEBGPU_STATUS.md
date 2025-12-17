@@ -13,6 +13,9 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
     * Made pattern sub-rect rows meaningful by auto-injecting required `fill-pattern-src` / `stroke-pattern-src` companions for `fill-pattern-*` / `stroke-pattern-*` property scenarios (avoids false positives where a property is a no-op without a pattern source).
     * Captures WebGPU validation errors per scenario (via `pushErrorScope('validation')`) so failures aren’t reduced to pixel diffs.
 *   **WebGPU Pattern Option Hardening**: WebGPU now rejects expressions for `*-pattern-size`, `*-pattern-offset`, `*-pattern-offset-origin`, and stroke `*-pattern-spacing` / `*-pattern-start-offset` with clear errors instead of emitting invalid WGSL.
+*   **Expression + Style Parity**:
+    * WGSL now supports `['has', ...]`, and missing feature properties in the WebGPU `props` buffer are encoded with `UNDEFINED_PROP_VALUE = -9999999` (aligns with WebGL “undefined” semantics for numeric reads).
+    * Polygon `fill-color` now supports non-trivial expressions (e.g. `case`/`match`) when they depend only on feature properties and style variables (map-state expressions still not supported for CPU-evaluated fill colors).
 *   **Compatibility Matrix Baseline Updated**: Regenerated `test/compat-matrix/baseline.json` after the above changes.
 *   **Validation (Latest)**: `npm run lint`, `npm run build-full`, `node test/compat-matrix/test.js --headless`, `node test/compat-matrix/test.js --headless --fix`, `npm run test-node`, and `node test/rendering/test.js --match webgpu` passing locally.
 

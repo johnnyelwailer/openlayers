@@ -4,11 +4,17 @@
 import earcut from 'earcut';
 import {asArray} from '../../color.js';
 import {
+  buildExpression as buildCpuExpression,
+  newEvaluationContext,
+} from '../../expr/cpu.js';
+import {
   BooleanType,
   ColorType,
   NumberType,
   isType,
+  newParsingContext,
 } from '../../expr/expression.js';
+import {UNDEFINED_PROP_VALUE} from '../../expr/gpu.js';
 import {
   create as createTransform,
   multiply as multiplyTransform,
@@ -2298,11 +2304,9 @@ class VectorStyleRenderer {
 
       const fillColor = s['fill-color'];
       const hasFillColor =
-        typeof fillColor === 'string' ||
-        (Array.isArray(fillColor) &&
-          (fillColor[0] === 'get' ||
-            fillColor[0] === 'var' ||
-            typeof fillColor[0] !== 'string'));
+        fillColor !== undefined &&
+        fillColor !== null &&
+        (typeof fillColor === 'string' || Array.isArray(fillColor));
 
       return hasFillColor || typeof patternSrc === 'string';
     });
@@ -2378,22 +2382,77 @@ class VectorStyleRenderer {
 
           const fillColorExpr = polyStyle['fill-color'];
           const fallbackTint = hasFillPattern ? [1, 1, 1, 1] : [0, 0, 1, 1];
+          const fillColorIsExpression =
+            Array.isArray(fillColorExpr) &&
+            typeof fillColorExpr[0] === 'string';
+          const fillColorNeedsCpuEval =
+            fillColorIsExpression &&
+            fillColorExpr[0] !== 'get' &&
+            fillColorExpr[0] !== 'var';
+
+          /** @type {import("../../expr/cpu.js").ExpressionEvaluator|null} */
+          let fillColorEvaluator = null;
+          /** @type {import("../../expr/cpu.js").EvaluationContext|null} */
+          let fillColorEvalCtx = null;
+          /** @type {Array<string>|null} */
+          let fillColorPropNames = null;
+          /** @type {Object|null} */
+          let fillColorPropsScratch = null;
+
+          if (fillColorNeedsCpuEval) {
+            const parsing = newParsingContext();
+            try {
+              fillColorEvaluator = buildCpuExpression(
+                /** @type {any} */ (fillColorExpr),
+                ColorType,
+                parsing,
+              );
+            } catch (err) {
+              throw new Error(
+                `WebGPU layers do not support this fill-color expression: ${String(
+                  err?.message || err,
+                )}`,
+              );
+            }
+            if (parsing.mapState) {
+              throw new Error(
+                'WebGPU layers do not support map-state expressions for the fill-color style property',
+              );
+            }
+            fillColorEvalCtx = newEvaluationContext();
+            fillColorEvalCtx.variables = this.variables_;
+            fillColorPropNames = Array.from(parsing.properties);
+            fillColorPropsScratch = {};
+          }
+
           const resolveFillColor = (feature) => {
             if (!fillColorExpr) {
               return fallbackTint;
             }
-            if (
-              Array.isArray(fillColorExpr) &&
-              fillColorExpr.length === 2 &&
-              fillColorExpr[0] === 'var'
-            ) {
+            if (fillColorEvaluator && fillColorEvalCtx) {
+              const scratch = fillColorPropsScratch;
+              const propNames = fillColorPropNames;
+              for (let i = 0; i < propNames.length; i++) {
+                const name = propNames[i];
+                scratch[name] = feature.get(name);
+              }
+              fillColorEvalCtx.properties = scratch;
+              fillColorEvalCtx.featureId = feature.getId?.() ?? null;
+              fillColorEvalCtx.geometryType = 'Polygon';
+              const resolved = fillColorEvaluator(fillColorEvalCtx);
               return resolveColor(
-                this.variables_[fillColorExpr[1]],
+                resolved,
                 feature,
                 fallbackTint,
+                this.variables_,
               );
             }
-            return resolveColor(fillColorExpr, feature, fallbackTint);
+            return resolveColor(
+              fillColorExpr,
+              feature,
+              fallbackTint,
+              this.variables_,
+            );
           };
 
           /** @type {StrokePatternTexture|undefined} */
@@ -2659,14 +2718,20 @@ class VectorStyleRenderer {
         for (let i = 0; i < propCount; i++) {
           const name = propNames[i];
           const value = feature.get(name);
-          let scalar = 0;
-          if (typeof value === 'number') {
-            scalar = Number.isFinite(value) ? value : 0;
-          } else if (typeof value === 'boolean') {
-            scalar = value ? 1 : 0;
-          } else if (typeof value === 'string') {
-            const n = Number(value);
-            scalar = Number.isFinite(n) ? n : 0;
+          let scalar = UNDEFINED_PROP_VALUE;
+          if (value !== undefined && value !== null) {
+            if (typeof value === 'number') {
+              scalar = Number.isFinite(value) ? value : 0;
+            } else if (typeof value === 'boolean') {
+              scalar = value ? 1 : 0;
+            } else if (typeof value === 'string') {
+              const n = Number(value);
+              scalar = Number.isFinite(n) ? n : 0;
+            } else {
+              // Preserve existing best-effort behavior: non-numeric values pack as 0
+              // (this also makes has() treat the property as present).
+              scalar = 0;
+            }
           }
           const scalarOffset = (ref * propStride + i * 2) * 4;
           data[scalarOffset] = scalar;
@@ -2739,14 +2804,18 @@ class VectorStyleRenderer {
         for (let i = 0; i < propCount; i++) {
           const name = propNames[i];
           const value = feature.get(name);
-          let scalar = 0;
-          if (typeof value === 'number') {
-            scalar = Number.isFinite(value) ? value : 0;
-          } else if (typeof value === 'boolean') {
-            scalar = value ? 1 : 0;
-          } else if (typeof value === 'string') {
-            const n = Number(value);
-            scalar = Number.isFinite(n) ? n : 0;
+          let scalar = UNDEFINED_PROP_VALUE;
+          if (value !== undefined && value !== null) {
+            if (typeof value === 'number') {
+              scalar = Number.isFinite(value) ? value : 0;
+            } else if (typeof value === 'boolean') {
+              scalar = value ? 1 : 0;
+            } else if (typeof value === 'string') {
+              const n = Number(value);
+              scalar = Number.isFinite(n) ? n : 0;
+            } else {
+              scalar = 0;
+            }
           }
           dst[base + i * 8] = scalar;
 
@@ -3401,10 +3470,9 @@ class VectorStyleRenderer {
           },
         );
 
-        const usesVars = bufferSet.usesVars ?? this.shaderUsesVars_(fillCode);
+        const usesVars = bufferSet.usesVars;
         const varsBuffer = usesVars ? this.getVariablesBuffer_(device) : null;
-        const usesProps =
-          bufferSet.usesProps ?? this.shaderUsesProps_(fillCode);
+        const usesProps = bufferSet.usesProps;
         const propsBuffer =
           buffers.featureProperties && usesProps
             ? buffers.featureProperties.buffer.getBuffer()
@@ -3581,10 +3649,9 @@ class VectorStyleRenderer {
           },
         );
 
-        const usesVars = bufferSet.usesVars ?? this.shaderUsesVars_(strokeCode);
+        const usesVars = bufferSet.usesVars;
         const varsBuffer = usesVars ? this.getVariablesBuffer_(device) : null;
-        const usesProps =
-          bufferSet.usesProps ?? this.shaderUsesProps_(strokeCode);
+        const usesProps = bufferSet.usesProps;
         const propsBuffer =
           buffers.featureProperties && usesProps
             ? buffers.featureProperties.buffer.getBuffer()
@@ -3726,10 +3793,9 @@ class VectorStyleRenderer {
           },
         );
 
-        const usesVars = bufferSet.usesVars ?? this.shaderUsesVars_(symbolCode);
+        const usesVars = bufferSet.usesVars;
         const varsBuffer = usesVars ? this.getVariablesBuffer_(device) : null;
-        const usesProps =
-          bufferSet.usesProps ?? this.shaderUsesProps_(symbolCode);
+        const usesProps = bufferSet.usesProps;
         const propsBuffer =
           buffers.featureProperties && usesProps
             ? buffers.featureProperties.buffer.getBuffer()

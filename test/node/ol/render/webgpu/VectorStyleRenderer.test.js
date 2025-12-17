@@ -1,4 +1,5 @@
 import {ColorType, NumberType} from '../../../../../src/ol/expr/expression.js';
+import {UNDEFINED_PROP_VALUE} from '../../../../../src/ol/expr/gpu.js';
 import VectorStyleRenderer from '../../../../../src/ol/render/webgpu/VectorStyleRenderer.js';
 import expect from '../../../expect.js';
 
@@ -354,6 +355,173 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
     expect(floats[13]).to.be(0);
     expect(floats[14]).to.be(0);
     expect(floats[15]).to.be(1);
+  });
+
+  it('uses a sentinel value for missing feature properties in props packing', async () => {
+    /** @type {ArrayBuffer|null} */
+    let propsMapped = null;
+
+    const device = {
+      createBuffer: ({size}) => {
+        const mapped = new ArrayBuffer(size);
+        // featureCount=2, propStride=2 => 2*2*16 = 64 bytes
+        if (size === 64) {
+          propsMapped = mapped;
+        }
+        return {
+          size,
+          getMappedRange: () => mapped,
+          unmap: () => {},
+        };
+      },
+      queue: {
+        writeBuffer: () => {},
+      },
+    };
+    const helper = {
+      getDevice: () => device,
+    };
+
+    const renderer = new VectorStyleRenderer(
+      [
+        {
+          style: {
+            'circle-radius': 10,
+            'circle-fill-color': [255, 0, 0, 1],
+          },
+          filter: ['==', ['get', 'limit'], 1],
+        },
+      ],
+      {},
+      /** @type {*} */ (helper),
+    );
+
+    const feature = {
+      get: () => undefined,
+    };
+    const geometryBatch = {
+      pointBatch: {
+        entries: {
+          a: {
+            ref: 1,
+            feature,
+            flatCoordss: [[0, 0]],
+          },
+        },
+      },
+      lineStringBatch: {entries: {}},
+      polygonBatch: {entries: {}},
+    };
+
+    await renderer.generateBuffers(
+      /** @type {*} */ (geometryBatch),
+      /** @type {*} */ ([]),
+    );
+
+    expect(propsMapped).to.not.be(null);
+    const floats = new Float32Array(propsMapped);
+    // First property scalar slot for ref 1.
+    expect(floats[8]).to.be(UNDEFINED_PROP_VALUE);
+  });
+
+  it('supports non-trivial fill-color expressions for polygon style buffers', async () => {
+    /** @type {ArrayBuffer|null} */
+    let polyStyleMapped = null;
+    const writes = [];
+
+    const device = {
+      createBuffer: ({size}) => {
+        const mapped = new ArrayBuffer(size);
+        // (polyMaxRef + 1) * vec4f = 2 * 16 bytes
+        if (size === 32) {
+          polyStyleMapped = mapped;
+        }
+        return {
+          size,
+          getMappedRange: () => mapped,
+          unmap: () => {},
+        };
+      },
+      queue: {
+        writeBuffer: (buffer, offset, data) => {
+          writes.push({buffer, offset, data});
+        },
+      },
+    };
+    const helper = {
+      getDevice: () => device,
+    };
+
+    const renderer = new VectorStyleRenderer(
+      [
+        {
+          style: {
+            'fill-color': [
+              'case',
+              ['==', ['get', 'k'], 1],
+              'rgb(255,0,0)',
+              'rgb(0,0,255)',
+            ],
+          },
+        },
+      ],
+      {},
+      /** @type {*} */ (helper),
+    );
+
+    const featureA = {
+      get: (name) => (name === 'k' ? 1 : undefined),
+      getId: () => null,
+    };
+    const geometryBatch = {
+      pointBatch: {entries: {}},
+      lineStringBatch: {entries: {}},
+      polygonBatch: {
+        entries: {
+          a: {
+            ref: 1,
+            feature: featureA,
+            flatCoordss: [[0, 0, 10, 0, 10, 10, 0, 10]],
+            ringsVerticesCounts: [[4]],
+          },
+        },
+      },
+    };
+
+    const buffers = await renderer.generateBuffers(
+      /** @type {*} */ (geometryBatch),
+      /** @type {*} */ ([]),
+    );
+
+    expect(buffers.polygonBuffers.length).to.be(1);
+    expect(polyStyleMapped).to.not.be(null);
+    const floats = new Float32Array(polyStyleMapped);
+    // ref 1 color is stored at offset 4.
+    expect(floats[4]).to.be(1);
+    expect(floats[5]).to.be(0);
+    expect(floats[6]).to.be(0);
+    expect(floats[7]).to.be(1);
+
+    const featureB = {
+      get: (name) => (name === 'k' ? 2 : undefined),
+      getId: () => null,
+    };
+    writes.length = 0;
+    buffers.polygonBuffers[0].updateStyle(
+      /** @type {*} */ (device),
+      1,
+      /** @type {*} */ (featureB),
+    );
+
+    expect(writes.length).to.be.greaterThan(0);
+    const last = writes[writes.length - 1];
+    expect(last.offset).to.be(16);
+    expect(last.data instanceof Float32Array).to.be(true);
+    const updated = /** @type {Float32Array} */ (last.data);
+    expect(updated[0]).to.be(0);
+    expect(updated[1]).to.be(0);
+    expect(updated[2]).to.be(1);
+    expect(updated[3]).to.be(1);
   });
 
   it('writes layer opacity to uniform buffer', () => {
