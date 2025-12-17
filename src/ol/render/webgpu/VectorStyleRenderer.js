@@ -100,6 +100,27 @@ function resolveNumber(value, feature, fallback, variables) {
 }
 
 /**
+ * @param {*} value Value.
+ * @return {boolean} Whether value is a finite number.
+ */
+function isFiniteNumberLiteral(value) {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+/**
+ * @param {*} value Value.
+ * @return {value is [number, number]} Whether value is a [number, number] tuple.
+ */
+function isSizeLiteral(value) {
+  return (
+    Array.isArray(value) &&
+    value.length === 2 &&
+    isFiniteNumberLiteral(value[0]) &&
+    isFiniteNumberLiteral(value[1])
+  );
+}
+
+/**
  * @param {*} expr Encoded expression.
  * @return {number} Maximum numeric output found, or NaN if unknown.
  */
@@ -1933,13 +1954,43 @@ class VectorStyleRenderer {
         if (hasStrokePattern) {
           patternTexture = await this.getPatternTexture_(patternSrc);
           const textureSize = patternTexture.size;
-          const sampleSize = Array.isArray(style['stroke-pattern-size'])
-            ? style['stroke-pattern-size']
+          const sampleSizeValue = style['stroke-pattern-size'];
+          if (
+            sampleSizeValue !== undefined &&
+            sampleSizeValue !== null &&
+            !isSizeLiteral(sampleSizeValue)
+          ) {
+            throw new Error(
+              'WebGPU layers do not support expressions for the stroke-pattern-size style property',
+            );
+          }
+          const sampleSize = isSizeLiteral(sampleSizeValue)
+            ? sampleSizeValue
             : textureSize;
-          const baseOffset = Array.isArray(style['stroke-pattern-offset'])
-            ? style['stroke-pattern-offset']
-            : [0, 0];
-          const origin = style['stroke-pattern-offset-origin'] || 'top-left';
+
+          const offsetValue = style['stroke-pattern-offset'];
+          if (
+            offsetValue !== undefined &&
+            offsetValue !== null &&
+            !isSizeLiteral(offsetValue)
+          ) {
+            throw new Error(
+              'WebGPU layers do not support expressions for the stroke-pattern-offset style property',
+            );
+          }
+          const baseOffset = isSizeLiteral(offsetValue) ? offsetValue : [0, 0];
+
+          const originValue = style['stroke-pattern-offset-origin'];
+          if (
+            originValue !== undefined &&
+            originValue !== null &&
+            typeof originValue !== 'string'
+          ) {
+            throw new Error(
+              'WebGPU layers do not support expressions for the stroke-pattern-offset-origin style property',
+            );
+          }
+          const origin = originValue || 'top-left';
           let offsetX = baseOffset[0] || 0;
           let offsetY = baseOffset[1] || 0;
           if (origin === 'top-right') {
@@ -1951,10 +2002,29 @@ class VectorStyleRenderer {
             offsetY = textureSize[1] - sampleSize[1] - offsetY;
           }
 
-          const spacingPx = Number(style['stroke-pattern-spacing'] || 0);
-          const startOffsetPx = Number(
-            style['stroke-pattern-start-offset'] || 0,
-          );
+          const spacingValue = style['stroke-pattern-spacing'];
+          if (
+            spacingValue !== undefined &&
+            spacingValue !== null &&
+            !isFiniteNumberLiteral(spacingValue)
+          ) {
+            throw new Error(
+              'WebGPU layers do not support expressions for the stroke-pattern-spacing style property',
+            );
+          }
+          const spacingPx = spacingValue || 0;
+
+          const startOffsetValue = style['stroke-pattern-start-offset'];
+          if (
+            startOffsetValue !== undefined &&
+            startOffsetValue !== null &&
+            !isFiniteNumberLiteral(startOffsetValue)
+          ) {
+            throw new Error(
+              'WebGPU layers do not support expressions for the stroke-pattern-start-offset style property',
+            );
+          }
+          const startOffsetPx = startOffsetValue || 0;
           const tintEnabled = 'stroke-color' in style;
           patternOptions = {
             textureSize: `vec2f(${textureSize[0]}, ${textureSize[1]})`,
@@ -2333,14 +2403,45 @@ class VectorStyleRenderer {
           if (hasFillPattern) {
             fillPatternTexture = await this.getPatternTexture_(fillPatternSrc);
             const textureSize = fillPatternTexture.size;
-            const sampleSize = Array.isArray(polyStyle['fill-pattern-size'])
-              ? polyStyle['fill-pattern-size']
+            const sampleSizeValue = polyStyle['fill-pattern-size'];
+            if (
+              sampleSizeValue !== undefined &&
+              sampleSizeValue !== null &&
+              !isSizeLiteral(sampleSizeValue)
+            ) {
+              throw new Error(
+                'WebGPU layers do not support expressions for the fill-pattern-size style property',
+              );
+            }
+            const sampleSize = isSizeLiteral(sampleSizeValue)
+              ? sampleSizeValue
               : textureSize;
-            const baseOffset = Array.isArray(polyStyle['fill-pattern-offset'])
-              ? polyStyle['fill-pattern-offset']
+
+            const offsetValue = polyStyle['fill-pattern-offset'];
+            if (
+              offsetValue !== undefined &&
+              offsetValue !== null &&
+              !isSizeLiteral(offsetValue)
+            ) {
+              throw new Error(
+                'WebGPU layers do not support expressions for the fill-pattern-offset style property',
+              );
+            }
+            const baseOffset = isSizeLiteral(offsetValue)
+              ? offsetValue
               : [0, 0];
-            const origin =
-              polyStyle['fill-pattern-offset-origin'] || 'top-left';
+
+            const originValue = polyStyle['fill-pattern-offset-origin'];
+            if (
+              originValue !== undefined &&
+              originValue !== null &&
+              typeof originValue !== 'string'
+            ) {
+              throw new Error(
+                'WebGPU layers do not support expressions for the fill-pattern-offset-origin style property',
+              );
+            }
+            const origin = originValue || 'top-left';
             let offsetX = baseOffset[0] || 0;
             let offsetY = baseOffset[1] || 0;
             if (origin === 'top-right') {

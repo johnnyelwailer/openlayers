@@ -459,6 +459,27 @@ function generateScenarios(properties) {
         style['stroke-color'] = [0, 0, 255, 1];
         style['stroke-width'] = 8;
       }
+      // Pattern sub-rect / companion properties are no-ops without a pattern source.
+      // Ensure these scenarios actually exercise the pattern pipeline.
+      if (
+        prop.name.startsWith('fill-pattern-') &&
+        !('fill-pattern-src' in style)
+      ) {
+        style['fill-pattern-src'] = patternSrc;
+        if (!('fill-color' in style)) {
+          style['fill-color'] = [255, 0, 0, 0.6];
+        }
+      }
+      if (
+        prop.name.startsWith('stroke-pattern-') &&
+        !('stroke-pattern-src' in style)
+      ) {
+        style['stroke-pattern-src'] = patternSrc;
+        if (!('stroke-width' in style)) {
+          style['stroke-color'] = [0, 0, 255, 1];
+          style['stroke-width'] = 8;
+        }
+      }
 
       scenarios.push({
         id: `${prop.name}/${v.name}`,
@@ -907,6 +928,12 @@ function generateScenarios(properties) {
 
   // Transform ops.
   pushExprProbe('case', NumberType, ['case', true, 1, 0]);
+  pushExprProbe('case-color', ColorType, [
+    'case',
+    ['==', ['get', 'x'], 1],
+    'rgb(255,0,0)',
+    'rgb(0,0,255)',
+  ]);
   pushExprProbe('interpolate-linear', NumberType, [
     'interpolate',
     ['linear'],
@@ -915,6 +942,15 @@ function generateScenarios(properties) {
     0,
     1,
     1,
+  ]);
+  pushExprProbe('interpolate-linear-color', ColorType, [
+    'interpolate',
+    ['linear'],
+    ['get', 'x'],
+    0,
+    'rgb(0,0,0)',
+    1,
+    'rgb(255,0,0)',
   ]);
   pushExprProbe('match-number', NumberType, [
     'match',
@@ -926,6 +962,15 @@ function generateScenarios(properties) {
     3,
     1,
     0,
+  ]);
+  pushExprProbe('match-color', ColorType, [
+    'match',
+    ['get', 'x'],
+    1,
+    'rgb(255,0,0)',
+    2,
+    'rgb(0,0,255)',
+    'rgb(0,0,0)',
   ]);
   pushExprProbe('match-string', NumberType, [
     'match',
@@ -949,6 +994,11 @@ function generateScenarios(properties) {
   pushExprProbe('string', StringType, ['string', 1, 'a']);
   pushExprProbe('concat', StringType, ['concat', 'a', 'b']);
   pushExprProbe('coalesce', NumberType, ['coalesce', ['get', 'missing'], 1]);
+  pushExprProbe('coalesce-color', ColorType, [
+    'coalesce',
+    ['get', 'missing'],
+    'rgb(255,0,0)',
+  ]);
   pushExprProbe('to-string', StringType, ['to-string', 1]);
 
   return scenarios;

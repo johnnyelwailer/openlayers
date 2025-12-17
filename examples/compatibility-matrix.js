@@ -1,6 +1,5 @@
 const filterEl = document.getElementById('compat-filter');
 const groupEl = document.getElementById('compat-group');
-const diagnosticsEl = document.getElementById('compat-diagnostics');
 const metaEl = document.getElementById('compat-meta');
 const summaryEl = document.getElementById('compat-summary');
 const tableEl = document.getElementById('compat-table');

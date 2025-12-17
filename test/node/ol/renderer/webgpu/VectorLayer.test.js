@@ -61,6 +61,31 @@ describe('ol/renderer/webgpu/VectorLayer', () => {
     expect(matches[0].distanceSq).to.be(100);
   });
 
+  it('does not hit circles with fill color none', () => {
+    const feature = new Feature(new Point([0, 0]));
+    const layer = new VectorLayer({
+      source: new VectorSource({features: [feature]}),
+    });
+    const renderer = new WebGPUVectorLayerRenderer(layer, {
+      style: {
+        'circle-radius': 10,
+        'circle-fill-color': 'none',
+      },
+    });
+
+    const matches = [];
+    const result = renderer.forEachFeatureAtCoordinate(
+      [0, 0],
+      /** @type {*} */ ({viewState: {resolution: 1, projection: {}}}),
+      10,
+      (f) => f,
+      matches,
+    );
+
+    expect(result).to.be(undefined);
+    expect(matches.length).to.be(0);
+  });
+
   it('combines hitTolerance with style-derived tolerance', () => {
     const feature = new Feature(new Point([0, 0]));
     const layer = new VectorLayer({
@@ -68,7 +93,7 @@ describe('ol/renderer/webgpu/VectorLayer', () => {
     });
     const renderer = new WebGPUVectorLayerRenderer(layer, {
       style: {
-        'circle-radius': 0,
+        'circle-radius': 1,
         'circle-fill-color': 'black',
       },
     });
@@ -77,7 +102,7 @@ describe('ol/renderer/webgpu/VectorLayer', () => {
     renderer.forEachFeatureAtCoordinate(
       [3, 0],
       /** @type {*} */ ({viewState: {resolution: 1, projection: {}}}),
-      3,
+      2,
       () => undefined,
       matches,
     );
@@ -85,6 +110,79 @@ describe('ol/renderer/webgpu/VectorLayer', () => {
     expect(matches.length).to.be(1);
     expect(matches[0].feature).to.be(feature);
     expect(matches[0].distanceSq).to.be(9);
+  });
+
+  it('respects rule filters and else semantics for point hit radius', () => {
+    const feature = new Feature(new Point([0, 0]));
+    feature.set('kind', 1);
+    const layer = new VectorLayer({
+      source: new VectorSource({features: [feature]}),
+    });
+    const renderer = new WebGPUVectorLayerRenderer(layer, {
+      style: [
+        {
+          filter: ['==', ['get', 'kind'], 1],
+          style: {
+            'circle-radius': 10,
+            'circle-fill-color': 'black',
+          },
+        },
+        {
+          else: true,
+          style: {
+            'circle-radius': 2,
+            'circle-fill-color': 'black',
+          },
+        },
+      ],
+    });
+
+    const matches = [];
+    renderer.forEachFeatureAtCoordinate(
+      [6, 0],
+      /** @type {*} */ ({viewState: {resolution: 1, projection: {}}}),
+      0,
+      () => undefined,
+      matches,
+    );
+
+    expect(matches.length).to.be(1);
+    expect(matches[0].feature).to.be(feature);
+  });
+
+  it('uses get() expressions when computing point hit radius', () => {
+    const feature = new Feature(new Point([0, 0]));
+    feature.set('r', 10);
+    const layer = new VectorLayer({
+      source: new VectorSource({features: [feature]}),
+    });
+    const renderer = new WebGPUVectorLayerRenderer(layer, {
+      style: {
+        'circle-radius': ['get', 'r'],
+        'circle-fill-color': 'black',
+      },
+    });
+
+    const matchesA = [];
+    renderer.forEachFeatureAtCoordinate(
+      [8, 6],
+      /** @type {*} */ ({viewState: {resolution: 1, projection: {}}}),
+      0,
+      () => undefined,
+      matchesA,
+    );
+    expect(matchesA.length).to.be(1);
+
+    feature.set('r', 2);
+    const matchesB = [];
+    renderer.forEachFeatureAtCoordinate(
+      [8, 6],
+      /** @type {*} */ ({viewState: {resolution: 1, projection: {}}}),
+      0,
+      () => undefined,
+      matchesB,
+    );
+    expect(matchesB.length).to.be(0);
   });
 
   it('scales distances by view resolution', () => {
@@ -180,6 +278,35 @@ describe('ol/renderer/webgpu/VectorLayer', () => {
       missMatches,
     );
     expect(missMatches.length).to.be(0);
+  });
+
+  it('does not hit strokes with stroke-color none', () => {
+    const feature = new Feature(
+      new LineString([
+        [0, 0],
+        [10, 0],
+      ]),
+    );
+    const layer = new VectorLayer({
+      source: new VectorSource({features: [feature]}),
+    });
+    const renderer = new WebGPUVectorLayerRenderer(layer, {
+      style: {
+        'stroke-color': 'none',
+        'stroke-width': 100,
+      },
+    });
+
+    const matches = [];
+    renderer.forEachFeatureAtCoordinate(
+      [5, 10],
+      /** @type {*} */ ({viewState: {resolution: 1, projection: {}}}),
+      0,
+      () => undefined,
+      matches,
+    );
+
+    expect(matches.length).to.be(0);
   });
 
   it('treats MultiPoint geometries as point hits', () => {
@@ -308,6 +435,50 @@ describe('ol/renderer/webgpu/VectorLayer', () => {
 
     expect(result).to.be(feature);
     expect(matches.length).to.be(0);
+  });
+
+  it('does not hit polygon interiors when fill-color is none', () => {
+    const feature = new Feature(
+      new Polygon([
+        [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+          [0, 0],
+        ],
+      ]),
+    );
+    const layer = new VectorLayer({
+      source: new VectorSource({features: [feature]}),
+    });
+    const renderer = new WebGPUVectorLayerRenderer(layer, {
+      style: {
+        'fill-color': 'none',
+        'stroke-color': 'black',
+        'stroke-width': 2,
+      },
+    });
+
+    const insideMatches = [];
+    renderer.forEachFeatureAtCoordinate(
+      [5, 5],
+      /** @type {*} */ ({viewState: {resolution: 1, projection: {}}}),
+      0,
+      () => undefined,
+      insideMatches,
+    );
+    expect(insideMatches.length).to.be(0);
+
+    const edgeMatches = [];
+    renderer.forEachFeatureAtCoordinate(
+      [10.5, 5],
+      /** @type {*} */ ({viewState: {resolution: 1, projection: {}}}),
+      0,
+      () => undefined,
+      edgeMatches,
+    );
+    expect(edgeMatches.length).to.be(1);
   });
 
   it('throws when hit detection is disabled', () => {

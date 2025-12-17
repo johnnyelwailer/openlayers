@@ -1,7 +1,7 @@
 {
   "meta": {
-    "date": "2025-12-17T08:24:21.437Z",
-    "scenarios": 482,
+    "date": "2025-12-17T08:53:55.430Z",
+    "scenarios": 486,
     "renderers": [
       "canvas",
       "webgl",
@@ -1740,7 +1740,8 @@
         "fill-pattern-offset": [
           0,
           0
-        ]
+        ],
+        "fill-pattern-src": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%3E%0A%20%20%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22white%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M0%200%20L16%2016%20M16%200%20L0%2016%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%2F%3E%0A%3C%2Fsvg%3E"
       },
       "needsGet": false,
       "needsVar": false,
@@ -1767,7 +1768,8 @@
         "fill-pattern-offset": [
           "get",
           "get_fill_pattern_offset"
-        ]
+        ],
+        "fill-pattern-src": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%3E%0A%20%20%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22white%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M0%200%20L16%2016%20M16%200%20L0%2016%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%2F%3E%0A%3C%2Fsvg%3E"
       },
       "needsGet": true,
       "needsVar": false,
@@ -1794,7 +1796,8 @@
         "fill-pattern-offset": [
           "var",
           "var_fill_pattern_offset"
-        ]
+        ],
+        "fill-pattern-src": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%3E%0A%20%20%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22white%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M0%200%20L16%2016%20M16%200%20L0%2016%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%2F%3E%0A%3C%2Fsvg%3E"
       },
       "needsGet": false,
       "needsVar": true,
@@ -1818,7 +1821,8 @@
           0,
           0.6
         ],
-        "fill-pattern-offset-origin": "top-left"
+        "fill-pattern-offset-origin": "top-left",
+        "fill-pattern-src": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%3E%0A%20%20%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22white%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M0%200%20L16%2016%20M16%200%20L0%2016%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%2F%3E%0A%3C%2Fsvg%3E"
       },
       "needsGet": false,
       "needsVar": false,
@@ -1842,7 +1846,8 @@
         "fill-pattern-offset-origin": [
           "get",
           "get_fill_pattern_offset_origin"
-        ]
+        ],
+        "fill-pattern-src": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%3E%0A%20%20%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22white%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M0%200%20L16%2016%20M16%200%20L0%2016%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%2F%3E%0A%3C%2Fsvg%3E"
       },
       "needsGet": true,
       "needsVar": false,
@@ -1866,7 +1871,8 @@
         "fill-pattern-offset-origin": [
           "var",
           "var_fill_pattern_offset_origin"
-        ]
+        ],
+        "fill-pattern-src": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%3E%0A%20%20%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22white%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M0%200%20L16%2016%20M16%200%20L0%2016%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%2F%3E%0A%3C%2Fsvg%3E"
       },
       "needsGet": false,
       "needsVar": true,
@@ -1890,7 +1896,8 @@
         "fill-pattern-size": [
           16,
           16
-        ]
+        ],
+        "fill-pattern-src": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%3E%0A%20%20%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22white%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M0%200%20L16%2016%20M16%200%20L0%2016%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%2F%3E%0A%3C%2Fsvg%3E"
       },
       "needsGet": false,
       "needsVar": false,
@@ -1917,7 +1924,8 @@
         "fill-pattern-size": [
           "get",
           "get_fill_pattern_size"
-        ]
+        ],
+        "fill-pattern-src": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%3E%0A%20%20%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22white%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M0%200%20L16%2016%20M16%200%20L0%2016%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%2F%3E%0A%3C%2Fsvg%3E"
       },
       "needsGet": true,
       "needsVar": false,
@@ -1944,7 +1952,8 @@
         "fill-pattern-size": [
           "var",
           "var_fill_pattern_size"
-        ]
+        ],
+        "fill-pattern-src": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%3E%0A%20%20%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22white%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M0%200%20L16%2016%20M16%200%20L0%2016%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%2F%3E%0A%3C%2Fsvg%3E"
       },
       "needsGet": false,
       "needsVar": true,
@@ -5920,7 +5929,8 @@
         "stroke-pattern-offset": [
           0,
           0
-        ]
+        ],
+        "stroke-pattern-src": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%3E%0A%20%20%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22white%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M0%200%20L16%2016%20M16%200%20L0%2016%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%2F%3E%0A%3C%2Fsvg%3E"
       },
       "needsGet": false,
       "needsVar": false,
@@ -5950,7 +5960,8 @@
         "stroke-pattern-offset": [
           "get",
           "get_stroke_pattern_offset"
-        ]
+        ],
+        "stroke-pattern-src": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%3E%0A%20%20%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22white%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M0%200%20L16%2016%20M16%200%20L0%2016%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%2F%3E%0A%3C%2Fsvg%3E"
       },
       "needsGet": true,
       "needsVar": false,
@@ -5980,7 +5991,8 @@
         "stroke-pattern-offset": [
           "var",
           "var_stroke_pattern_offset"
-        ]
+        ],
+        "stroke-pattern-src": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%3E%0A%20%20%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22white%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M0%200%20L16%2016%20M16%200%20L0%2016%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%2F%3E%0A%3C%2Fsvg%3E"
       },
       "needsGet": false,
       "needsVar": true,
@@ -6007,7 +6019,8 @@
         "stroke-width": 8,
         "stroke-line-cap": "round",
         "stroke-line-join": "round",
-        "stroke-pattern-offset-origin": "top-left"
+        "stroke-pattern-offset-origin": "top-left",
+        "stroke-pattern-src": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%3E%0A%20%20%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22white%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M0%200%20L16%2016%20M16%200%20L0%2016%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%2F%3E%0A%3C%2Fsvg%3E"
       },
       "needsGet": false,
       "needsVar": false,
@@ -6034,7 +6047,8 @@
         "stroke-pattern-offset-origin": [
           "get",
           "get_stroke_pattern_offset_origin"
-        ]
+        ],
+        "stroke-pattern-src": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%3E%0A%20%20%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22white%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M0%200%20L16%2016%20M16%200%20L0%2016%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%2F%3E%0A%3C%2Fsvg%3E"
       },
       "needsGet": true,
       "needsVar": false,
@@ -6061,7 +6075,8 @@
         "stroke-pattern-offset-origin": [
           "var",
           "var_stroke_pattern_offset_origin"
-        ]
+        ],
+        "stroke-pattern-src": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%3E%0A%20%20%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22white%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M0%200%20L16%2016%20M16%200%20L0%2016%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%2F%3E%0A%3C%2Fsvg%3E"
       },
       "needsGet": false,
       "needsVar": true,
@@ -6088,7 +6103,8 @@
         "stroke-pattern-size": [
           16,
           16
-        ]
+        ],
+        "stroke-pattern-src": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%3E%0A%20%20%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22white%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M0%200%20L16%2016%20M16%200%20L0%2016%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%2F%3E%0A%3C%2Fsvg%3E"
       },
       "needsGet": false,
       "needsVar": false,
@@ -6118,7 +6134,8 @@
         "stroke-pattern-size": [
           "get",
           "get_stroke_pattern_size"
-        ]
+        ],
+        "stroke-pattern-src": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%3E%0A%20%20%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22white%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M0%200%20L16%2016%20M16%200%20L0%2016%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%2F%3E%0A%3C%2Fsvg%3E"
       },
       "needsGet": true,
       "needsVar": false,
@@ -6148,7 +6165,8 @@
         "stroke-pattern-size": [
           "var",
           "var_stroke_pattern_size"
-        ]
+        ],
+        "stroke-pattern-src": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%3E%0A%20%20%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22white%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M0%200%20L16%2016%20M16%200%20L0%2016%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%2F%3E%0A%3C%2Fsvg%3E"
       },
       "needsGet": false,
       "needsVar": true,
@@ -6175,7 +6193,8 @@
         "stroke-width": 8,
         "stroke-line-cap": "round",
         "stroke-line-join": "round",
-        "stroke-pattern-spacing": 6
+        "stroke-pattern-spacing": 6,
+        "stroke-pattern-src": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%3E%0A%20%20%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22white%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M0%200%20L16%2016%20M16%200%20L0%2016%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%2F%3E%0A%3C%2Fsvg%3E"
       },
       "needsGet": false,
       "needsVar": false,
@@ -6202,7 +6221,8 @@
         "stroke-pattern-spacing": [
           "get",
           "get_stroke_pattern_spacing"
-        ]
+        ],
+        "stroke-pattern-src": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%3E%0A%20%20%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22white%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M0%200%20L16%2016%20M16%200%20L0%2016%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%2F%3E%0A%3C%2Fsvg%3E"
       },
       "needsGet": true,
       "needsVar": false,
@@ -6229,7 +6249,8 @@
         "stroke-pattern-spacing": [
           "var",
           "var_stroke_pattern_spacing"
-        ]
+        ],
+        "stroke-pattern-src": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%3E%0A%20%20%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22white%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M0%200%20L16%2016%20M16%200%20L0%2016%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%2F%3E%0A%3C%2Fsvg%3E"
       },
       "needsGet": false,
       "needsVar": true,
@@ -6260,7 +6281,8 @@
             "get_stroke_pattern_spacing"
           ],
           1.5
-        ]
+        ],
+        "stroke-pattern-src": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%3E%0A%20%20%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22white%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M0%200%20L16%2016%20M16%200%20L0%2016%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%2F%3E%0A%3C%2Fsvg%3E"
       },
       "needsGet": true,
       "needsVar": false,
@@ -6362,7 +6384,8 @@
         "stroke-width": 8,
         "stroke-line-cap": "round",
         "stroke-line-join": "round",
-        "stroke-pattern-start-offset": 6
+        "stroke-pattern-start-offset": 6,
+        "stroke-pattern-src": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%3E%0A%20%20%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22white%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M0%200%20L16%2016%20M16%200%20L0%2016%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%2F%3E%0A%3C%2Fsvg%3E"
       },
       "needsGet": false,
       "needsVar": false,
@@ -6389,7 +6412,8 @@
         "stroke-pattern-start-offset": [
           "get",
           "get_stroke_pattern_start_offset"
-        ]
+        ],
+        "stroke-pattern-src": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%3E%0A%20%20%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22white%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M0%200%20L16%2016%20M16%200%20L0%2016%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%2F%3E%0A%3C%2Fsvg%3E"
       },
       "needsGet": true,
       "needsVar": false,
@@ -6416,7 +6440,8 @@
         "stroke-pattern-start-offset": [
           "var",
           "var_stroke_pattern_start_offset"
-        ]
+        ],
+        "stroke-pattern-src": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%3E%0A%20%20%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22white%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M0%200%20L16%2016%20M16%200%20L0%2016%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%2F%3E%0A%3C%2Fsvg%3E"
       },
       "needsGet": false,
       "needsVar": true,
@@ -6447,7 +6472,8 @@
             "get_stroke_pattern_start_offset"
           ],
           1.5
-        ]
+        ],
+        "stroke-pattern-src": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%3E%0A%20%20%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22white%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M0%200%20L16%2016%20M16%200%20L0%2016%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%2F%3E%0A%3C%2Fsvg%3E"
       },
       "needsGet": true,
       "needsVar": false,
@@ -28212,6 +28238,33 @@
       "capabilityGetsUsed": 0
     },
     {
+      "id": "capabilities/expr-operators/case-color",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "case",
+        [
+          "==",
+          [
+            "get",
+            "x"
+          ],
+          1
+        ],
+        "rgb(255,0,0)",
+        "rgb(0,0,255)"
+      ],
+      "expectedType": 8,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
       "id": "capabilities/expr-operators/interpolate-linear",
       "group": "capability",
       "geometry": "none",
@@ -28229,6 +28282,34 @@
         1
       ],
       "expectedType": 2,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/interpolate-linear-color",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "interpolate",
+        [
+          "linear"
+        ],
+        [
+          "get",
+          "x"
+        ],
+        0,
+        "rgb(0,0,0)",
+        1,
+        "rgb(255,0,0)"
+      ],
+      "expectedType": 8,
       "needsGet": false,
       "needsVar": false,
       "capabilityKind": "expr-operators",
@@ -28257,6 +28338,32 @@
         0
       ],
       "expectedType": 2,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/match-color",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "match",
+        [
+          "get",
+          "x"
+        ],
+        1,
+        "rgb(255,0,0)",
+        2,
+        "rgb(0,0,255)",
+        "rgb(0,0,0)"
+      ],
+      "expectedType": 8,
       "needsGet": false,
       "needsVar": false,
       "capabilityKind": "expr-operators",
@@ -28433,6 +28540,28 @@
         1
       ],
       "expectedType": 2,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/coalesce-color",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "coalesce",
+        [
+          "get",
+          "missing"
+        ],
+        "rgb(255,0,0)"
+      ],
+      "expectedType": 8,
       "needsGet": false,
       "needsVar": false,
       "capabilityKind": "expr-operators",
@@ -30393,10 +30522,15 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "fill",
       "scenarioGeometry": "polygon",
-      "status": "ok",
-      "messages": [],
-      "rendered": true,
-      "differentFraction": 0.03173828125
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "blank",
+          "message": "Rendered blank output"
+        }
+      ],
+      "rendered": false,
+      "differentFraction": 0
     },
     {
       "id": "fill-pattern-offset/var",
@@ -30404,8 +30538,13 @@
       "targetId": "target-canvas",
       "scenarioGroup": "fill",
       "scenarioGeometry": "polygon",
-      "status": "ok",
-      "messages": [],
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "error",
+          "message": "Expected an array for fill-pattern-offset"
+        }
+      ],
       "rendered": true,
       "differentFraction": 0.0333251953125
     },
@@ -30426,10 +30565,15 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "fill",
       "scenarioGeometry": "polygon",
-      "status": "ok",
-      "messages": [],
-      "rendered": true,
-      "differentFraction": 0.03173828125
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "blank",
+          "message": "Rendered blank output"
+        }
+      ],
+      "rendered": false,
+      "differentFraction": 0
     },
     {
       "id": "fill-pattern-offset-origin/literal",
@@ -30492,10 +30636,15 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "fill",
       "scenarioGeometry": "polygon",
-      "status": "ok",
-      "messages": [],
-      "rendered": true,
-      "differentFraction": 0.03173828125
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "blank",
+          "message": "Rendered blank output"
+        }
+      ],
+      "rendered": false,
+      "differentFraction": 0
     },
     {
       "id": "fill-pattern-offset-origin/var",
@@ -30525,10 +30674,15 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "fill",
       "scenarioGeometry": "polygon",
-      "status": "ok",
-      "messages": [],
-      "rendered": true,
-      "differentFraction": 0.03173828125
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "blank",
+          "message": "Rendered blank output"
+        }
+      ],
+      "rendered": false,
+      "differentFraction": 0
     },
     {
       "id": "fill-pattern-size/literal",
@@ -30591,10 +30745,15 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "fill",
       "scenarioGeometry": "polygon",
-      "status": "ok",
-      "messages": [],
-      "rendered": true,
-      "differentFraction": 0.03173828125
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "blank",
+          "message": "Rendered blank output"
+        }
+      ],
+      "rendered": false,
+      "differentFraction": 0
     },
     {
       "id": "fill-pattern-size/var",
@@ -30602,8 +30761,13 @@
       "targetId": "target-canvas",
       "scenarioGroup": "fill",
       "scenarioGeometry": "polygon",
-      "status": "ok",
-      "messages": [],
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "error",
+          "message": "Expected an array for fill-pattern-size"
+        }
+      ],
       "rendered": true,
       "differentFraction": 0.0333251953125
     },
@@ -30624,10 +30788,15 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "fill",
       "scenarioGeometry": "polygon",
-      "status": "ok",
-      "messages": [],
-      "rendered": true,
-      "differentFraction": 0.03173828125
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "blank",
+          "message": "Rendered blank output"
+        }
+      ],
+      "rendered": false,
+      "differentFraction": 0
     },
     {
       "id": "fill-pattern-src/literal",
@@ -35969,10 +36138,15 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "stroke",
       "scenarioGeometry": "line",
-      "status": "ok",
-      "messages": [],
-      "rendered": true,
-      "differentFraction": 0.030792236328125
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "blank",
+          "message": "Rendered blank output"
+        }
+      ],
+      "rendered": false,
+      "differentFraction": 0
     },
     {
       "id": "stroke-pattern-offset/var",
@@ -36002,10 +36176,15 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "stroke",
       "scenarioGeometry": "line",
-      "status": "ok",
-      "messages": [],
-      "rendered": true,
-      "differentFraction": 0.030792236328125
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "blank",
+          "message": "Rendered blank output"
+        }
+      ],
+      "rendered": false,
+      "differentFraction": 0
     },
     {
       "id": "stroke-pattern-offset-origin/literal",
@@ -36068,10 +36247,15 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "stroke",
       "scenarioGeometry": "line",
-      "status": "ok",
-      "messages": [],
-      "rendered": true,
-      "differentFraction": 0.030792236328125
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "blank",
+          "message": "Rendered blank output"
+        }
+      ],
+      "rendered": false,
+      "differentFraction": 0
     },
     {
       "id": "stroke-pattern-offset-origin/var",
@@ -36101,10 +36285,15 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "stroke",
       "scenarioGeometry": "line",
-      "status": "ok",
-      "messages": [],
-      "rendered": true,
-      "differentFraction": 0.030792236328125
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "blank",
+          "message": "Rendered blank output"
+        }
+      ],
+      "rendered": false,
+      "differentFraction": 0
     },
     {
       "id": "stroke-pattern-size/literal",
@@ -36167,10 +36356,15 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "stroke",
       "scenarioGeometry": "line",
-      "status": "ok",
-      "messages": [],
-      "rendered": true,
-      "differentFraction": 0.030792236328125
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "blank",
+          "message": "Rendered blank output"
+        }
+      ],
+      "rendered": false,
+      "differentFraction": 0
     },
     {
       "id": "stroke-pattern-size/var",
@@ -36200,10 +36394,15 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "stroke",
       "scenarioGeometry": "line",
-      "status": "ok",
-      "messages": [],
-      "rendered": true,
-      "differentFraction": 0.030792236328125
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "blank",
+          "message": "Rendered blank output"
+        }
+      ],
+      "rendered": false,
+      "differentFraction": 0
     },
     {
       "id": "stroke-pattern-spacing/literal",
@@ -36225,7 +36424,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.030792236328125
+      "differentFraction": 0.0183868408203125
     },
     {
       "id": "stroke-pattern-spacing/literal",
@@ -36236,7 +36435,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.030792236328125
+      "differentFraction": 0.0183868408203125
     },
     {
       "id": "stroke-pattern-spacing/get",
@@ -36258,7 +36457,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.030792236328125
+      "differentFraction": 0.0183868408203125
     },
     {
       "id": "stroke-pattern-spacing/get",
@@ -36266,10 +36465,15 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "stroke",
       "scenarioGeometry": "line",
-      "status": "ok",
-      "messages": [],
-      "rendered": true,
-      "differentFraction": 0.030792236328125
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "blank",
+          "message": "Rendered blank output"
+        }
+      ],
+      "rendered": false,
+      "differentFraction": 0
     },
     {
       "id": "stroke-pattern-spacing/var",
@@ -36291,7 +36495,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.030792236328125
+      "differentFraction": 0.0183868408203125
     },
     {
       "id": "stroke-pattern-spacing/var",
@@ -36299,10 +36503,15 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "stroke",
       "scenarioGeometry": "line",
-      "status": "ok",
-      "messages": [],
-      "rendered": true,
-      "differentFraction": 0.030792236328125
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "blank",
+          "message": "Rendered blank output"
+        }
+      ],
+      "rendered": false,
+      "differentFraction": 0
     },
     {
       "id": "stroke-pattern-spacing/arith",
@@ -36324,7 +36533,7 @@
       "status": "ok",
       "messages": [],
       "rendered": true,
-      "differentFraction": 0.030792236328125
+      "differentFraction": 0.0159149169921875
     },
     {
       "id": "stroke-pattern-spacing/arith",
@@ -36332,10 +36541,15 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "stroke",
       "scenarioGeometry": "line",
-      "status": "ok",
-      "messages": [],
-      "rendered": true,
-      "differentFraction": 0.030792236328125
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "blank",
+          "message": "Rendered blank output"
+        }
+      ],
+      "rendered": false,
+      "differentFraction": 0
     },
     {
       "id": "stroke-pattern-src/literal",
@@ -36517,10 +36731,15 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "stroke",
       "scenarioGeometry": "line",
-      "status": "ok",
-      "messages": [],
-      "rendered": true,
-      "differentFraction": 0.030792236328125
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "blank",
+          "message": "Rendered blank output"
+        }
+      ],
+      "rendered": false,
+      "differentFraction": 0
     },
     {
       "id": "stroke-pattern-start-offset/var",
@@ -36550,10 +36769,15 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "stroke",
       "scenarioGeometry": "line",
-      "status": "ok",
-      "messages": [],
-      "rendered": true,
-      "differentFraction": 0.030792236328125
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "blank",
+          "message": "Rendered blank output"
+        }
+      ],
+      "rendered": false,
+      "differentFraction": 0
     },
     {
       "id": "stroke-pattern-start-offset/arith",
@@ -36583,10 +36807,15 @@
       "targetId": "target-webgpu",
       "scenarioGroup": "stroke",
       "scenarioGeometry": "line",
-      "status": "ok",
-      "messages": [],
-      "rendered": true,
-      "differentFraction": 0.030792236328125
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "blank",
+          "message": "Rendered blank output"
+        }
+      ],
+      "rendered": false,
+      "differentFraction": 0
     },
     {
       "id": "stroke-width/literal",
@@ -47184,6 +47413,45 @@
       "messages": []
     },
     {
+      "id": "capabilities/expr-operators/case-color",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/case-color",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/case-color",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
       "id": "capabilities/expr-operators/interpolate-linear",
       "renderer": "canvas",
       "targetId": "target-canvas",
@@ -47223,6 +47491,45 @@
       "messages": []
     },
     {
+      "id": "capabilities/expr-operators/interpolate-linear-color",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/interpolate-linear-color",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/interpolate-linear-color",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
       "id": "capabilities/expr-operators/match-number",
       "renderer": "canvas",
       "targetId": "target-canvas",
@@ -47250,6 +47557,45 @@
     },
     {
       "id": "capabilities/expr-operators/match-number",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/match-color",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/match-color",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/match-color",
       "renderer": "webgpu",
       "targetId": "target-webgpu",
       "scenarioGroup": "capability",
@@ -47607,6 +47953,55 @@
     },
     {
       "id": "capabilities/expr-operators/coalesce",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "expr",
+          "message": "WGSL backend does not support coalesce()"
+        }
+      ]
+    },
+    {
+      "id": "capabilities/expr-operators/coalesce-color",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/coalesce-color",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "expr",
+          "message": "No compiler defined for this operator: \"coalesce\""
+        }
+      ]
+    },
+    {
+      "id": "capabilities/expr-operators/coalesce-color",
       "renderer": "webgpu",
       "targetId": "target-webgpu",
       "scenarioGroup": "capability",

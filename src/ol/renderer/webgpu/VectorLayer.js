@@ -19,7 +19,7 @@ import {create as createTransform} from '../../transform.js';
 import {getUid} from '../../util.js';
 import WebGPULayerRenderer from './Layer.js';
 import {
-  computeHitDetectionPadding,
+  createHitDetectionEvaluator,
   forEachFeatureAtCoordinateCPU,
 } from './hitdetect.js';
 
@@ -146,18 +146,28 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
      */
     this.hitDetectionEnabled_ = !options.disableHitDetection;
 
-    const hitPadding = computeHitDetectionPadding(this.styles_);
     /**
      * @private
-     * @type {number}
+     * @type {import("./hitdetect.js").HitDetectionEvaluator}
      */
-    this.hitDetectionPointRadiusPx_ = hitPadding.pointRadiusPx;
+    this.hitDetectionEvaluator_ = createHitDetectionEvaluator(
+      this.styles_,
+      this.styleVariables_,
+    );
 
     /**
      * @private
      * @type {number}
      */
-    this.hitDetectionStrokeHalfWidthPx_ = hitPadding.strokeHalfWidthPx;
+    this.hitDetectionPointRadiusPx_ =
+      this.hitDetectionEvaluator_.maxPointRadiusPx;
+
+    /**
+     * @private
+     * @type {number}
+     */
+    this.hitDetectionStrokeHalfWidthPx_ =
+      this.hitDetectionEvaluator_.maxStrokeHalfWidthPx;
   }
 
   /**
@@ -466,6 +476,7 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
       this.hitDetectionStrokeHalfWidthPx_,
       callback,
       matches,
+      this.hitDetectionEvaluator_?.evaluate,
     );
   }
 
