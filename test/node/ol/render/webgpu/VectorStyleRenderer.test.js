@@ -488,6 +488,77 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
     );
   });
 
+  it('packs geometry-type() into props as a stable numeric id', async () => {
+    const writes = [];
+    const device = {
+      createBuffer: ({size}) => ({
+        size,
+        getMappedRange: () => new ArrayBuffer(size),
+        unmap: () => {},
+      }),
+      queue: {
+        writeBuffer: (buffer, offset, data) => {
+          writes.push({buffer, offset, data: new Float32Array(data)});
+        },
+      },
+    };
+    const helper = {
+      getDevice: () => device,
+    };
+
+    const renderer = new VectorStyleRenderer(
+      [
+        {
+          style: {
+            'circle-radius': 10,
+            'circle-fill-color': [255, 0, 0, 1],
+          },
+          filter: ['==', ['geometry-type'], 'Polygon'],
+        },
+      ],
+      {},
+      /** @type {*} */ (helper),
+    );
+
+    const feature = {
+      get: () => undefined,
+      getGeometry: () => ({getType: () => 'MultiPolygon'}),
+    };
+    const geometryBatch = {
+      pointBatch: {
+        entries: {
+          a: {
+            ref: 1,
+            feature,
+            flatCoordss: [[0, 0]],
+          },
+        },
+      },
+      lineStringBatch: {entries: {}},
+      polygonBatch: {entries: {}},
+    };
+
+    const buffers = await renderer.generateBuffers(
+      /** @type {*} */ (geometryBatch),
+      /** @type {*} */ ([]),
+    );
+
+    expect(buffers.featureProperties).to.not.be(null);
+    expect(
+      buffers.featureProperties.indexByName.get('__ol_geometry_type__'),
+    ).to.be(0);
+
+    buffers.featureProperties.update(
+      /** @type {*} */ (device),
+      1,
+      /** @type {*} */ (feature),
+    );
+    expect(writes.length).to.be.greaterThan(0);
+    expect(writes[writes.length - 1].data[0]).to.be(
+      getStringNumberEquivalent('Polygon'),
+    );
+  });
+
   it('packs color feature properties into the color slot', async () => {
     /** @type {ArrayBuffer|null} */
     let propsMapped = null;

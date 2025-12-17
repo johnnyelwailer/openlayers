@@ -24,6 +24,7 @@ import {
  * @property {(name: string, type: number) => string} getProp WGSL expression for a `get` property.
  * @property {(name: string, type: number) => string} [getVar] WGSL expression for a style variable.
  * @property {(type: number) => string} [getId] WGSL expression for `id()`.
+ * @property {(type: number) => string} [getGeometryType] WGSL expression for `geometry-type()`.
  */
 
 /**
@@ -140,6 +141,9 @@ export function compileWgslExpression(expr, ctx, expected) {
       get: (name, type) => ctx.getProp(name, type),
       var: (name, type) => ctx.getVar?.(name, type) || '0.0',
       ...(ctx.getId ? {id: (type) => ctx.getId(type)} : {}),
+      ...(ctx.getGeometryType
+        ? {geometryType: (type) => ctx.getGeometryType(type)}
+        : {}),
     });
   }
   if (expected === 'bool') {

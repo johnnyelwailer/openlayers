@@ -1183,6 +1183,15 @@ async function main() {
                   const offset = alloc(propsLayout, '__id__', type, 'prop');
                   return `props[${offset}]`;
                 },
+                geometryType: (type) => {
+                  const offset = alloc(
+                    propsLayout,
+                    '__geometry_type__',
+                    type,
+                    'prop',
+                  );
+                  return `props[${offset}]`;
+                },
               },
               {strict: true, diagnostics},
             );

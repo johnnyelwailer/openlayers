@@ -190,6 +190,17 @@ describe('ol/expr/wgsl', () => {
     ).to.be('feature_id()');
   });
 
+  it('compiles geometry-type() when provided by the context', () => {
+    const parsingContext = newParsingContext();
+    const expr = parse(['geometry-type'], StringType, parsingContext);
+    expect(
+      compileExpressionToWgsl(expr, {
+        ...ctx,
+        geometryType: () => 'geom_type()',
+      }),
+    ).to.be('geom_type()');
+  });
+
   it('compiles match() with string input', () => {
     const parsingContext = newParsingContext();
     const expr = parse(

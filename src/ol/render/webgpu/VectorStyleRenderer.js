@@ -13,6 +13,7 @@ import {
   ColorType,
   NumberType,
   SizeType,
+  computeGeometryType,
   isType,
   newParsingContext,
   parse,
@@ -44,30 +45,40 @@ import {
 
 const BIND_GROUP_CACHE = Symbol('ol/webgpu/VectorStyleRenderer.bindGroupCache');
 const FEATURE_ID_PROP_NAME = '__ol_feature_id__';
+const GEOMETRY_TYPE_PROP_NAME = '__ol_geometry_type__';
 
 /**
  * @param {*} expr Encoded expression.
- * @return {boolean} Whether the encoded expression uses `id()`.
+ * @return {{featureId: boolean, geometryType: boolean}} Special input usage.
  */
-function expressionUsesFeatureId(expr) {
+function getExpressionSpecialInputUsage(expr) {
   if (!expr || !Array.isArray(expr)) {
-    return false;
+    return {featureId: false, geometryType: false};
   }
   try {
     const parsingContext = newParsingContext();
     parse(expr, AnyType, parsingContext);
-    return parsingContext.featureId;
+    return {
+      featureId: parsingContext.featureId,
+      geometryType: parsingContext.geometryType,
+    };
   } catch {
     // Best-effort fallback. This can be imprecise for literal arrays, so skip them.
     if (expr[0] === 'literal') {
-      return false;
+      return {featureId: false, geometryType: false};
     }
+    const op = expr[0];
+    let featureId = op === 'id';
+    let geometryType = op === 'geometry-type';
     for (const v of expr) {
-      if (expressionUsesFeatureId(v)) {
-        return true;
+      const nested = getExpressionSpecialInputUsage(v);
+      featureId ||= nested.featureId;
+      geometryType ||= nested.geometryType;
+      if (featureId && geometryType) {
+        break;
       }
     }
-    return false;
+    return {featureId, geometryType};
   }
 }
 
@@ -928,16 +939,23 @@ class VectorStyleRenderer {
 
     const varsUsed = new Set();
     let featureIdUsed = false;
+    let geometryTypeUsed = false;
     for (const rule of rules) {
       collectVarNames(rule.filter, varsUsed);
-      featureIdUsed ||= expressionUsesFeatureId(rule.filter);
+      {
+        const usage = getExpressionSpecialInputUsage(rule.filter);
+        featureIdUsed ||= usage.featureId;
+        geometryTypeUsed ||= usage.geometryType;
+      }
       const style = rule.style;
       if (!style) {
         continue;
       }
       for (const value of Object.values(style)) {
         collectVarNames(value, varsUsed);
-        featureIdUsed ||= expressionUsesFeatureId(value);
+        const usage = getExpressionSpecialInputUsage(value);
+        featureIdUsed ||= usage.featureId;
+        geometryTypeUsed ||= usage.geometryType;
       }
     }
     this.setVariableNames_(Array.from(varsUsed).sort());
@@ -945,6 +963,9 @@ class VectorStyleRenderer {
     const propsUsed = new Set();
     if (featureIdUsed) {
       propsUsed.add(FEATURE_ID_PROP_NAME);
+    }
+    if (geometryTypeUsed) {
+      propsUsed.add(GEOMETRY_TYPE_PROP_NAME);
     }
     for (const rule of rules) {
       collectGetProperties(rule.filter, propsUsed);
@@ -1099,6 +1120,14 @@ class VectorStyleRenderer {
               propIndexByName,
               propStride,
             ),
+          getGeometryType: (type) =>
+            this.getFeaturePropExpression_(
+              GEOMETRY_TYPE_PROP_NAME,
+              type,
+              'input.featureIndex',
+              propIndexByName,
+              propStride,
+            ),
         };
         const needsDiscard = !!rule.filter || (rule.else && hasPrev);
         const discard = needsDiscard
@@ -1120,6 +1149,14 @@ class VectorStyleRenderer {
             getId: (type) =>
               this.getFeaturePropExpression_(
                 FEATURE_ID_PROP_NAME,
+                type,
+                'featureIndex',
+                propIndexByName,
+                propStride,
+              ),
+            getGeometryType: (type) =>
+              this.getFeaturePropExpression_(
+                GEOMETRY_TYPE_PROP_NAME,
                 type,
                 'featureIndex',
                 propIndexByName,
@@ -2307,6 +2344,14 @@ class VectorStyleRenderer {
                 propIndexByName,
                 propStride,
               ),
+            getGeometryType: (type) =>
+              this.getFeaturePropExpression_(
+                GEOMETRY_TYPE_PROP_NAME,
+                type,
+                'featureIndex',
+                propIndexByName,
+                propStride,
+              ),
           };
           const fragmentCtx = {
             lineMetricVar: 'lineMetric',
@@ -2322,6 +2367,14 @@ class VectorStyleRenderer {
             getId: (type) =>
               this.getFeaturePropExpression_(
                 FEATURE_ID_PROP_NAME,
+                type,
+                'input.featureIndex',
+                propIndexByName,
+                propStride,
+              ),
+            getGeometryType: (type) =>
+              this.getFeaturePropExpression_(
+                GEOMETRY_TYPE_PROP_NAME,
                 type,
                 'input.featureIndex',
                 propIndexByName,
@@ -2566,6 +2619,14 @@ class VectorStyleRenderer {
                         propIndexByName,
                         propStride,
                       ),
+                    getGeometryType: (type) =>
+                      this.getFeaturePropExpression_(
+                        GEOMETRY_TYPE_PROP_NAME,
+                        type,
+                        'featureIndex',
+                        propIndexByName,
+                        propStride,
+                      ),
                   },
                   'vec4f',
                 )
@@ -2707,6 +2768,14 @@ class VectorStyleRenderer {
             getId: (type) =>
               this.getFeaturePropExpression_(
                 FEATURE_ID_PROP_NAME,
+                type,
+                'input.featureIndex',
+                propIndexByName,
+                propStride,
+              ),
+            getGeometryType: (type) =>
+              this.getFeaturePropExpression_(
+                GEOMETRY_TYPE_PROP_NAME,
                 type,
                 'input.featureIndex',
                 propIndexByName,
@@ -2867,12 +2936,19 @@ class VectorStyleRenderer {
         }
         for (let i = 0; i < propCount; i++) {
           const name = propNames[i];
-          const value =
-            name === FEATURE_ID_PROP_NAME
-              ? typeof feature.getId === 'function'
-                ? feature.getId()
-                : null
-              : feature.get(name);
+          let value;
+          if (name === FEATURE_ID_PROP_NAME) {
+            value =
+              typeof feature.getId === 'function' ? feature.getId() : null;
+          } else if (name === GEOMETRY_TYPE_PROP_NAME) {
+            value = computeGeometryType(
+              typeof feature.getGeometry === 'function'
+                ? feature.getGeometry()
+                : null,
+            );
+          } else {
+            value = feature.get(name);
+          }
           let scalar = UNDEFINED_PROP_VALUE;
           if (value !== undefined && value !== null) {
             if (typeof value === 'number') {
@@ -2890,7 +2966,10 @@ class VectorStyleRenderer {
           const scalarOffset = (ref * propStride + i * 2) * 4;
           data[scalarOffset] = scalar;
 
-          if (name === FEATURE_ID_PROP_NAME) {
+          if (
+            name === FEATURE_ID_PROP_NAME ||
+            name === GEOMETRY_TYPE_PROP_NAME
+          ) {
             continue;
           }
 
@@ -2961,12 +3040,19 @@ class VectorStyleRenderer {
         dst.fill(0, base, base + rowStrideFloats);
         for (let i = 0; i < propCount; i++) {
           const name = propNames[i];
-          const value =
-            name === FEATURE_ID_PROP_NAME
-              ? typeof feature.getId === 'function'
-                ? feature.getId()
-                : null
-              : feature.get(name);
+          let value;
+          if (name === FEATURE_ID_PROP_NAME) {
+            value =
+              typeof feature.getId === 'function' ? feature.getId() : null;
+          } else if (name === GEOMETRY_TYPE_PROP_NAME) {
+            value = computeGeometryType(
+              typeof feature.getGeometry === 'function'
+                ? feature.getGeometry()
+                : null,
+            );
+          } else {
+            value = feature.get(name);
+          }
           let scalar = UNDEFINED_PROP_VALUE;
           if (value !== undefined && value !== null) {
             if (typeof value === 'number') {
@@ -2981,7 +3067,10 @@ class VectorStyleRenderer {
           }
           dst[base + i * 8] = scalar;
 
-          if (name === FEATURE_ID_PROP_NAME) {
+          if (
+            name === FEATURE_ID_PROP_NAME ||
+            name === GEOMETRY_TYPE_PROP_NAME
+          ) {
             continue;
           }
 
