@@ -215,7 +215,7 @@ These are follow-up notes after hardening `get()` support in the WGSL backend vi
 WebGPU vector hit detection is currently implemented as a **synchronous, CPU-based** best-effort path in `src/ol/renderer/webgpu/hitdetect.js`.
 
 ### Outstanding issues / gaps
-- **Map-state expressions**: CPU expression evaluation does not provide `['zoom']` / `['time']` today, so any hit-relevant sizes/filters based on these are approximated.
+- **Map-state expressions (`['zoom']`, `['time']`)**: WebGPU hit detection is CPU-based and uses the shared CPU expression evaluator, which does not implement these operators yet. As a result, any hit-relevant sizes are treated as default/fallback values, and **rule `filter`s that depend on zoom/time may be treated as if no filter was provided** (potentially returning hits for features that are not rendered).
 - **Icon fidelity**: `icon-anchor`, `icon-displacement`, `icon-rotation`, `icon-rotate-with-view`, and image alpha are not modeled; hit tolerance uses coarse size-based padding.
 - **Patterns & discard**: shader-dependent discard logic (patterns, texture alpha, complex filter/expression combinations) cannot be matched exactly on the CPU.
 - **Ordering semantics**: “topmost” behavior is approximated via the existing `matches` distance ordering; this does not yet replicate WebGL/WebGPU draw-order + zIndex in all cases.

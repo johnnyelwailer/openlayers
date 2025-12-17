@@ -4,11 +4,19 @@ import MultiPoint from '../../../../../src/ol/geom/MultiPoint.js';
 import Point from '../../../../../src/ol/geom/Point.js';
 import Polygon from '../../../../../src/ol/geom/Polygon.js';
 import VectorLayer from '../../../../../src/ol/layer/Vector.js';
+import {
+  clearUserProjection,
+  transform,
+  useGeographic,
+} from '../../../../../src/ol/proj.js';
 import WebGPUVectorLayerRenderer from '../../../../../src/ol/renderer/webgpu/VectorLayer.js';
 import VectorSource from '../../../../../src/ol/source/Vector.js';
 import expect from '../../../expect.js';
 
 describe('ol/renderer/webgpu/VectorLayer', () => {
+  beforeEach(() => clearUserProjection());
+  afterEach(() => clearUserProjection());
+
   it('returns callback result immediately for a direct point hit', () => {
     const feature = new Feature(new Point([0, 0]));
     const layer = new VectorLayer({
@@ -25,6 +33,35 @@ describe('ol/renderer/webgpu/VectorLayer', () => {
     const result = renderer.forEachFeatureAtCoordinate(
       [0, 0],
       /** @type {*} */ ({viewState: {resolution: 1, projection: {}}}),
+      0,
+      (f) => f,
+      matches,
+    );
+
+    expect(result).to.be(feature);
+    expect(matches.length).to.be(0);
+  });
+
+  it('hits features correctly with user projection enabled', () => {
+    useGeographic();
+
+    const feature = new Feature(new Point([10, 20]));
+    const layer = new VectorLayer({
+      source: new VectorSource({features: [feature]}),
+    });
+    const renderer = new WebGPUVectorLayerRenderer(layer, {
+      style: {
+        'circle-radius': 10,
+        'circle-fill-color': 'black',
+      },
+    });
+
+    const matches = [];
+    const result = renderer.forEachFeatureAtCoordinate(
+      transform([10, 20], 'EPSG:4326', 'EPSG:3857'),
+      /** @type {*} */ ({
+        viewState: {resolution: 1, projection: 'EPSG:3857'},
+      }),
       0,
       (f) => f,
       matches,
