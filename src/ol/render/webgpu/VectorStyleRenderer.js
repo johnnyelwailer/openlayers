@@ -3322,12 +3322,7 @@ class VectorStyleRenderer {
       uniformData[22] = 0;
       uniformData[23] = 0;
       const now =
-        typeof frameState.time === 'number'
-          ? frameState.time
-          : typeof performance !== 'undefined' &&
-              typeof performance.now === 'function'
-            ? performance.now()
-            : Date.now();
+        typeof frameState.time === 'number' ? frameState.time : Date.now();
       if (this.startTime_ === null) {
         this.startTime_ = now;
       }

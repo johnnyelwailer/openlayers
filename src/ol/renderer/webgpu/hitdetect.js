@@ -9,7 +9,6 @@ import {
   SizeType,
   newParsingContext,
 } from '../../expr/expression.js';
-import {toUserCoordinate, toUserResolution} from '../../proj.js';
 import {getUid} from '../../util.js';
 
 /**
@@ -636,12 +635,8 @@ export function forEachFeatureAtCoordinateCPU(
   matches,
   styleEvaluator,
 ) {
-  const viewProjection = frameState.viewState.projection;
-  const coord = toUserCoordinate(coordinate.slice(), viewProjection);
-  const resolution = toUserResolution(
-    frameState.viewState.resolution,
-    viewProjection,
-  );
+  const coord = coordinate;
+  const resolution = frameState.viewState.resolution;
   if (!Number.isFinite(resolution) || resolution <= 0) {
     return undefined;
   }

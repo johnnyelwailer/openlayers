@@ -16,7 +16,7 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 *   **`props` Allocation Optimization**: Avoid allocating/binding the feature-properties buffer for CPU-resolved `get()` usage (e.g. direct `['get', ...]` stroke width/color), while still allocating when WGSL expressions require it (filters/expressions).
 *   **Update Path Allocations Reduced**: Reused scratch arrays for per-feature GPU buffer updates and reused the uniform upload array to reduce GC churn.
 *   **Batched Dirty Ref Updates**: Coalesced consecutive “dirty ref” style/props updates into contiguous `queue.writeBuffer()` uploads to reduce per-frame CPU overhead for rapidly changing feature properties.
-*   **`time` Expression Parity**: Added support for `['time']` in WebGPU via a real uniform (WebGL parity), sourcing from `frameState.time` / `performance.now()` to avoid epoch mismatches.
+*   **`time` Expression Parity**: Added support for `['time']` in WebGPU via a real uniform (WebGL parity), sourcing from `frameState.time` (with a `Date.now()` fallback) so the time base matches WebGL.
 *   **CPU Hit Detection (Sync)**: Implemented a first-pass, synchronous `forEachFeatureAtPixel` path for WebGPU vector layers using source spatial indexing + CPU geometry distance checks (best-effort tolerance derived from literal style values); see `src/ol/renderer/webgpu/hitdetect.js`.
 *   **Compatibility Matrix Baseline Updated**: Regenerated `test/compat-matrix/baseline.json` after the above parity fixes.
 *   **Validation (Latest)**: `npm run lint`, `node test/rendering/test.js --match webgpu`, `npm run build-full`, and `node test/compat-matrix/test.js --headless` passing locally.
@@ -210,13 +210,30 @@ WebGPU changes the trade space: readback is *asynchronous* (`copyTextureToBuffer
 
 These are follow-up notes after hardening `get()` support in the WGSL backend via a per-feature `props` storage buffer.
 
+## 6.2 Hit Detection Notes (2025-12-17)
+
+WebGPU vector hit detection is currently implemented as a **synchronous, CPU-based** best-effort path in `src/ol/renderer/webgpu/hitdetect.js`.
+
+### Outstanding issues / gaps
+- **Map-state expressions**: CPU expression evaluation does not provide `['zoom']` / `['time']` today, so any hit-relevant sizes/filters based on these are approximated.
+- **Icon fidelity**: `icon-anchor`, `icon-displacement`, `icon-rotation`, `icon-rotate-with-view`, and image alpha are not modeled; hit tolerance uses coarse size-based padding.
+- **Patterns & discard**: shader-dependent discard logic (patterns, texture alpha, complex filter/expression combinations) cannot be matched exactly on the CPU.
+- **Ordering semantics**: “topmost” behavior is approximated via the existing `matches` distance ordering; this does not yet replicate WebGL/WebGPU draw-order + zIndex in all cases.
+- **Performance**: dynamic expressions can force conservative padding (bigger extents) which increases candidate iteration in `forEachFeatureInExtent`.
+
+### Next tasks
+- **End-to-end browser tests**: add coverage via `Map#forEachFeatureAtPixel()` with `WebGPUVector` layers (including wrapped worlds and layer ordering).
+- **Zoom/time plumbing**: extend the CPU evaluation context to support zoom/time and populate it where CPU expression evaluation is used.
+- **Style-aware bounds**: incorporate more style properties into hit padding (anchor/displacement/scale/rotation) and better polygon stroke-vs-fill semantics.
+- **Optional future**: explore a GPU pick path behind an async API surface for high-fidelity picking (see Section 6).
+
 ### Correctness risks
 - **Global refs vs per-geometry buffers**: MixedGeometryBatch refs are global across point/line/polygon, but WebGPU per-geometry style buffers are sized based on each geometry type’s `*MaxRef`. `updateFeatureStyles()` currently fans out updates to all buffer sets, so per-buffer `updateStyle()` must guard against out-of-range `ref` values. (Hardened in `src/ol/render/webgpu/VectorStyleRenderer.js` by checking `ref > {point,line,poly}MaxRef` before writing.)
 - **`get()` return type limitations**: `get()` now supports both scalar and color reads by storing two `vec4f` slots per property (scalar slot + color slot). This is correct but increases memory usage; future work may want a more compact typed layout.
 - **Auto pipeline layout sensitivity**: Shaders are built with `layout: 'auto'`, so unused bindings are omitted by WebGPU. Binding logic currently relies on scanning WGSL source for `vars[...]` / `props[...]`. This is pragmatic but fragile if shader codegen changes.
 - **Boolean literal filters in WGSL**: `compileWgslExpression()` does not currently compile top-level `true`/`false` literals for `expected === 'bool'` (it falls back to `false`). Call sites use a workaround like `['==', 1, 1]` for “always true”; this should be fixed in the compiler.
 - **Polygon rule support gaps**: Polygons now support multiple fill rules with filters and `else: true` semantics, but fill style evaluation is still largely CPU-side (`literal|get|var` subsets) and lacks full WebGL rule parsing parity.
-- **`time` epoch mismatches**: WebGPU’s `['time']` uniform is sourced from `frameState.time` (RAF/performance epoch) with a `performance.now()` fallback; mixing `Date.now()` and RAF time can yield huge negative/positive deltas, so the time source must remain consistent across frames.
+- **`time` time-base mismatches**: If `['time']` is sourced from multiple clocks (e.g. mixing epoch time and monotonic time), deltas can jump wildly; keep the time source consistent across frames.
 - **CPU hit detection fidelity**: The current WebGPU hit detection (`src/ol/renderer/webgpu/hitdetect.js`) is CPU-based and sync, but it is not style-accurate for shader discard/alpha masks, patterns, icon image alpha, and expression-driven sizes; it uses geometry distance checks and a conservative max padding for `get()`/`var()`-driven sizes.
 
 ### Performance considerations

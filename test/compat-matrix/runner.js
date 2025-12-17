@@ -895,6 +895,10 @@ function generateScenarios(properties) {
   pushExprProbe('id', StringType | NumberType, ['id']);
   pushExprProbe('has', BooleanType, ['has', 'x']);
 
+  // Literal support (non-array expressions).
+  pushExprProbe('literal-boolean-true', BooleanType, true);
+  pushExprProbe('literal-boolean-false', BooleanType, false);
+
   // Boolean ops.
   pushExprProbe('not', BooleanType, ['!', true]);
   pushExprProbe('any', BooleanType, ['any', false, true]);
