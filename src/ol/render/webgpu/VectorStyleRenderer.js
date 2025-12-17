@@ -8,12 +8,14 @@ import {
   newEvaluationContext,
 } from '../../expr/cpu.js';
 import {
+  AnyType,
   BooleanType,
   ColorType,
   NumberType,
   SizeType,
   isType,
   newParsingContext,
+  parse,
 } from '../../expr/expression.js';
 import {
   UNDEFINED_PROP_VALUE,
@@ -45,22 +47,28 @@ const FEATURE_ID_PROP_NAME = '__ol_feature_id__';
 
 /**
  * @param {*} expr Encoded expression.
- * @param {string} operator Operator.
- * @return {boolean} Whether the operator is found in the encoded expression.
+ * @return {boolean} Whether the encoded expression uses `id()`.
  */
-function expressionUsesOperator(expr, operator) {
+function expressionUsesFeatureId(expr) {
   if (!expr || !Array.isArray(expr)) {
     return false;
   }
-  if (expr.length > 0 && expr[0] === operator) {
-    return true;
-  }
-  for (const v of expr) {
-    if (expressionUsesOperator(v, operator)) {
-      return true;
+  try {
+    const parsingContext = newParsingContext();
+    parse(expr, AnyType, parsingContext);
+    return parsingContext.featureId;
+  } catch {
+    // Best-effort fallback. This can be imprecise for literal arrays, so skip them.
+    if (expr[0] === 'literal') {
+      return false;
     }
+    for (const v of expr) {
+      if (expressionUsesFeatureId(v)) {
+        return true;
+      }
+    }
+    return false;
   }
-  return false;
 }
 
 /**
@@ -922,14 +930,14 @@ class VectorStyleRenderer {
     let featureIdUsed = false;
     for (const rule of rules) {
       collectVarNames(rule.filter, varsUsed);
-      featureIdUsed ||= expressionUsesOperator(rule.filter, 'id');
+      featureIdUsed ||= expressionUsesFeatureId(rule.filter);
       const style = rule.style;
       if (!style) {
         continue;
       }
       for (const value of Object.values(style)) {
         collectVarNames(value, varsUsed);
-        featureIdUsed ||= expressionUsesOperator(value, 'id');
+        featureIdUsed ||= expressionUsesFeatureId(value);
       }
     }
     this.setVariableNames_(Array.from(varsUsed).sort());
@@ -2882,6 +2890,10 @@ class VectorStyleRenderer {
           const scalarOffset = (ref * propStride + i * 2) * 4;
           data[scalarOffset] = scalar;
 
+          if (name === FEATURE_ID_PROP_NAME) {
+            continue;
+          }
+
           if (Array.isArray(value)) {
             const r = Number(value[0]);
             const g = Number(value[1]);
@@ -2968,6 +2980,10 @@ class VectorStyleRenderer {
             }
           }
           dst[base + i * 8] = scalar;
+
+          if (name === FEATURE_ID_PROP_NAME) {
+            continue;
+          }
 
           if (Array.isArray(value)) {
             const r = Number(value[0]);

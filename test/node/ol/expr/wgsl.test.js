@@ -2,6 +2,7 @@ import {
   BooleanType,
   ColorType,
   NumberType,
+  StringType,
   newParsingContext,
   parse,
 } from '../../../../src/ol/expr/expression.js';
@@ -176,6 +177,17 @@ describe('ol/expr/wgsl', () => {
     expect(compileExpressionToWgsl(expr, ctx)).to.be(
       '(get_foo() != -9999999.0)',
     );
+  });
+
+  it('compiles id() when provided by the context', () => {
+    const parsingContext = newParsingContext();
+    const expr = parse(['id'], NumberType | StringType, parsingContext);
+    expect(
+      compileExpressionToWgsl(expr, {
+        ...ctx,
+        id: () => 'feature_id()',
+      }),
+    ).to.be('feature_id()');
   });
 
   it('compiles match() with string input', () => {
