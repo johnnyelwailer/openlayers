@@ -1,12 +1,22 @@
 # WebGPU Vector Rendering - Implementation Status
 
-**Date:** 2025-12-16
+**Date:** 2025-12-17
 **Branch:** `feature/webgpu-vector` (implied)
 
 ## 1. Executive Summary
 The core infrastructure for WebGPU vector rendering has been implemented, mirroring the architecture of the WebGL renderer. The system compiles and runs without runtime errors or validation crashes.
 
-**Latest Progress (2025-12-16):**
+**Latest Progress (2025-12-17):**
+*   **Compatibility Matrix Accuracy Improvements**:
+    * Added compile-time expression backend probes (`capabilities/expr-operators/*`) to distinguish “unsupported operator” from “blank output”.
+    * Extended expr probes to cover color-returning expressions (`case/interpolate/match` + `coalesce(color)`), not just numeric/boolean cases.
+    * Made pattern sub-rect rows meaningful by auto-injecting required `fill-pattern-src` / `stroke-pattern-src` companions for `fill-pattern-*` / `stroke-pattern-*` property scenarios (avoids false positives where a property is a no-op without a pattern source).
+    * Captures WebGPU validation errors per scenario (via `pushErrorScope('validation')`) so failures aren’t reduced to pixel diffs.
+*   **WebGPU Pattern Option Hardening**: WebGPU now rejects expressions for `*-pattern-size`, `*-pattern-offset`, `*-pattern-offset-origin`, and stroke `*-pattern-spacing` / `*-pattern-start-offset` with clear errors instead of emitting invalid WGSL.
+*   **Compatibility Matrix Baseline Updated**: Regenerated `test/compat-matrix/baseline.json` after the above changes.
+*   **Validation (Latest)**: `npm run lint`, `npm run build-full`, `node test/compat-matrix/test.js --headless`, `node test/compat-matrix/test.js --headless --fix`, `npm run test-node`, and `node test/rendering/test.js --match webgpu` passing locally.
+
+**Earlier Progress (2025-12-16):**
 *   **Compat Matrix Parity (Points)**: Fixed WebGPU “blank output” for `circle-fill-color/var`, `circle-stroke-color/var`, `shape-fill-color/var`, `shape-stroke-color/var`, `icon-color/var`, `icon-size/get`, and `icon-size/var` by resolving `var()` and size expressions for point symbol style buffers.
 *   **Icon Sprite Sub-rect Expressions**: WebGPU icon rendering now resolves `icon-size`/`icon-offset` as `literal|get|var` per feature (prevents NaNs in UVs and enables the compat-matrix icon-size coverage).
 *   **Style Resolution Helpers**: Extended WebGPU style-buffer helpers to resolve `['var', …]` and added `resolveSize()` for `SizeExpression` handling (used in the point/icon pipeline).
@@ -16,7 +26,7 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 *   **`props` Allocation Optimization**: Avoid allocating/binding the feature-properties buffer for CPU-resolved `get()` usage (e.g. direct `['get', ...]` stroke width/color), while still allocating when WGSL expressions require it (filters/expressions).
 *   **Update Path Allocations Reduced**: Reused scratch arrays for per-feature GPU buffer updates and reused the uniform upload array to reduce GC churn.
 *   **Batched Dirty Ref Updates**: Coalesced consecutive “dirty ref” style/props updates into contiguous `queue.writeBuffer()` uploads to reduce per-frame CPU overhead for rapidly changing feature properties.
-*   **`time` Expression Parity**: Added support for `['time']` in WebGPU via a real uniform (WebGL parity), sourcing from `frameState.time` (with a `Date.now()` fallback) so the time base matches WebGL.
+*   **`time` Expression Parity**: Added support for `['time']` in WebGPU via a real uniform (WebGL parity), sourced from `frameState.time` / `performance.now()` to avoid epoch mismatches.
 *   **CPU Hit Detection (Sync)**: Implemented a first-pass, synchronous `forEachFeatureAtPixel` path for WebGPU vector layers using source spatial indexing + CPU geometry distance checks (best-effort tolerance derived from literal style values); see `src/ol/renderer/webgpu/hitdetect.js`.
 *   **Compatibility Matrix Baseline Updated**: Regenerated `test/compat-matrix/baseline.json` after the above parity fixes.
 *   **Validation (Latest)**: `npm run lint`, `node test/rendering/test.js --match webgpu`, `npm run build-full`, and `node test/compat-matrix/test.js --headless` passing locally.
