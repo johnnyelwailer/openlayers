@@ -108,5 +108,13 @@ describe('ol/render/webgpu/expr', () => {
         'mix(2.0, 4.0, clamp((lineMetric - 0.0) / (10.0 - 0.0), 0.0, 1.0))',
       );
     });
+
+    it('throws for unsupported operators instead of returning defaults', () => {
+      expect(() => {
+        compileWgslExpression(['number', 1, '1'], ctx, 'f32');
+      }).to.throwException((e) => {
+        expect(e.message).to.be('WGSL backend does not support number()');
+      });
+    });
   });
 });

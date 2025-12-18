@@ -321,6 +321,17 @@ function createMap(target, renderer) {
   } = ol.layer;
   const {Vector: VectorSource} = ol.source;
 
+  if (!target) {
+    throw new Error(`Missing target element for renderer: ${renderer}`);
+  }
+  // In headless runs, the layout can briefly report 0x0. Ensure OL sees a
+  // stable target size before the first render to reduce blank-frame flakes.
+  if (target.clientWidth === 0 || target.clientHeight === 0) {
+    target.style.width = '256px';
+    target.style.height = '256px';
+  }
+  target.getBoundingClientRect();
+
   const {points, line, polygon} = createFeatures();
   const source = new VectorSource({
     features: [...points, line, polygon],
@@ -346,6 +357,7 @@ function createMap(target, renderer) {
     }),
   });
 
+  map.updateSize();
   return {map, layer, features: {points, line, polygon}};
 }
 
@@ -1021,6 +1033,9 @@ async function main() {
   const properties = data.properties || [];
   const scenarios = generateScenarios(properties);
 
+  // Give the browser one layout pass so map targets have a deterministic size.
+  await waitForAnimationFrames(1);
+
   /** @type {Record<string, any>} */
   const contexts = {};
   for (const renderer of RENDERERS) {
@@ -1361,9 +1376,20 @@ fn main() {
 
         // Render after style/variables changes are applied and give the browser a
         // couple of frames to paint (more stable than waiting for rendercomplete).
+        runCtx.map.updateSize();
         runCtx.map.renderSync();
         await waitForAnimationFrames(2);
-        const renderInfo = await globalThis.reportScenarioResult({targetId});
+        let renderInfo = await globalThis.reportScenarioResult({targetId});
+        if (renderInfo && renderInfo.rendered === false) {
+          // Some GPU pipelines can produce a transient blank frame (e.g. shader compilation).
+          // Retry once to avoid flaky "blank output" failures.
+          runCtx.map.renderSync();
+          await waitForAnimationFrames(4);
+          const retry = await globalThis.reportScenarioResult({targetId});
+          if (retry) {
+            renderInfo = retry;
+          }
+        }
         if (renderInfo) {
           Object.assign(entry, renderInfo);
           if (entry.status === 'ok' && renderInfo.rendered === false) {

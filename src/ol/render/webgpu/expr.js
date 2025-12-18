@@ -133,18 +133,22 @@ export function compileWgslExpression(expr, ctx, expected) {
           ? ColorType
           : NumberType;
     const parsed = parse(expr, expectedType, parsingContext);
-    return compileExpressionToWgsl(parsed, {
-      lineMetric: ctx.lineMetricVar,
-      resolution: 'uniforms.resolution',
-      zoom: 'uniforms.zoom',
-      time: 'uniforms.time',
-      get: (name, type) => ctx.getProp(name, type),
-      var: (name, type) => ctx.getVar?.(name, type) || '0.0',
-      ...(ctx.getId ? {id: (type) => ctx.getId(type)} : {}),
-      ...(ctx.getGeometryType
-        ? {geometryType: (type) => ctx.getGeometryType(type)}
-        : {}),
-    });
+    return compileExpressionToWgsl(
+      parsed,
+      {
+        lineMetric: ctx.lineMetricVar,
+        resolution: 'uniforms.resolution',
+        zoom: 'uniforms.zoom',
+        time: 'uniforms.time',
+        get: (name, type) => ctx.getProp(name, type),
+        ...(ctx.getVar ? {var: (name, type) => ctx.getVar(name, type)} : {}),
+        ...(ctx.getId ? {id: (type) => ctx.getId(type)} : {}),
+        ...(ctx.getGeometryType
+          ? {geometryType: (type) => ctx.getGeometryType(type)}
+          : {}),
+      },
+      {strict: true},
+    );
   }
   if (expected === 'bool') {
     return 'false';

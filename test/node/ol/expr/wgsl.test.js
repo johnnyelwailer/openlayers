@@ -201,6 +201,38 @@ describe('ol/expr/wgsl', () => {
     ).to.be('geom_type()');
   });
 
+  it('compiles coalesce() with get() using the undefined sentinel', () => {
+    const parsingContext = newParsingContext();
+    const expr = parse(
+      ['coalesce', ['get', 'x'], 7],
+      NumberType,
+      parsingContext,
+    );
+    const compiled = compileExpressionToWgsl(expr, {
+      ...ctx,
+      get: (name, type) =>
+        type === NumberType ? `get_${name}_scalar()` : `get_${name}_color()`,
+    });
+    expect(compiled).to.contain('(get_x_scalar() != -9999999.0)');
+    expect(compiled).to.contain('select(');
+  });
+
+  it('compiles coalesce(color) with get() using the undefined sentinel', () => {
+    const parsingContext = newParsingContext();
+    const expr = parse(
+      ['coalesce', ['get', 'c'], 'rgb(255,0,0)'],
+      ColorType,
+      parsingContext,
+    );
+    const compiled = compileExpressionToWgsl(expr, {
+      ...ctx,
+      get: (name, type) =>
+        type === NumberType ? `get_${name}_scalar()` : `get_${name}_color()`,
+    });
+    expect(compiled).to.contain('(get_c_scalar() != -9999999.0)');
+    expect(compiled).to.contain('select(');
+  });
+
   it('compiles match() with string input', () => {
     const parsingContext = newParsingContext();
     const expr = parse(

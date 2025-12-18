@@ -12,11 +12,13 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
     * Extended expr probes to cover color-returning expressions (`case/interpolate/match` + `coalesce(color)`), not just numeric/boolean cases.
     * Made pattern sub-rect rows meaningful by auto-injecting required `fill-pattern-src` / `stroke-pattern-src` companions for `fill-pattern-*` / `stroke-pattern-*` property scenarios (avoids false positives where a property is a no-op without a pattern source).
     * Captures WebGPU validation errors per scenario (via `pushErrorScope('validation')`) so failures aren’t reduced to pixel diffs.
+    * Reduced headless flakes by forcing deterministic map target sizing and retrying once when a scenario renders a transient blank frame.
 *   **WebGPU Pattern Option Hardening**: WebGPU now rejects expressions for `*-pattern-size`, `*-pattern-offset`, `*-pattern-offset-origin`, and stroke `*-pattern-spacing` / `*-pattern-start-offset` with clear errors instead of emitting invalid WGSL.
 *   **Expression + Style Parity**:
     * WGSL now supports `['has', ...]`, and missing feature properties in the WebGPU `props` buffer are encoded with `UNDEFINED_PROP_VALUE = -9999999` (aligns with WebGL “undefined” semantics for numeric reads).
     * WGSL now supports `['id']` by packing feature ids into the `props` buffer (strings encoded as stable numeric ids); enables `updateStyleVariables()`-driven hover/highlight filters like `examples/webgpu-vector-layer.html`.
     * WGSL now supports `['geometry-type']` by packing simplified geometry types per feature into the `props` buffer (aligns with WebGL “geometry-type” semantics for mixed geometry styling).
+    * WGSL now supports `['coalesce', ...]` for missing feature properties via the `UNDEFINED_PROP_VALUE` sentinel (works for `get()` arguments; `var()` cannot currently be detected as undefined in WGSL).
     * Polygon `fill-color` now supports non-trivial expressions (e.g. `case`/`match`/arithmetic) by compiling to WGSL and evaluating per feature.
     * **String-based expressions (WebGL parity)**: strings are represented as stable numeric ids in WGSL, enabling string comparisons in `filter`, `match`, and `in` (fixes the style-variable + feature-property string filtering used in `examples/icon-sprite-webgpu.html`).
     * **Polygon fill-color correctness**: polygon `fill-color` expressions are compiled to WGSL when used as expressions (fixes “wrong colors” patterns like `['*', ['get','COLOR'], [220,220,220]]` in `examples/webgpu-vector-layer.html`).
@@ -150,7 +152,7 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 
 ### Features (Pending)
 - [ ] **Complex Styling**: Full rule support (multiple rules, filters on point/line/polygon) and broader expression coverage beyond the current subset.
-- [ ] **WGSL Expression Coverage**: Expand operator support (e.g. `step`, `match`, `between`, `in`, `all/any/!`, `coalesce`, `floor/round`, trig) and remove “silent default” codegen paths (surface unsupported ops as errors/warnings).
+- [ ] **WGSL Expression Coverage**: Expand operator support (e.g. `step`, `match`, `between`, `in`, `all/any/!`, `floor/round`, trig) and remove “silent default” codegen paths (surface unsupported ops as errors/warnings).
 - [ ] **Style Variables (`var()`) Parity**: Keep expanding `var()` usage across symbolizers and move more dynamic properties from CPU-resolved style buffers to the `vars` storage buffer.
 - [ ] **Pattern Expressions**: Support expressions for `*-pattern-size`, `*-pattern-offset`, and related sub-rect fields (WebGL supports expressions here).
 - [ ] **Point/Polygon Expressions**: Extend point/polygon pipelines beyond `literal|get|var` (icons, circles, shapes, polygon fill-color).
@@ -170,12 +172,12 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 ### P0 (correctness / merge-blocking hardening)
 - [ ] **Style parsing parity**: Replace the “single builder” approach in `src/ol/render/webgpu/VectorStyleRenderer.js` with WebGL-equivalent rule parsing (multiple rules, filters per rule, consistent defaults).
 - [x] **Filter parity**: Apply rule filters consistently across point/line/polygon (polygons currently apply the filter for the active fill rule).
-- [ ] **Expression hardening**: Prevent silent fallbacks in WGSL codegen (unsupported ops compiling to `0.0`/`false`); emit actionable diagnostics and/or fall back to CPU evaluation where feasible.
+- [x] **Expression hardening (shader paths)**: `compileWgslExpression()` now compiles WGSL in `strict` mode so unsupported ops throw instead of silently returning `0.0`/`false`; remaining work is better diagnostics and optional CPU fallbacks for selected properties.
 - [ ] **Hit detection plumbing**: Implement `forEachFeatureAtPixel` and wire `disableHitDetection` so it actually bypasses work.
 - [ ] **Device lifecycle**: Handle device loss and renderer disposal cleanly (destroy GPU resources, avoid stale cached canvas/device state).
 
 ### P1 (feature parity expansion)
-- [ ] **WGSL operator coverage**: Prioritize ops exercised by the compatibility matrix (`step`, `match`, boolean ops, `coalesce`) and common numeric transforms (`floor/round`, trig).
+- [ ] **WGSL operator coverage**: Prioritize ops exercised by the compatibility matrix (`step`, `match`, conversion ops) and common numeric transforms (`floor/round`, trig).
 - [ ] **Pattern expressions**: Port WebGL’s expression support for pattern sub-rect sizing/offset fields (`*-pattern-size`, `*-pattern-offset`, `*-pattern-offset-origin`, spacing/start-offset as expressions where applicable).
 - [ ] **Point/Polygon expressions**: Move more per-feature properties to shader-evaluated expressions (or a richer feature-properties storage buffer) to match WebGL semantics and reduce CPU churn.
 - [ ] **Browser spec tests**: Expand `test/browser/spec/ol/render/webgpu/*` toward WebGL’s coverage (buffer utils, shader builder, style parsing, renderer lifecycle).

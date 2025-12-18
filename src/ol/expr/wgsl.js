@@ -4,6 +4,7 @@
 import {asArray} from '../color.js';
 import {
   BooleanType,
+  CallExpression,
   ColorType,
   LiteralExpression,
   NumberType,
@@ -356,6 +357,35 @@ export function compileExpressionToWgsl(expression, ctx, options) {
       result = `mix(${output1}, ${output2}, clamp(${ratio}, 0.0, 1.0))`;
     }
     return result || defaultForType(call.type);
+  }
+
+  if (op === Ops.Coalesce) {
+    // Coalesce returns the first value that is not null/undefined.
+    // In WGSL we approximate "undefined" for feature properties by checking the scalar slot
+    // against UNDEFINED_PROP_VALUE (works for scalar/bool/string/color, as long as the value
+    // comes from `get()`).
+    let result = compileExpressionToWgsl(
+      call.args[call.args.length - 1],
+      ctx,
+      options,
+    );
+
+    for (let i = call.args.length - 2; i >= 0; i--) {
+      const arg = call.args[i];
+      if (arg instanceof CallExpression && arg.operator === Ops.Get) {
+        const firstArg = /** @type {LiteralExpression} */ (arg.args[0]);
+        const propName = /** @type {string} */ (firstArg.value);
+        const defined = `(${ctx.get(propName, NumberType)} != ${numberToWgsl(
+          UNDEFINED_PROP_VALUE,
+        )})`;
+        const value = compileExpressionToWgsl(arg, ctx, options);
+        result = `select(${result}, ${value}, ${defined})`;
+        continue;
+      }
+      // Everything else is assumed to be always defined.
+      result = compileExpressionToWgsl(arg, ctx, options);
+    }
+    return result;
   }
 
   if (op === Ops.Match) {
