@@ -130,6 +130,12 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
 
     /**
      * @private
+     * @type {import("../../transform.js").Transform}
+     */
+    this.tmpTransform_ = createTransform();
+
+    /**
+     * @private
      * @type {Map<string, number>}
      */
     this.geometryRevisionByUid_ = new Map();
@@ -345,10 +351,9 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
       this.ready = false;
       this.generatingBuffers_ = true;
       this.error_ = null;
-      const transform = createTransform(); // Placeholder, logic moves to shader mainly, or batch transform.
 
       this.styleRenderer_
-        .generateBuffers(this.batch_, transform)
+        .generateBuffers(this.batch_, this.tmpTransform_)
         .then((buffers) => {
           this.currentBuffers_ = buffers;
           this.ready = true;

@@ -69,9 +69,10 @@ function createPointFeatures(count) {
  * @param {'webgl'|'webgpu'} renderer Renderer.
  * @param {any} target Target element.
  * @param {any} source Source.
- * @return {{map: any, layer: any, view: any}} Map context.
+ * @param {Array<any>} features Features.
+ * @return {{map: any, layer: any, view: any, source: any, features: Array<any>}} Map context.
  */
-function createMap(renderer, target, source) {
+function createMap(renderer, target, source, features) {
   const {Map, View} = ol;
   const {WebGLVector: WebGLVectorLayer, WebGPUVector: WebGPUVectorLayer} =
     ol.layer;
@@ -107,7 +108,7 @@ function createMap(renderer, target, source) {
   });
 
   map.updateSize();
-  return {map, layer, view};
+  return {map, layer, view, source, features};
 }
 
 /**
@@ -192,10 +193,6 @@ async function main() {
   const warmup = Number(url.searchParams.get('warmup') || 60);
   const featureCount = Number(url.searchParams.get('features') || 2000);
 
-  const {Vector: VectorSource} = ol.source;
-  const features = createPointFeatures(featureCount);
-  const source = new VectorSource({features});
-
   const env = await collectEnv();
 
   /** @type {Record<string, any>} */
@@ -216,7 +213,10 @@ async function main() {
       };
       continue;
     }
-    contexts[renderer] = createMap(renderer, target, source);
+    const {Vector: VectorSource} = ol.source;
+    const features = createPointFeatures(featureCount);
+    const source = new VectorSource({features});
+    contexts[renderer] = createMap(renderer, target, source, features);
   }
 
   const scenarios = [
@@ -266,6 +266,38 @@ async function main() {
         const t = i * 0.03;
         const opacity = 0.6 + 0.3 * (0.5 + 0.5 * Math.sin(t));
         runCtx.layer.setOpacity(opacity);
+      },
+    }),
+    /** @type {const} */ ({
+      id: 'geometry-churn',
+      warmup,
+      frames,
+      reset: (runCtx) => {
+        runCtx.layer.setOpacity(1);
+        runCtx.view.setCenter([0, 0]);
+      },
+      step: (i, runCtx) => {
+        // Update a chunk of feature geometries periodically to force buffer rebuilds.
+        // The intent is to surface "hiccups" (long frame times) rather than maximize steady-state FPS.
+        if (i % 10 !== 0) {
+          return;
+        }
+        const features = runCtx.features || [];
+        const total = features.length || 1;
+        const updateCount = Math.min(400, total);
+        const t = i * 0.02;
+        for (let j = 0; j < updateCount; j++) {
+          const idx = (i * updateCount + j) % total;
+          const f = features[idx];
+          const geom = f?.getGeometry?.();
+          if (!geom?.setCoordinates) {
+            continue;
+          }
+          const x = (idx % 128) * 2000 + 20000 * Math.sin(t + idx * 0.01);
+          const y =
+            Math.floor(idx / 128) * 2000 + 20000 * Math.cos(t + idx * 0.01);
+          geom.setCoordinates([x, y]);
+        }
       },
     }),
   ];

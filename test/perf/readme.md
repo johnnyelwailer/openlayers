@@ -55,3 +55,4 @@ Current scenarios:
 - `style-vars`: rapid `updateStyleVariables()` churn
 - `pan`: view panning
 - `opacity`: layer opacity animation (exercises offscreen compositing in WebGPU)
+- `geometry-churn`: periodic geometry updates (forces batch/buffer rebuilds; surfaces hitching)
