@@ -463,6 +463,24 @@ class VectorStyleRenderer {
 
     /**
      * @private
+     * @type {Float32Array}
+     */
+    this.compositeUniformDataOpacity_ = new Float32Array(8);
+
+    /**
+     * @private
+     * @type {Float32Array}
+     */
+    this.compositeUniformDataOne_ = new Float32Array([1, 0, 0, 0, 0, 0, 0, 0]);
+
+    /**
+     * @private
+     * @type {number}
+     */
+    this.compositeUniformOpacity_ = NaN;
+
+    /**
+     * @private
      * @type {GPUBuffer|null}
      */
     this.compositeUniformBufferOne_ = null;
@@ -532,6 +550,24 @@ class VectorStyleRenderer {
      * @type {GPUTextureFormat|null}
      */
     this.compositePipelineFormat_ = null;
+
+    /**
+     * @private
+     * @type {GPUTextureFormat|null}
+     */
+    this.canvasFormat_ = null;
+
+    /**
+     * @private
+     * @type {GPURenderPassDescriptor|null}
+     */
+    this.renderPassDescriptor_ = null;
+
+    /**
+     * @private
+     * @type {GPURenderPassDescriptor|null}
+     */
+    this.clearPassDescriptor_ = null;
   }
 
   /**
@@ -3496,7 +3532,7 @@ class VectorStyleRenderer {
         device.queue.writeBuffer(
           this.compositeUniformBufferOne_,
           0,
-          new Float32Array([1, 0, 0, 0, 0, 0, 0, 0]),
+          this.compositeUniformDataOne_,
         );
       }
       return this.compositeUniformBufferOne_;
@@ -3508,11 +3544,15 @@ class VectorStyleRenderer {
         usage: 0x0040 | 0x0008, // UNIFORM | COPY_DST
       });
     }
-    device.queue.writeBuffer(
-      this.compositeUniformBufferOpacity_,
-      0,
-      new Float32Array([opacity, 0, 0, 0, 0, 0, 0, 0]),
-    );
+    if (opacity !== this.compositeUniformOpacity_) {
+      this.compositeUniformOpacity_ = opacity;
+      this.compositeUniformDataOpacity_[0] = opacity;
+      device.queue.writeBuffer(
+        this.compositeUniformBufferOpacity_,
+        0,
+        this.compositeUniformDataOpacity_,
+      );
+    }
     return this.compositeUniformBufferOpacity_;
   }
 
@@ -3541,7 +3581,9 @@ class VectorStyleRenderer {
       return;
     }
 
-    this.syncVariables_(device);
+    if (this.variableNames_.length > 0) {
+      this.syncVariables_(device);
+    }
 
     // --- Uniforms Calculation (World -> Clip) ---
     const size = frameState.size;
@@ -3581,7 +3623,9 @@ class VectorStyleRenderer {
 
     const commandEncoder = device.createCommandEncoder();
 
-    const format = navigator.gpu.getPreferredCanvasFormat();
+    const format =
+      this.canvasFormat_ ||
+      (this.canvasFormat_ = navigator.gpu.getPreferredCanvasFormat());
     const widthPx = Math.round(width * pixelRatio);
     const heightPx = Math.round(height * pixelRatio);
     const frameView = this.helper_.getFrameTextureView(
@@ -3601,34 +3645,42 @@ class VectorStyleRenderer {
     // This is needed even when the layer uses offscreen compositing (opacity < 1), because
     // the frame target will only be written to on the last world pass.
     if (useOffscreenComposite && isFirstPass && isFirstWorld) {
-      const clearPass = commandEncoder.beginRenderPass({
+      const clearPassDesc =
+        this.clearPassDescriptor_ ||
+        (this.clearPassDescriptor_ = {
+          colorAttachments: [
+            {
+              view: frameView,
+              clearValue: {r: 0.0, g: 0.0, b: 0.0, a: 0.0},
+              loadOp: 'clear',
+              storeOp: 'store',
+            },
+          ],
+        });
+      clearPassDesc.colorAttachments[0].view = frameView;
+      const clearPass = commandEncoder.beginRenderPass(clearPassDesc);
+      clearPass.end();
+    }
+    const renderPassDesc =
+      this.renderPassDescriptor_ ||
+      (this.renderPassDescriptor_ = {
         colorAttachments: [
           {
-            view: frameView,
+            view: geometryTargetView,
             clearValue: {r: 0.0, g: 0.0, b: 0.0, a: 0.0},
-            loadOp: 'clear',
+            loadOp: 'load',
             storeOp: 'store',
           },
         ],
       });
-      clearPass.end();
-    }
-    const renderPassDescriptor = {
-      colorAttachments: [
-        {
-          view: geometryTargetView,
-          clearValue: {r: 0.0, g: 0.0, b: 0.0, a: 0.0},
-          loadOp: useOffscreenComposite
-            ? isFirstWorld
-              ? 'clear'
-              : 'load'
-            : isFirstPass && isFirstWorld
-              ? 'clear'
-              : 'load',
-          storeOp: 'store',
-        },
-      ],
-    };
+    renderPassDesc.colorAttachments[0].view = geometryTargetView;
+    renderPassDesc.colorAttachments[0].loadOp = useOffscreenComposite
+      ? isFirstWorld
+        ? 'clear'
+        : 'load'
+      : isFirstPass && isFirstWorld
+        ? 'clear'
+        : 'load';
 
     // Update Uniform Buffer with resolution
     if (this.uniformBuffer_) {
@@ -3657,7 +3709,7 @@ class VectorStyleRenderer {
       device.queue.writeBuffer(this.uniformBuffer_, 0, uniformData);
     }
 
-    const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
+    const passEncoder = commandEncoder.beginRenderPass(renderPassDesc);
     const bindGroupCache = this.getBindGroupCache_(buffers);
 
     // 1. Render Polygons (Draw first to be underneath)

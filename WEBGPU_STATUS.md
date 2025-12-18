@@ -13,6 +13,10 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
     * Made pattern sub-rect rows meaningful by auto-injecting required `fill-pattern-src` / `stroke-pattern-src` companions for `fill-pattern-*` / `stroke-pattern-*` property scenarios (avoids false positives where a property is a no-op without a pattern source).
     * Captures WebGPU validation errors per scenario (via `pushErrorScope('validation')`) so failures aren’t reduced to pixel diffs.
     * Reduced headless flakes by forcing deterministic map target sizing and retrying once when a scenario renders a transient blank frame.
+*   **Render Loop Hardening**:
+    * Reduced per-frame allocations in the opacity compositing path and avoid redundant uniform buffer writes when the layer opacity is unchanged.
+    * Cache render pass descriptors and preferred canvas format to reduce per-frame object churn.
+    * Avoid allocating/syncing the `vars` storage buffer when no `var()` expressions are used by the active style.
 *   **WebGPU Pattern Option Hardening**: WebGPU now rejects expressions for `*-pattern-size`, `*-pattern-offset`, `*-pattern-offset-origin`, and stroke `*-pattern-spacing` / `*-pattern-start-offset` with clear errors instead of emitting invalid WGSL.
 *   **Expression + Style Parity**:
     * WGSL now supports `['has', ...]`, and missing feature properties in the WebGPU `props` buffer are encoded with `UNDEFINED_PROP_VALUE = -9999999` (aligns with WebGL “undefined” semantics for numeric reads).

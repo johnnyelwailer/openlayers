@@ -50,3 +50,8 @@ Scenarios live in `test/perf/runner.js` and should be:
 - cheap enough to run in a couple minutes with defaults
 
 When working on performance, add a new scenario if an optimization targets a specific workload that is not covered by `style-vars` or `pan`.
+
+Current scenarios:
+- `style-vars`: rapid `updateStyleVariables()` churn
+- `pan`: view panning
+- `opacity`: layer opacity animation (exercises offscreen compositing in WebGPU)

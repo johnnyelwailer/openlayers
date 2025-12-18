@@ -112,7 +112,7 @@ function createMap(renderer, target, source) {
 
 /**
  * @param {any} runCtx Run context.
- * @param {{id: string, warmup: number, frames: number, step: (i: number, runCtx: any) => void}} scenario Scenario.
+ * @param {{id: string, warmup: number, frames: number, reset?: (runCtx: any) => void, step: (i: number, runCtx: any) => void}} scenario Scenario.
  * @return {Promise<{frameTimes: Array<number>, workTimes: Array<number>}>} Frame and work timings.
  */
 async function runScenario(runCtx, scenario) {
@@ -224,6 +224,10 @@ async function main() {
       id: 'style-vars',
       warmup,
       frames,
+      reset: (runCtx) => {
+        runCtx.layer.setOpacity(1);
+        runCtx.view.setCenter([0, 0]);
+      },
       step: (i, runCtx) => {
         const t = i * 0.03;
         const radius = 4 + ((i % 12) / 12) * 10;
@@ -240,10 +244,28 @@ async function main() {
       id: 'pan',
       warmup,
       frames,
+      reset: (runCtx) => {
+        runCtx.layer.setOpacity(1);
+        runCtx.view.setCenter([0, 0]);
+      },
       step: (i, runCtx) => {
         const dx = Math.sin(i * 0.05) * 10000;
         const dy = Math.cos(i * 0.05) * 10000;
         runCtx.view.setCenter([dx, dy]);
+      },
+    }),
+    /** @type {const} */ ({
+      id: 'opacity',
+      warmup,
+      frames,
+      reset: (runCtx) => {
+        runCtx.layer.setOpacity(0.7);
+        runCtx.view.setCenter([0, 0]);
+      },
+      step: (i, runCtx) => {
+        const t = i * 0.03;
+        const opacity = 0.6 + 0.3 * (0.5 + 0.5 * Math.sin(t));
+        runCtx.layer.setOpacity(opacity);
       },
     }),
   ];
@@ -262,6 +284,9 @@ async function main() {
         continue;
       }
       try {
+        if (scenario.reset) {
+          scenario.reset(runCtx);
+        }
         // Give the browser one frame for layout and one for initial render/shader compile.
         await nextFrame();
         runCtx.map.renderSync();
