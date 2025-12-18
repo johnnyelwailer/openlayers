@@ -42,3 +42,11 @@ Compare against a baseline and fail if p95 frame time regresses by more than 15%
 node test/perf/test.js --compare path/to/baseline.json --threshold 0.15
 ```
 
+## Adding scenarios
+
+Scenarios live in `test/perf/runner.js` and should be:
+- deterministic (no network, no randomness unless seeded)
+- representative of a user-facing workload (e.g. style vars churn, pan/zoom, feature add/remove)
+- cheap enough to run in a couple minutes with defaults
+
+When working on performance, add a new scenario if an optimization targets a specific workload that is not covered by `style-vars` or `pan`.
