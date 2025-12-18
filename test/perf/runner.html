@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>perf-runner</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        padding: 8px;
+      }
+      .target {
+        width: 512px;
+        height: 512px;
+        background: rgb(255, 0, 255);
+        outline: 1px solid rgba(0, 0, 0, 0.25);
+        position: relative;
+      }
+      canvas {
+        background: transparent !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="row">
+      <div id="target-webgl" class="target"></div>
+      <div id="target-webgpu" class="target"></div>
+    </div>
+    <script src="/ol.js"></script>
+    <script type="module" src="/perf/runner.js"></script>
+  </body>
+</html>
+

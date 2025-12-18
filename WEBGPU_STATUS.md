@@ -192,6 +192,7 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 2. **Expression hardening + coverage**: Add missing ops and make unsupported ops observable (no silent defaults).
 3. **Hit detection**: Implement `forEachFeatureAtPixel` and wire `disableHitDetection`.
 4. **Pattern + symbol parity**: Add expression support for pattern sub-rect fields and expand point/polygon expression handling.
+5. **Performance tracking**: Use `node test/perf/test.js` (or `npm run test-perf`) to capture repeatable WebGL/WebGPU frame-time stats for common scenarios (style vars + panning).
 
 ### Hit Detection Approaches (WebGPU)
 

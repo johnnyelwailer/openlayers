@@ -13,6 +13,7 @@
     "lint": "npm run transpile && eslint config examples site src/ol tasks test",
     "pretest": "npm run lint && npm run typecheck && npm run typecheck-strict && npm run typecheck-libcheck",
     "test-rendering": "npm run build-full && node test/rendering/test.js",
+    "test-perf": "npm run build-full && node test/perf/test.js",
     "test-browser": "npm run karma -- --single-run --log-level error",
     "test-node": "mocha --recursive test/node",
     "test": "npm run test-browser && npm run test-node && npm run test-rendering -- --force",
