@@ -19,11 +19,12 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
     };
 
     let bindGroupsCreated = 0;
+    const bindGroupLayouts = [{}, {}];
     const device = {
       createBuffer: () => ({}),
       createShaderModule: () => ({}),
       createRenderPipeline: () => ({
-        getBindGroupLayout: () => ({}),
+        getBindGroupLayout: (index) => bindGroupLayouts[index] || {},
       }),
       createBindGroup: () => {
         bindGroupsCreated++;
@@ -91,7 +92,7 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
     renderer.render(buffers, frameState, 0, 1, true, false, true);
     renderer.render(buffers, frameState, 0, 1, true, false, true);
 
-    expect(bindGroupsCreated).to.be(1);
+    expect(bindGroupsCreated).to.be(2);
   });
 
   it('binds tile mask resources when requested', () => {
@@ -107,11 +108,12 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
 
     /** @type {Array<any>} */
     const bindGroupArgs = [];
+    const bindGroupLayouts = [{}, {}];
     const device = {
       createBuffer: () => ({}),
       createShaderModule: () => ({}),
       createRenderPipeline: () => ({
-        getBindGroupLayout: () => ({}),
+        getBindGroupLayout: (index) => bindGroupLayouts[index] || {},
       }),
       createBindGroup: (args) => {
         bindGroupArgs.push(args);
@@ -186,10 +188,115 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
 
     renderer.render(buffers, frameState, 0, 1, true, false, true, 1, 0);
 
-    const last = bindGroupArgs[bindGroupArgs.length - 1];
-    const bindings = last.entries.map((e) => e.binding);
+    const tileMaskBindGroup = bindGroupArgs.find((args) =>
+      args.entries.some((e) => e.binding === 6),
+    );
+    expect(tileMaskBindGroup).to.not.be(undefined);
+    const bindings = tileMaskBindGroup.entries.map((e) => e.binding);
     expect(bindings).to.contain(6);
     expect(bindings).to.contain(7);
+  });
+
+  it('batches multiple draws into a single submit', () => {
+    if (typeof navigator === 'undefined' || !navigator) {
+      Object.defineProperty(globalThis, 'navigator', {
+        value: {},
+        configurable: true,
+      });
+    }
+    navigator.gpu = {
+      getPreferredCanvasFormat: () => 'bgra8unorm',
+    };
+
+    let submits = 0;
+    const bindGroupLayouts = [{}, {}];
+    const device = {
+      createBuffer: () => ({}),
+      createShaderModule: () => ({}),
+      createRenderPipeline: () => ({
+        getBindGroupLayout: (index) => bindGroupLayouts[index] || {},
+      }),
+      createBindGroup: () => ({}),
+      createCommandEncoder: () => ({
+        beginRenderPass: () => ({
+          setPipeline: () => {},
+          setBindGroup: () => {},
+          setVertexBuffer: () => {},
+          draw: () => {},
+          end: () => {},
+        }),
+        finish: () => ({}),
+      }),
+      queue: {
+        writeBuffer: () => {},
+        submit: () => {
+          submits++;
+        },
+      },
+    };
+
+    const helper = {
+      getDevice: () => device,
+      getContext: () => ({getCurrentTexture: () => ({createView: () => ({})})}),
+      getFrameTextureView: () => ({}),
+      getCurrentTextureView: () => ({}),
+      isFirstPass: () => true,
+    };
+
+    const renderer = new VectorStyleRenderer(
+      [{}],
+      {},
+      /** @type {*} */ (helper),
+    );
+
+    const vertexBuffer = {size: 12};
+    const buffersA = {
+      polygonBuffers: [],
+      lineStringBuffers: [],
+      pointBuffers: [
+        {
+          vertex: {getBuffer: () => vertexBuffer},
+          style: {getBuffer: () => ({})},
+        },
+      ],
+    };
+    const buffersB = {
+      polygonBuffers: [],
+      lineStringBuffers: [],
+      pointBuffers: [
+        {
+          vertex: {getBuffer: () => vertexBuffer},
+          style: {getBuffer: () => ({})},
+        },
+      ],
+    };
+
+    const frameState = {
+      index: 0,
+      size: [32, 32],
+      pixelRatio: 1,
+      viewState: {
+        center: [0, 0],
+        resolution: 1,
+        rotation: 0,
+        zoom: 0,
+      },
+    };
+
+    renderer.renderTiles(
+      [
+        {buffers: buffersA, globalAlpha: 1, tileZoomLevel: 10},
+        {buffers: buffersB, globalAlpha: 1, tileZoomLevel: 10},
+      ],
+      frameState,
+      0,
+      1,
+      true,
+      false,
+      true,
+    );
+
+    expect(submits).to.be(1);
   });
 
   it('does not allocate featureProperties for CPU-only get() usage', async () => {

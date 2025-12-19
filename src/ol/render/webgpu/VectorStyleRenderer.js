@@ -565,6 +565,23 @@ class VectorStyleRenderer {
     this.uniformData_ = null;
 
     /**
+     * Cached bind groups for the uniforms bind group (group 1).
+     * Layouts come from pipelines created with `layout: 'auto'`, so we key by
+     * bind group layout id and uniform buffer id.
+     * @private
+     * @type {Map<number, Map<number, GPUBindGroup>>}
+     */
+    this.uniformBindGroupCache_ = new Map();
+
+    /**
+     * Small per-tile uniform buffers used to batch vector-tile rendering into a
+     * single command submission.
+     * @private
+     * @type {Array<GPUBuffer>}
+     */
+    this.tileUniformBuffers_ = [];
+
+    /**
      * @private
      * @type {number|null}
      */
@@ -740,11 +757,537 @@ class VectorStyleRenderer {
   }
 
   /**
+   * Encode draw calls for a buffer set into an existing render pass.
+   * @param {GPURenderPassEncoder} passEncoder Render pass encoder.
+   * @param {GPUDevice} device Device.
+   * @param {GPUTextureFormat} format Target format.
+   * @param {Object} buffers Buffers object (polygon/line/point).
+   * @param {GPUBuffer} uniformBuffer Uniform buffer for this draw.
+   * @private
+   */
+  renderBuffers_(passEncoder, device, format, buffers, uniformBuffer) {
+    const bindGroupCache = this.getBindGroupCache_(buffers);
+
+    // 1. Render Polygons (Draw first to be underneath)
+    if (buffers.polygonBuffers) {
+      for (const bufferSet of buffers.polygonBuffers) {
+        const vertexBuffer = bufferSet.vertex.getBuffer();
+        const styleBuffer = bufferSet.style.getBuffer();
+        const count = vertexBuffer.size / 12;
+
+        const fillCode = bufferSet.fillShader || this.defaultFillShader_;
+        const pipeline = this.getPipeline_(
+          this.fillPipelineCache_,
+          format,
+          fillCode,
+          () => {
+            const shaderModule = device.createShaderModule({code: fillCode});
+            return device.createRenderPipeline({
+              layout: 'auto',
+              vertex: {
+                module: shaderModule,
+                entryPoint: 'vs_main',
+                buffers: [
+                  {
+                    arrayStride: 12, // 3 floats
+                    attributes: [
+                      {
+                        shaderLocation: 0,
+                        offset: 0,
+                        format: 'float32x2', // position
+                      },
+                      {
+                        shaderLocation: 1,
+                        offset: 8,
+                        format: 'float32', // featureIndex
+                      },
+                    ],
+                  },
+                ],
+              },
+              fragment: {
+                module: shaderModule,
+                entryPoint: 'fs_main',
+                targets: [
+                  {
+                    format,
+                    blend: {
+                      color: {
+                        srcFactor: 'one',
+                        dstFactor: 'one-minus-src-alpha',
+                        operation: 'add',
+                      },
+                      alpha: {
+                        srcFactor: 'one',
+                        dstFactor: 'one-minus-src-alpha',
+                        operation: 'add',
+                      },
+                    },
+                  },
+                ],
+              },
+              primitive: {
+                topology: 'triangle-list',
+              },
+            });
+          },
+        );
+
+        const usesVars = bufferSet.usesVars;
+        const varsBuffer = usesVars ? this.getVariablesBuffer_(device) : null;
+        const usesProps = bufferSet.usesProps;
+        const propsBuffer =
+          buffers.featureProperties && usesProps
+            ? buffers.featureProperties.buffer.getBuffer()
+            : null;
+        const usesTileMask = bufferSet.usesTileMask;
+        const tileMaskSampler = usesTileMask ? this.tileMaskSampler_ : null;
+        const tileMaskView = usesTileMask ? this.tileMaskView_ : null;
+        const patternSampler = bufferSet.pattern?.sampler || null;
+        const patternView = bufferSet.pattern?.view || null;
+        const bindGroup = this.getCachedBindGroup_(
+          bindGroupCache,
+          this.getObjectId_(pipeline),
+          this.getObjectId_(styleBuffer),
+          this.getObjectId_(patternSampler),
+          this.getObjectId_(patternView),
+          this.getObjectId_(varsBuffer),
+          this.getObjectId_(propsBuffer),
+          this.getObjectId_(tileMaskSampler),
+          this.getObjectId_(tileMaskView),
+          () =>
+            device.createBindGroup({
+              layout: pipeline.getBindGroupLayout(0),
+              entries: [
+                {
+                  binding: 0,
+                  resource: {
+                    buffer: styleBuffer,
+                  },
+                },
+                ...(bufferSet.pattern
+                  ? [
+                      {
+                        binding: 2,
+                        resource: bufferSet.pattern.sampler,
+                      },
+                      {
+                        binding: 3,
+                        resource: bufferSet.pattern.view,
+                      },
+                    ]
+                  : []),
+                ...(varsBuffer
+                  ? [
+                      {
+                        binding: 4,
+                        resource: {
+                          buffer: varsBuffer,
+                        },
+                      },
+                    ]
+                  : []),
+                ...(propsBuffer
+                  ? [
+                      {
+                        binding: 5,
+                        resource: {
+                          buffer: propsBuffer,
+                        },
+                      },
+                    ]
+                  : []),
+                ...(tileMaskSampler && tileMaskView
+                  ? [
+                      {
+                        binding: 6,
+                        resource: tileMaskSampler,
+                      },
+                      {
+                        binding: 7,
+                        resource: tileMaskView,
+                      },
+                    ]
+                  : []),
+              ],
+            }),
+        );
+        const uniformsBindGroup = this.getUniformBindGroup_(
+          pipeline,
+          device,
+          uniformBuffer,
+        );
+
+        passEncoder.setPipeline(pipeline);
+        passEncoder.setBindGroup(0, bindGroup);
+        passEncoder.setBindGroup(1, uniformsBindGroup);
+        passEncoder.setVertexBuffer(0, vertexBuffer);
+        passEncoder.draw(count);
+      }
+    }
+
+    // 2. Render LineStrings (Draw after polygons)
+    if (buffers.lineStringBuffers) {
+      for (const bufferSet of buffers.lineStringBuffers) {
+        const vertexBuffer = bufferSet.vertex.getBuffer();
+        const styleBuffer = bufferSet.style.getBuffer();
+
+        // Each vertex = 12 floats = 48 bytes.
+        const count = vertexBuffer.size / 48;
+
+        const strokeCode = bufferSet.strokeShader || this.defaultStrokeShader_;
+        const pipeline = this.getPipeline_(
+          this.strokePipelineCache_,
+          format,
+          strokeCode,
+          () => {
+            const shaderModule = device.createShaderModule({code: strokeCode});
+            return device.createRenderPipeline({
+              layout: 'auto',
+              vertex: {
+                module: shaderModule,
+                entryPoint: 'vs_main',
+                buffers: [
+                  {
+                    arrayStride: 48,
+                    stepMode: 'instance',
+                    attributes: [
+                      {
+                        shaderLocation: 0,
+                        offset: 0,
+                        format: 'float32x2', // segmentStart
+                      },
+                      {
+                        shaderLocation: 1,
+                        offset: 8,
+                        format: 'float32', // measureStart
+                      },
+                      {
+                        shaderLocation: 2,
+                        offset: 12,
+                        format: 'float32x2', // segmentEnd
+                      },
+                      {
+                        shaderLocation: 3,
+                        offset: 20,
+                        format: 'float32', // measureEnd
+                      },
+                      {
+                        shaderLocation: 4,
+                        offset: 24,
+                        format: 'float32x2', // joinAngles (start,end)
+                      },
+                      {
+                        shaderLocation: 5,
+                        offset: 32,
+                        format: 'float32', // distanceLow
+                      },
+                      {
+                        shaderLocation: 6,
+                        offset: 36,
+                        format: 'float32', // distanceHigh
+                      },
+                      {
+                        shaderLocation: 7,
+                        offset: 40,
+                        format: 'float32', // angleTangentSum
+                      },
+                      {
+                        shaderLocation: 8,
+                        offset: 44,
+                        format: 'float32', // featureIndex
+                      },
+                    ],
+                  },
+                ],
+              },
+              fragment: {
+                module: shaderModule,
+                entryPoint: 'fs_main',
+                targets: [
+                  {
+                    format,
+                    blend: {
+                      color: {
+                        srcFactor: 'one',
+                        dstFactor: 'one-minus-src-alpha',
+                        operation: 'add',
+                      },
+                      alpha: {
+                        srcFactor: 'one',
+                        dstFactor: 'one-minus-src-alpha',
+                        operation: 'add',
+                      },
+                    },
+                  },
+                ],
+              },
+              primitive: {
+                topology: 'triangle-strip',
+              },
+            });
+          },
+        );
+
+        const usesVars = bufferSet.usesVars;
+        const varsBuffer = usesVars ? this.getVariablesBuffer_(device) : null;
+        const usesProps = bufferSet.usesProps;
+        const propsBuffer =
+          buffers.featureProperties && usesProps
+            ? buffers.featureProperties.buffer.getBuffer()
+            : null;
+        const usesTileMask = bufferSet.usesTileMask;
+        const tileMaskSampler = usesTileMask ? this.tileMaskSampler_ : null;
+        const tileMaskView = usesTileMask ? this.tileMaskView_ : null;
+        const patternSampler = bufferSet.pattern?.sampler || null;
+        const patternView = bufferSet.pattern?.view || null;
+        const bindGroup = this.getCachedBindGroup_(
+          bindGroupCache,
+          this.getObjectId_(pipeline),
+          this.getObjectId_(styleBuffer),
+          this.getObjectId_(patternSampler),
+          this.getObjectId_(patternView),
+          this.getObjectId_(varsBuffer),
+          this.getObjectId_(propsBuffer),
+          this.getObjectId_(tileMaskSampler),
+          this.getObjectId_(tileMaskView),
+          () =>
+            device.createBindGroup({
+              layout: pipeline.getBindGroupLayout(0),
+              entries: [
+                {
+                  binding: 0,
+                  resource: {
+                    buffer: styleBuffer,
+                  },
+                },
+                ...(bufferSet.pattern
+                  ? [
+                      {
+                        binding: 2,
+                        resource: bufferSet.pattern.sampler,
+                      },
+                      {
+                        binding: 3,
+                        resource: bufferSet.pattern.view,
+                      },
+                    ]
+                  : []),
+                ...(varsBuffer
+                  ? [
+                      {
+                        binding: 4,
+                        resource: {
+                          buffer: varsBuffer,
+                        },
+                      },
+                    ]
+                  : []),
+                ...(propsBuffer
+                  ? [
+                      {
+                        binding: 5,
+                        resource: {
+                          buffer: propsBuffer,
+                        },
+                      },
+                    ]
+                  : []),
+                ...(tileMaskSampler && tileMaskView
+                  ? [
+                      {
+                        binding: 6,
+                        resource: tileMaskSampler,
+                      },
+                      {
+                        binding: 7,
+                        resource: tileMaskView,
+                      },
+                    ]
+                  : []),
+              ],
+            }),
+        );
+        const uniformsBindGroup = this.getUniformBindGroup_(
+          pipeline,
+          device,
+          uniformBuffer,
+        );
+
+        passEncoder.setPipeline(pipeline);
+        passEncoder.setBindGroup(0, bindGroup);
+        passEncoder.setBindGroup(1, uniformsBindGroup);
+        passEncoder.setVertexBuffer(0, vertexBuffer);
+        passEncoder.draw(4, count); // 4 vertices per instance (quad as triangle-strip)
+      }
+    }
+
+    // 3. Render Points (Draw last to be on top)
+    if (buffers.pointBuffers) {
+      for (const bufferSet of buffers.pointBuffers) {
+        const vertexBuffer = bufferSet.vertex.getBuffer();
+        const styleBuffer = bufferSet.style.getBuffer();
+        const instanceCount = vertexBuffer.size / 12;
+
+        const symbolCode =
+          bufferSet.symbolShader || this.defaultCircleSymbolShader_;
+        const pipeline = this.getPipeline_(
+          this.symbolPipelineCache_,
+          format,
+          symbolCode,
+          () => {
+            const shaderModule = device.createShaderModule({code: symbolCode});
+            return device.createRenderPipeline({
+              layout: 'auto',
+              vertex: {
+                module: shaderModule,
+                entryPoint: 'vs_main',
+                buffers: [
+                  {
+                    arrayStride: 12,
+                    stepMode: 'instance',
+                    attributes: [
+                      {
+                        shaderLocation: 0,
+                        offset: 0,
+                        format: 'float32x2',
+                      },
+                      {
+                        shaderLocation: 1,
+                        offset: 8,
+                        format: 'float32', // featureIndex
+                      },
+                    ],
+                  },
+                ],
+              },
+              fragment: {
+                module: shaderModule,
+                entryPoint: 'fs_main',
+                targets: [
+                  {
+                    format,
+                    blend: {
+                      color: {
+                        srcFactor: 'one',
+                        dstFactor: 'one-minus-src-alpha',
+                        operation: 'add',
+                      },
+                      alpha: {
+                        srcFactor: 'one',
+                        dstFactor: 'one-minus-src-alpha',
+                        operation: 'add',
+                      },
+                    },
+                  },
+                ],
+              },
+              primitive: {
+                topology: 'triangle-strip',
+              },
+            });
+          },
+        );
+
+        const usesVars = bufferSet.usesVars;
+        const varsBuffer = usesVars ? this.getVariablesBuffer_(device) : null;
+        const usesProps = bufferSet.usesProps;
+        const propsBuffer =
+          buffers.featureProperties && usesProps
+            ? buffers.featureProperties.buffer.getBuffer()
+            : null;
+        const usesTileMask = bufferSet.usesTileMask;
+        const tileMaskSampler = usesTileMask ? this.tileMaskSampler_ : null;
+        const tileMaskView = usesTileMask ? this.tileMaskView_ : null;
+        const patternSampler = bufferSet.pattern?.sampler || null;
+        const patternView = bufferSet.pattern?.view || null;
+        const bindGroup = this.getCachedBindGroup_(
+          bindGroupCache,
+          this.getObjectId_(pipeline),
+          this.getObjectId_(styleBuffer),
+          this.getObjectId_(patternSampler),
+          this.getObjectId_(patternView),
+          this.getObjectId_(varsBuffer),
+          this.getObjectId_(propsBuffer),
+          this.getObjectId_(tileMaskSampler),
+          this.getObjectId_(tileMaskView),
+          () =>
+            device.createBindGroup({
+              layout: pipeline.getBindGroupLayout(0),
+              entries: [
+                {
+                  binding: 0,
+                  resource: {
+                    buffer: styleBuffer,
+                  },
+                },
+                ...(bufferSet.pattern
+                  ? [
+                      {
+                        binding: 2,
+                        resource: bufferSet.pattern.sampler,
+                      },
+                      {
+                        binding: 3,
+                        resource: bufferSet.pattern.view,
+                      },
+                    ]
+                  : []),
+                ...(varsBuffer
+                  ? [
+                      {
+                        binding: 4,
+                        resource: {
+                          buffer: varsBuffer,
+                        },
+                      },
+                    ]
+                  : []),
+                ...(propsBuffer
+                  ? [
+                      {
+                        binding: 5,
+                        resource: {
+                          buffer: propsBuffer,
+                        },
+                      },
+                    ]
+                  : []),
+                ...(tileMaskSampler && tileMaskView
+                  ? [
+                      {
+                        binding: 6,
+                        resource: tileMaskSampler,
+                      },
+                      {
+                        binding: 7,
+                        resource: tileMaskView,
+                      },
+                    ]
+                  : []),
+              ],
+            }),
+        );
+        const uniformsBindGroup = this.getUniformBindGroup_(
+          pipeline,
+          device,
+          uniformBuffer,
+        );
+
+        passEncoder.setPipeline(pipeline);
+        passEncoder.setBindGroup(0, bindGroup);
+        passEncoder.setBindGroup(1, uniformsBindGroup);
+        passEncoder.setVertexBuffer(0, vertexBuffer);
+        passEncoder.draw(4, instanceCount);
+      }
+    }
+  }
+
+  /**
    * Cache bind groups without allocating string keys in render loops.
    * @param {Map<number, *>} cache Cache root.
    * @param {number} pipelineId Pipeline id.
    * @param {number} styleBufferId Style buffer id.
-   * @param {number} uniformsBufferId Uniform buffer id.
    * @param {number} patternSamplerId Pattern sampler id.
    * @param {number} patternViewId Pattern view id.
    * @param {number} varsBufferId Vars buffer id.
@@ -759,7 +1302,6 @@ class VectorStyleRenderer {
     cache,
     pipelineId,
     styleBufferId,
-    uniformsBufferId,
     patternSamplerId,
     patternViewId,
     varsBufferId,
@@ -778,40 +1320,70 @@ class VectorStyleRenderer {
       m2 = new Map();
       m1.set(styleBufferId, m2);
     }
-    let m3 = m2.get(uniformsBufferId);
+    let m3 = m2.get(patternSamplerId);
     if (!m3) {
       m3 = new Map();
-      m2.set(uniformsBufferId, m3);
+      m2.set(patternSamplerId, m3);
     }
-    let m4 = m3.get(patternSamplerId);
+    let m4 = m3.get(patternViewId);
     if (!m4) {
       m4 = new Map();
-      m3.set(patternSamplerId, m4);
+      m3.set(patternViewId, m4);
     }
-    let m5 = m4.get(patternViewId);
+    let m5 = m4.get(varsBufferId);
     if (!m5) {
       m5 = new Map();
-      m4.set(patternViewId, m5);
+      m4.set(varsBufferId, m5);
     }
-    let m6 = m5.get(varsBufferId);
+    let m6 = m5.get(propsBufferId);
     if (!m6) {
       m6 = new Map();
-      m5.set(varsBufferId, m6);
+      m5.set(propsBufferId, m6);
     }
-    let m7 = m6.get(propsBufferId);
+    let m7 = m6.get(tileMaskSamplerId);
     if (!m7) {
       m7 = new Map();
-      m6.set(propsBufferId, m7);
+      m6.set(tileMaskSamplerId, m7);
     }
-    let m8 = m7.get(tileMaskSamplerId);
-    if (!m8) {
-      m8 = new Map();
-      m7.set(tileMaskSamplerId, m8);
-    }
-    let bindGroup = m8.get(tileMaskViewId);
+    let bindGroup = m7.get(tileMaskViewId);
     if (!bindGroup) {
       bindGroup = create();
-      m8.set(tileMaskViewId, bindGroup);
+      m7.set(tileMaskViewId, bindGroup);
+    }
+    return bindGroup;
+  }
+
+  /**
+   * Get or create the uniforms bind group (group 1) for the given pipeline and buffer.
+   * @param {GPURenderPipeline} pipeline Pipeline.
+   * @param {GPUDevice} device Device.
+   * @param {GPUBuffer} uniformBuffer Uniform buffer.
+   * @return {GPUBindGroup} Bind group.
+   * @private
+   */
+  getUniformBindGroup_(pipeline, device, uniformBuffer) {
+    const layout = pipeline.getBindGroupLayout(1);
+    const layoutId = this.getObjectId_(layout);
+    const bufferId = this.getObjectId_(uniformBuffer);
+    let byLayout = this.uniformBindGroupCache_.get(layoutId);
+    if (!byLayout) {
+      byLayout = new Map();
+      this.uniformBindGroupCache_.set(layoutId, byLayout);
+    }
+    let bindGroup = byLayout.get(bufferId);
+    if (!bindGroup) {
+      bindGroup = device.createBindGroup({
+        layout,
+        entries: [
+          {
+            binding: 0,
+            resource: {
+              buffer: uniformBuffer,
+            },
+          },
+        ],
+      });
+      byLayout.set(bufferId, bindGroup);
     }
     return bindGroup;
   }
@@ -3755,6 +4327,223 @@ class VectorStyleRenderer {
   }
 
   /**
+   * Render multiple buffer sets in a single command submission.
+   * Intended for vector-tile rendering where many tiles are visible at once.
+   * @param {Array<{buffers: Object, globalAlpha: number, tileZoomLevel: number}>} draws Draw calls.
+   * @param {import("../../Map.js").FrameState} frameState Frame state.
+   * @param {number} [worldOffsetX] World offset in map units (defaults to 0).
+   * @param {number} [opacity] Layer opacity (defaults to 1).
+   * @param {boolean} [isFirstWorld] Whether this is the first world pass.
+   * @param {boolean} [isLastWorld] Whether this is the last world pass.
+   * @param {boolean} [isFirstPass] Whether this is the first pass for the shared canvas.
+   */
+  renderTiles(
+    draws,
+    frameState,
+    worldOffsetX = 0,
+    opacity = 1,
+    isFirstWorld = true,
+    isLastWorld = true,
+    isFirstPass = false,
+  ) {
+    if (!draws || draws.length === 0) {
+      return;
+    }
+
+    const device = this.helper_.getDevice();
+    const context = this.helper_.getContext();
+
+    if (!device || !context) {
+      return;
+    }
+
+    if (this.variableNames_.length > 0) {
+      this.syncVariables_(device);
+    }
+
+    // --- Uniforms Calculation (World -> Clip) ---
+    const size = frameState.size;
+    const width = size[0];
+    const height = size[1];
+    const pixelRatio = frameState.pixelRatio;
+    const viewState = frameState.viewState;
+
+    const center = viewState.center;
+    const resolution = viewState.resolution;
+    const rotation = viewState.rotation;
+    const zoom = viewState.zoom;
+
+    // 1. World -> Render (Pixel)
+    // Translate(-center), Scale(1/res), Rotate(-rot), Translate(viewportCenter)
+    const renderTransform = this.renderTransform_;
+    resetTransform(renderTransform);
+    translateTransform(renderTransform, width / 2, height / 2);
+    scaleTransform(renderTransform, 1 / resolution, -1 / resolution);
+    rotateTransform(renderTransform, -rotation);
+    translateTransform(renderTransform, -center[0] + worldOffsetX, -center[1]);
+
+    // 2. Pixel -> Clip
+    // Scale (2/w, -2/h), Translate (-1, 1)
+    const clipTransform = this.clipTransform_;
+    resetTransform(clipTransform);
+    translateTransform(clipTransform, -1, 1);
+    scaleTransform(clipTransform, 2 / width, -2 / height);
+
+    // 3. Combine: Clip * Render
+    multiplyTransform(clipTransform, renderTransform);
+
+    const commandEncoder = device.createCommandEncoder();
+
+    const gpu = navigator.gpu;
+    const format =
+      this.canvasFormat_ ||
+      (this.canvasFormat_ = gpu.getPreferredCanvasFormat());
+    const widthPx = Math.round(width * pixelRatio);
+    const heightPx = Math.round(height * pixelRatio);
+    const frameView = this.helper_.getFrameTextureView(
+      frameState.index,
+      format,
+      widthPx,
+      heightPx,
+    );
+
+    const useOffscreenComposite =
+      Number.isFinite(opacity) && opacity >= 0 && opacity < 1;
+    const geometryTargetView = useOffscreenComposite
+      ? this.getOffscreenView_(device, format, widthPx, heightPx)
+      : frameView;
+
+    // If we are the first WebGPU layer in the frame, clear the persistent frame target.
+    // This is needed even when the layer uses offscreen compositing (opacity < 1), because
+    // the frame target will only be written to on the last world pass.
+    if (useOffscreenComposite && isFirstPass && isFirstWorld) {
+      const clearPassDesc =
+        this.clearPassDescriptor_ ||
+        (this.clearPassDescriptor_ = {
+          colorAttachments: [
+            {
+              view: frameView,
+              clearValue: {r: 0.0, g: 0.0, b: 0.0, a: 0.0},
+              loadOp: 'clear',
+              storeOp: 'store',
+            },
+          ],
+        });
+      clearPassDesc.colorAttachments[0].view = frameView;
+      const clearPass = commandEncoder.beginRenderPass(clearPassDesc);
+      clearPass.end();
+    }
+    const renderPassDesc =
+      this.renderPassDescriptor_ ||
+      (this.renderPassDescriptor_ = {
+        colorAttachments: [
+          {
+            view: geometryTargetView,
+            clearValue: {r: 0.0, g: 0.0, b: 0.0, a: 0.0},
+            loadOp: 'load',
+            storeOp: 'store',
+          },
+        ],
+      });
+    renderPassDesc.colorAttachments[0].view = geometryTargetView;
+    renderPassDesc.colorAttachments[0].loadOp = useOffscreenComposite
+      ? isFirstWorld
+        ? 'clear'
+        : 'load'
+      : isFirstPass && isFirstWorld
+        ? 'clear'
+        : 'load';
+
+    // Build uniform data once and only change per-tile values in the loop.
+    const uniformData = this.uniformData_ || new Float32Array(28); // 112 bytes
+    this.uniformData_ = uniformData;
+    const mat4Data = this.clipMat4_;
+    mat4FromTransform(mat4Data, clipTransform);
+    uniformData.set(mat4Data);
+    uniformData[16] = resolution;
+    uniformData[17] = pixelRatio;
+    uniformData[18] = width;
+    uniformData[19] = height;
+    uniformData[20] = rotation;
+    uniformData[21] = zoom;
+
+    const now =
+      typeof frameState.time === 'number' ? frameState.time : Date.now();
+    if (this.startTime_ === null) {
+      this.startTime_ = now;
+    }
+    uniformData[24] = (now - this.startTime_) * 0.001;
+    uniformData[25] = 0;
+    uniformData[26] = 0;
+    uniformData[27] = 0;
+
+    while (this.tileUniformBuffers_.length < draws.length) {
+      this.tileUniformBuffers_.push(
+        device.createBuffer({
+          size: 112,
+          usage: 0x0040 | 0x0008, // UNIFORM | COPY_DST
+        }),
+      );
+    }
+
+    const passEncoder = commandEncoder.beginRenderPass(renderPassDesc);
+    for (let i = 0; i < draws.length; i++) {
+      const draw = draws[i];
+      const uniformBuffer = this.tileUniformBuffers_[i];
+      // uniforms.padding.x and uniforms.padding.y are intentionally used as
+      // generic per-draw values (e.g. tile alpha and tile zoom level).
+      uniformData[22] = draw.globalAlpha;
+      uniformData[23] = draw.tileZoomLevel;
+      device.queue.writeBuffer(
+        uniformBuffer,
+        0,
+        /** @type {GPUAllowSharedBufferSource} */ (uniformData),
+      );
+      this.renderBuffers_(
+        passEncoder,
+        device,
+        format,
+        draw.buffers,
+        uniformBuffer,
+      );
+    }
+    passEncoder.end();
+
+    if (useOffscreenComposite && isLastWorld) {
+      // Composite pass applies layer opacity once, like WebGL.
+      // Composite the layer's offscreen texture into the persistent frame texture.
+      this.compositeToView_(
+        device,
+        geometryTargetView,
+        frameView,
+        format,
+        opacity,
+        commandEncoder,
+        false,
+      );
+    }
+
+    if (isLastWorld) {
+      // Always blit the persistent frame texture to the swap chain so we don't
+      // depend on swap chain content preservation across multiple layer submits.
+      const swapChainView = this.helper_.getCurrentTextureView(
+        frameState.index,
+      );
+      this.compositeToView_(
+        device,
+        frameView,
+        swapChainView,
+        format,
+        1,
+        commandEncoder,
+        true,
+      );
+    }
+
+    device.queue.submit([commandEncoder.finish()]);
+  }
+
+  /**
    * @param {Object} buffers Buffers.
    * @param {import("../../Map.js").FrameState} frameState Frame state.
    * @param {number} [worldOffsetX] World offset in map units (defaults to 0).
@@ -3919,523 +4708,13 @@ class VectorStyleRenderer {
     }
 
     const passEncoder = commandEncoder.beginRenderPass(renderPassDesc);
-    const bindGroupCache = this.getBindGroupCache_(buffers);
-
-    // 1. Render Polygons (Draw first to be underneath)
-    if (buffers.polygonBuffers) {
-      for (const bufferSet of buffers.polygonBuffers) {
-        const vertexBuffer = bufferSet.vertex.getBuffer();
-        const styleBuffer = bufferSet.style.getBuffer();
-        const count = vertexBuffer.size / 12;
-
-        const fillCode = bufferSet.fillShader || this.defaultFillShader_;
-        const pipeline = this.getPipeline_(
-          this.fillPipelineCache_,
-          format,
-          fillCode,
-          () => {
-            const shaderModule = device.createShaderModule({code: fillCode});
-            return device.createRenderPipeline({
-              layout: 'auto',
-              vertex: {
-                module: shaderModule,
-                entryPoint: 'vs_main',
-                buffers: [
-                  {
-                    arrayStride: 12, // 3 floats
-                    attributes: [
-                      {
-                        shaderLocation: 0,
-                        offset: 0,
-                        format: 'float32x2', // position
-                      },
-                      {
-                        shaderLocation: 1,
-                        offset: 8,
-                        format: 'float32', // featureIndex
-                      },
-                    ],
-                  },
-                ],
-              },
-              fragment: {
-                module: shaderModule,
-                entryPoint: 'fs_main',
-                targets: [
-                  {
-                    format,
-                    blend: {
-                      color: {
-                        srcFactor: 'one',
-                        dstFactor: 'one-minus-src-alpha',
-                        operation: 'add',
-                      },
-                      alpha: {
-                        srcFactor: 'one',
-                        dstFactor: 'one-minus-src-alpha',
-                        operation: 'add',
-                      },
-                    },
-                  },
-                ],
-              },
-              primitive: {
-                topology: 'triangle-list',
-              },
-            });
-          },
-        );
-
-        const usesVars = bufferSet.usesVars;
-        const varsBuffer = usesVars ? this.getVariablesBuffer_(device) : null;
-        const usesProps = bufferSet.usesProps;
-        const propsBuffer =
-          buffers.featureProperties && usesProps
-            ? buffers.featureProperties.buffer.getBuffer()
-            : null;
-        const usesTileMask = bufferSet.usesTileMask;
-        const tileMaskSampler = usesTileMask ? this.tileMaskSampler_ : null;
-        const tileMaskView = usesTileMask ? this.tileMaskView_ : null;
-        const patternSampler = bufferSet.pattern?.sampler || null;
-        const patternView = bufferSet.pattern?.view || null;
-        const bindGroup = this.getCachedBindGroup_(
-          bindGroupCache,
-          this.getObjectId_(pipeline),
-          this.getObjectId_(styleBuffer),
-          this.getObjectId_(this.uniformBuffer_),
-          this.getObjectId_(patternSampler),
-          this.getObjectId_(patternView),
-          this.getObjectId_(varsBuffer),
-          this.getObjectId_(propsBuffer),
-          this.getObjectId_(tileMaskSampler),
-          this.getObjectId_(tileMaskView),
-          () =>
-            device.createBindGroup({
-              layout: pipeline.getBindGroupLayout(0),
-              entries: [
-                {
-                  binding: 0,
-                  resource: {
-                    buffer: styleBuffer,
-                  },
-                },
-                {
-                  binding: 1,
-                  resource: {
-                    buffer: this.uniformBuffer_,
-                  },
-                },
-                ...(bufferSet.pattern
-                  ? [
-                      {
-                        binding: 2,
-                        resource: bufferSet.pattern.sampler,
-                      },
-                      {
-                        binding: 3,
-                        resource: bufferSet.pattern.view,
-                      },
-                    ]
-                  : []),
-                ...(varsBuffer
-                  ? [
-                      {
-                        binding: 4,
-                        resource: {
-                          buffer: varsBuffer,
-                        },
-                      },
-                    ]
-                  : []),
-                ...(propsBuffer
-                  ? [
-                      {
-                        binding: 5,
-                        resource: {
-                          buffer: propsBuffer,
-                        },
-                      },
-                    ]
-                  : []),
-                ...(tileMaskSampler && tileMaskView
-                  ? [
-                      {
-                        binding: 6,
-                        resource: tileMaskSampler,
-                      },
-                      {
-                        binding: 7,
-                        resource: tileMaskView,
-                      },
-                    ]
-                  : []),
-              ],
-            }),
-        );
-
-        passEncoder.setPipeline(pipeline);
-        passEncoder.setBindGroup(0, bindGroup);
-        passEncoder.setVertexBuffer(0, vertexBuffer);
-        passEncoder.draw(count);
-      }
-    }
-
-    // 2. Render Lines
-    if (buffers.lineStringBuffers) {
-      for (const bufferSet of buffers.lineStringBuffers) {
-        const vertexBuffer = bufferSet.vertex.getBuffer();
-        const styleBuffer = bufferSet.style.getBuffer();
-        // 12 floats per instance (see generation above)
-        const count = vertexBuffer.size / (12 * 4);
-
-        const strokeCode = bufferSet.strokeShader || this.defaultStrokeShader_;
-        const pipeline = this.getPipeline_(
-          this.strokePipelineCache_,
-          format,
-          strokeCode,
-          () => {
-            const shaderModule = device.createShaderModule({code: strokeCode});
-            return device.createRenderPipeline({
-              layout: 'auto',
-              vertex: {
-                module: shaderModule,
-                entryPoint: 'vs_main',
-                buffers: [
-                  {
-                    arrayStride: 48, // 12 floats per instance
-                    stepMode: 'instance',
-                    attributes: [
-                      {
-                        shaderLocation: 0,
-                        offset: 0,
-                        format: 'float32x2', // segmentStart
-                      },
-                      {
-                        shaderLocation: 1,
-                        offset: 8,
-                        format: 'float32', // measureStart
-                      },
-                      {
-                        shaderLocation: 2,
-                        offset: 12,
-                        format: 'float32x2', // segmentEnd
-                      },
-                      {
-                        shaderLocation: 3,
-                        offset: 20,
-                        format: 'float32', // measureEnd
-                      },
-                      {
-                        shaderLocation: 4,
-                        offset: 24,
-                        format: 'float32x2', // joinAngles (start,end)
-                      },
-                      {
-                        shaderLocation: 5,
-                        offset: 32,
-                        format: 'float32', // distanceLow
-                      },
-                      {
-                        shaderLocation: 6,
-                        offset: 36,
-                        format: 'float32', // distanceHigh
-                      },
-                      {
-                        shaderLocation: 7,
-                        offset: 40,
-                        format: 'float32', // angleTangentSum
-                      },
-                      {
-                        shaderLocation: 8,
-                        offset: 44,
-                        format: 'float32', // featureIndex
-                      },
-                    ],
-                  },
-                ],
-              },
-              fragment: {
-                module: shaderModule,
-                entryPoint: 'fs_main',
-                targets: [
-                  {
-                    format,
-                    blend: {
-                      color: {
-                        srcFactor: 'one',
-                        dstFactor: 'one-minus-src-alpha',
-                        operation: 'add',
-                      },
-                      alpha: {
-                        srcFactor: 'one',
-                        dstFactor: 'one-minus-src-alpha',
-                        operation: 'add',
-                      },
-                    },
-                  },
-                ],
-              },
-              primitive: {
-                topology: 'triangle-strip',
-              },
-            });
-          },
-        );
-
-        const usesVars = bufferSet.usesVars;
-        const varsBuffer = usesVars ? this.getVariablesBuffer_(device) : null;
-        const usesProps = bufferSet.usesProps;
-        const propsBuffer =
-          buffers.featureProperties && usesProps
-            ? buffers.featureProperties.buffer.getBuffer()
-            : null;
-        const usesTileMask = bufferSet.usesTileMask;
-        const tileMaskSampler = usesTileMask ? this.tileMaskSampler_ : null;
-        const tileMaskView = usesTileMask ? this.tileMaskView_ : null;
-        const patternSampler = bufferSet.pattern?.sampler || null;
-        const patternView = bufferSet.pattern?.view || null;
-        const bindGroup = this.getCachedBindGroup_(
-          bindGroupCache,
-          this.getObjectId_(pipeline),
-          this.getObjectId_(styleBuffer),
-          this.getObjectId_(this.uniformBuffer_),
-          this.getObjectId_(patternSampler),
-          this.getObjectId_(patternView),
-          this.getObjectId_(varsBuffer),
-          this.getObjectId_(propsBuffer),
-          this.getObjectId_(tileMaskSampler),
-          this.getObjectId_(tileMaskView),
-          () =>
-            device.createBindGroup({
-              layout: pipeline.getBindGroupLayout(0),
-              entries: [
-                {
-                  binding: 0,
-                  resource: {
-                    buffer: styleBuffer,
-                  },
-                },
-                {
-                  binding: 1,
-                  resource: {
-                    buffer: this.uniformBuffer_,
-                  },
-                },
-                ...(bufferSet.pattern
-                  ? [
-                      {
-                        binding: 2,
-                        resource: bufferSet.pattern.sampler,
-                      },
-                      {
-                        binding: 3,
-                        resource: bufferSet.pattern.view,
-                      },
-                    ]
-                  : []),
-                ...(varsBuffer
-                  ? [
-                      {
-                        binding: 4,
-                        resource: {
-                          buffer: varsBuffer,
-                        },
-                      },
-                    ]
-                  : []),
-                ...(propsBuffer
-                  ? [
-                      {
-                        binding: 5,
-                        resource: {
-                          buffer: propsBuffer,
-                        },
-                      },
-                    ]
-                  : []),
-                ...(tileMaskSampler && tileMaskView
-                  ? [
-                      {
-                        binding: 6,
-                        resource: tileMaskSampler,
-                      },
-                      {
-                        binding: 7,
-                        resource: tileMaskView,
-                      },
-                    ]
-                  : []),
-              ],
-            }),
-        );
-
-        passEncoder.setPipeline(pipeline);
-        passEncoder.setBindGroup(0, bindGroup);
-        passEncoder.setVertexBuffer(0, vertexBuffer);
-        passEncoder.draw(4, count); // 4 vertices per instance (quad as triangle-strip)
-      }
-    }
-
-    // 3. Render Points (Draw last to be on top)
-    if (buffers.pointBuffers) {
-      for (const bufferSet of buffers.pointBuffers) {
-        const vertexBuffer = bufferSet.vertex.getBuffer();
-        const styleBuffer = bufferSet.style.getBuffer();
-        const instanceCount = vertexBuffer.size / 12;
-
-        const symbolCode =
-          bufferSet.symbolShader || this.defaultCircleSymbolShader_;
-        const pipeline = this.getPipeline_(
-          this.symbolPipelineCache_,
-          format,
-          symbolCode,
-          () => {
-            const shaderModule = device.createShaderModule({code: symbolCode});
-            return device.createRenderPipeline({
-              layout: 'auto',
-              vertex: {
-                module: shaderModule,
-                entryPoint: 'vs_main',
-                buffers: [
-                  {
-                    arrayStride: 12,
-                    stepMode: 'instance',
-                    attributes: [
-                      {
-                        shaderLocation: 0,
-                        offset: 0,
-                        format: 'float32x2',
-                      },
-                      {
-                        shaderLocation: 1,
-                        offset: 8,
-                        format: 'float32',
-                      },
-                    ],
-                  },
-                ],
-              },
-              fragment: {
-                module: shaderModule,
-                entryPoint: 'fs_main',
-                targets: [
-                  {
-                    format,
-                    blend: {
-                      color: {
-                        srcFactor: 'one',
-                        dstFactor: 'one-minus-src-alpha',
-                        operation: 'add',
-                      },
-                      alpha: {
-                        srcFactor: 'one',
-                        dstFactor: 'one-minus-src-alpha',
-                        operation: 'add',
-                      },
-                    },
-                  },
-                ],
-              },
-              primitive: {
-                topology: 'triangle-strip',
-              },
-            });
-          },
-        );
-
-        const usesVars = bufferSet.usesVars;
-        const varsBuffer = usesVars ? this.getVariablesBuffer_(device) : null;
-        const usesProps = bufferSet.usesProps;
-        const propsBuffer =
-          buffers.featureProperties && usesProps
-            ? buffers.featureProperties.buffer.getBuffer()
-            : null;
-        const usesTileMask = bufferSet.usesTileMask;
-        const tileMaskSampler = usesTileMask ? this.tileMaskSampler_ : null;
-        const tileMaskView = usesTileMask ? this.tileMaskView_ : null;
-        const patternSampler = bufferSet.pattern?.sampler || null;
-        const patternView = bufferSet.pattern?.view || null;
-        const bindGroup = this.getCachedBindGroup_(
-          bindGroupCache,
-          this.getObjectId_(pipeline),
-          this.getObjectId_(styleBuffer),
-          this.getObjectId_(this.uniformBuffer_),
-          this.getObjectId_(patternSampler),
-          this.getObjectId_(patternView),
-          this.getObjectId_(varsBuffer),
-          this.getObjectId_(propsBuffer),
-          this.getObjectId_(tileMaskSampler),
-          this.getObjectId_(tileMaskView),
-          () =>
-            device.createBindGroup({
-              layout: pipeline.getBindGroupLayout(0),
-              entries: [
-                {
-                  binding: 0,
-                  resource: {
-                    buffer: styleBuffer,
-                  },
-                },
-                {
-                  binding: 1,
-                  resource: {
-                    buffer: this.uniformBuffer_,
-                  },
-                },
-                ...(bufferSet.pattern
-                  ? [
-                      {
-                        binding: 2,
-                        resource: bufferSet.pattern.sampler,
-                      },
-                      {
-                        binding: 3,
-                        resource: bufferSet.pattern.view,
-                      },
-                    ]
-                  : []),
-                ...(varsBuffer
-                  ? [
-                      {
-                        binding: 4,
-                        resource: {
-                          buffer: varsBuffer,
-                        },
-                      },
-                    ]
-                  : []),
-                ...(propsBuffer
-                  ? [
-                      {
-                        binding: 5,
-                        resource: {
-                          buffer: propsBuffer,
-                        },
-                      },
-                    ]
-                  : []),
-                ...(tileMaskSampler && tileMaskView
-                  ? [
-                      {
-                        binding: 6,
-                        resource: tileMaskSampler,
-                      },
-                      {
-                        binding: 7,
-                        resource: tileMaskView,
-                      },
-                    ]
-                  : []),
-              ],
-            }),
-        );
-
-        passEncoder.setPipeline(pipeline);
-        passEncoder.setBindGroup(0, bindGroup);
-        passEncoder.setVertexBuffer(0, vertexBuffer);
-        passEncoder.draw(4, instanceCount);
-      }
-    }
+    this.renderBuffers_(
+      passEncoder,
+      device,
+      format,
+      buffers,
+      this.uniformBuffer_,
+    );
 
     passEncoder.end();
 

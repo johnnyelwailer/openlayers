@@ -214,7 +214,7 @@ export class WGSLBuilder {
       };
 
       @group(0) @binding(0) var<storage, read> styles : array<Style>;
-      @group(0) @binding(1) var<uniform> uniforms : Uniforms;
+      @group(1) @binding(0) var<uniform> uniforms : Uniforms;
       ${patternBindings}
       @group(0) @binding(4) var<storage, read> vars : array<vec4f>;
       @group(0) @binding(5) var<storage, read> props : array<vec4f>;
@@ -402,7 +402,7 @@ export class WGSLBuilder {
       };
 
       @group(0) @binding(0) var<storage, read> styles : array<Style>;
-      @group(0) @binding(1) var<uniform> uniforms : StrokeUniforms;
+      @group(1) @binding(0) var<uniform> uniforms : StrokeUniforms;
       ${patternBindings}
       @group(0) @binding(4) var<storage, read> vars : array<vec4f>;
       @group(0) @binding(5) var<storage, read> props : array<vec4f>;
@@ -818,7 +818,7 @@ export class WGSLBuilder {
       };
 
       @group(0) @binding(0) var<storage, read> styles : array<Style>;
-      @group(0) @binding(1) var<uniform> uniforms : Uniforms;
+      @group(1) @binding(0) var<uniform> uniforms : Uniforms;
       @group(0) @binding(4) var<storage, read> vars : array<vec4f>;
       @group(0) @binding(5) var<storage, read> props : array<vec4f>;
       ${
@@ -982,7 +982,7 @@ export class WGSLBuilder {
       };
 
       @group(0) @binding(0) var<storage, read> styles : array<Style>;
-      @group(0) @binding(1) var<uniform> uniforms : Uniforms;
+      @group(1) @binding(0) var<uniform> uniforms : Uniforms;
       @group(0) @binding(2) var iconSampler : sampler;
       @group(0) @binding(3) var iconTexture : texture_2d<f32>;
       @group(0) @binding(4) var<storage, read> vars : array<vec4f>;
@@ -1114,7 +1114,7 @@ export class WGSLBuilder {
       };
 
       @group(0) @binding(0) var<storage, read> styles : array<Style>;
-      @group(0) @binding(1) var<uniform> uniforms : Uniforms;
+      @group(1) @binding(0) var<uniform> uniforms : Uniforms;
       @group(0) @binding(4) var<storage, read> vars : array<vec4f>;
       @group(0) @binding(5) var<storage, read> props : array<vec4f>;
       ${

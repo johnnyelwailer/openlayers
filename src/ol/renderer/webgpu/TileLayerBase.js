@@ -429,6 +429,33 @@ class WebGPUBaseTileLayerRenderer extends WebGPULayerRenderer {
   ) {}
 
   /**
+   * Render the computed draw calls.
+   * @param {import("../../Map.js").FrameState} frameState Frame state.
+   * @param {Array<{tileZ:number, tileRepresentation:TileRepresentation}>} drawCalls Draw calls.
+   * @param {import("../../tilegrid/TileGrid.js").default} tileGrid Tile grid.
+   * @param {number} gutter Tile gutter.
+   * @param {import("../../extent.js").Extent} extent Layer extent.
+   * @param {Object<string, number>} alphaLookup Alpha lookup.
+   * @protected
+   */
+  renderTiles(frameState, drawCalls, tileGrid, gutter, extent, alphaLookup) {
+    for (let i = 0; i < drawCalls.length; i++) {
+      const {tileRepresentation, tileZ} = drawCalls[i];
+      this.drawTile_(
+        frameState,
+        tileRepresentation,
+        tileZ,
+        gutter,
+        extent,
+        alphaLookup,
+        tileGrid,
+        i,
+        drawCalls.length,
+      );
+    }
+  }
+
+  /**
    * @param {import("../../Map.js").FrameState} frameState Frame state.
    * @param {TileRepresentation} tileRepresentation Tile representation.
    * @param {number} tileZ Tile zoom level.
@@ -707,20 +734,14 @@ class WebGPUBaseTileLayerRenderer extends WebGPULayerRenderer {
 
     this.beforeTilesRender(frameState, blend, drawCalls.length);
 
-    for (let i = 0; i < drawCalls.length; i++) {
-      const {tileRepresentation, tileZ} = drawCalls[i];
-      this.drawTile_(
-        frameState,
-        tileRepresentation,
-        tileZ,
-        gutter,
-        extent,
-        alphaLookup,
-        tileGrid,
-        i,
-        drawCalls.length,
-      );
-    }
+    this.renderTiles(
+      frameState,
+      drawCalls,
+      tileGrid,
+      gutter,
+      extent,
+      alphaLookup,
+    );
 
     const tileRepresentationCache = this.tileRepresentationCache;
     tileRepresentationCache.expireCache();

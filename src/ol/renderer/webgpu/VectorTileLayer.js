@@ -3,6 +3,7 @@
  */
 import EventType from '../../events/EventType.js';
 import VectorStyleRenderer from '../../render/webgpu/VectorStyleRenderer.js';
+import {getKey as getTileCoordKey} from '../../tilecoord.js';
 import {
   create as createTransform,
   multiply as multiplyTransform,
@@ -284,6 +285,52 @@ class WebGPUVectorTileLayerRenderer extends WebGPUBaseTileLayerRenderer {
     );
     this.isFirstPass_ = this.helper.isFirstPass(frameState.index);
     this.opacity_ = this.getLayer().getOpacity();
+  }
+
+  /**
+   * Render all visible tiles in a single command submission for performance.
+   * @override
+   */
+  renderTiles(frameState, drawCalls, tileGrid, gutter, extent, alphaLookup) {
+    if (!this.styleRenderer_) {
+      return;
+    }
+
+    /** @type {Array<{buffers: Object, globalAlpha: number, tileZoomLevel: number}>} */
+    const tileDraws = [];
+    for (let i = 0; i < drawCalls.length; i++) {
+      const {tileRepresentation, tileZ} = drawCalls[i];
+      const buffers = tileRepresentation.buffers;
+      if (!tileRepresentation.ready || !buffers) {
+        continue;
+      }
+
+      const tileCoordKey = getTileCoordKey(tileRepresentation.tile.tileCoord);
+      const alpha = tileCoordKey in alphaLookup ? alphaLookup[tileCoordKey] : 1;
+      if (alpha < 1) {
+        frameState.animate = true;
+      }
+
+      tileDraws.push({
+        buffers,
+        globalAlpha: alpha,
+        tileZoomLevel: tileZ,
+      });
+    }
+
+    if (tileDraws.length === 0) {
+      return;
+    }
+
+    this.styleRenderer_.renderTiles(
+      tileDraws,
+      frameState,
+      0,
+      this.opacity_,
+      true,
+      true,
+      this.isFirstPass_,
+    );
   }
 
   /**
