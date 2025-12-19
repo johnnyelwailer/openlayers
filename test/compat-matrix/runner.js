@@ -1015,6 +1015,11 @@ function generateScenarios(properties) {
     ['get', 'missing'],
     'rgb(255,0,0)',
   ]);
+  pushExprProbe('palette', ColorType, [
+    'palette',
+    1,
+    ['rgb(0,0,0)', 'rgb(255,0,0)'],
+  ]);
   pushExprProbe('to-string', StringType, ['to-string', 1]);
 
   return scenarios;

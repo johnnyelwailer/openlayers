@@ -291,4 +291,17 @@ describe('ol/expr/wgsl', () => {
       numberToWgsl(getStringNumberEquivalent('1')),
     );
   });
+
+  it('compiles palette()', () => {
+    const parsingContext = newParsingContext();
+    const expr = parse(
+      ['palette', 1, ['rgb(0,0,0)', 'rgb(255,0,0)']],
+      ColorType,
+      parsingContext,
+    );
+    const compiled = compileExpressionToWgsl(expr, ctx);
+    expect(compiled).to.contain('clamp(floor(1.0 + 0.5), 0.0, 1.0)');
+    expect(compiled).to.contain('vec4f(0.0, 0.0, 0.0, 1.0)');
+    expect(compiled).to.contain('vec4f(1.0, 0.0, 0.0, 1.0)');
+  });
 });

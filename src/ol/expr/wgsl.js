@@ -486,6 +486,29 @@ export function compileExpressionToWgsl(expression, ctx, options) {
     return defaultForType(call.type);
   }
 
+  if (op === Ops.Palette) {
+    const index = compileExpressionToWgsl(call.args[0], ctx, options);
+    const colors = call.args
+      .slice(1)
+      .map((arg) => compileExpressionToWgsl(arg, ctx, options));
+    if (colors.length === 0) {
+      reportUnsupported(op, 'palette() requires at least one color', options);
+      return defaultForType(call.type);
+    }
+    if (colors.length === 1) {
+      return colors[0];
+    }
+    const maxIndex = numberToWgsl(colors.length - 1);
+    const clampedIndex = `clamp(floor(${index} + 0.5), 0.0, ${maxIndex})`;
+    let result = colors[0];
+    for (let i = 1; i < colors.length; i++) {
+      result = `select(${result}, ${colors[i]}, (${clampedIndex} == ${numberToWgsl(
+        i,
+      )}))`;
+    }
+    return result;
+  }
+
   reportUnsupported(op, `WGSL backend does not support ${op}()`, options);
   return defaultForType(call.type);
 }

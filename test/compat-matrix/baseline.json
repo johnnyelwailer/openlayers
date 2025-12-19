@@ -1,7 +1,7 @@
 {
   "meta": {
-    "date": "2025-12-19T06:40:03.525Z",
-    "scenarios": 488,
+    "date": "2025-12-19T06:54:17.212Z",
+    "scenarios": 489,
     "renderers": [
       "canvas",
       "webgl",
@@ -28600,6 +28600,28 @@
       "capabilityGetsUsed": 0
     },
     {
+      "id": "capabilities/expr-operators/palette",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": [
+        "palette",
+        1,
+        [
+          "rgb(0,0,0)",
+          "rgb(255,0,0)"
+        ]
+      ],
+      "expectedType": 8,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
       "id": "capabilities/expr-operators/to-string",
       "group": "capability",
       "geometry": "none",
@@ -48065,6 +48087,50 @@
     },
     {
       "id": "capabilities/expr-operators/coalesce-color",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/palette",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "not_supported",
+      "messages": [
+        {
+          "type": "expr",
+          "message": "Unsupported operator palette"
+        }
+      ]
+    },
+    {
+      "id": "capabilities/expr-operators/palette",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/palette",
       "renderer": "webgpu",
       "targetId": "target-webgpu",
       "scenarioGroup": "capability",
