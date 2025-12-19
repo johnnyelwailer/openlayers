@@ -1,6 +1,6 @@
 # WebGPU Vector Rendering - Implementation Status
 
-**Date:** 2025-12-17
+**Date:** 2025-12-19
 **Branch:** `feature/webgpu-vector` (implied)
 
 ## 1. Executive Summary
@@ -13,11 +13,12 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
     * Made pattern sub-rect rows meaningful by auto-injecting required `fill-pattern-src` / `stroke-pattern-src` companions for `fill-pattern-*` / `stroke-pattern-*` property scenarios (avoids false positives where a property is a no-op without a pattern source).
     * Captures WebGPU validation errors per scenario (via `pushErrorScope('validation')`) so failures aren’t reduced to pixel diffs.
     * Reduced headless flakes by forcing deterministic map target sizing and retrying once when a scenario renders a transient blank frame.
+    * When WebGPU style/buffer generation fails asynchronously, the compat runner now records the renderer’s last error via `WebGPUVectorLayerRenderer#getLastError()` (instead of only “Rendered blank output”).
 *   **Render Loop Hardening**:
     * Reduced per-frame allocations in the opacity compositing path and avoid redundant uniform buffer writes when the layer opacity is unchanged.
     * Cache render pass descriptors and preferred canvas format to reduce per-frame object churn.
     * Avoid allocating/syncing the `vars` storage buffer when no `var()` expressions are used by the active style.
-*   **WebGPU Pattern Option Hardening**: WebGPU now rejects expressions for `*-pattern-size`, `*-pattern-offset`, `*-pattern-offset-origin`, and stroke `*-pattern-spacing` / `*-pattern-start-offset` with clear errors instead of emitting invalid WGSL.
+*   **WebGPU Pattern Option Hardening**: WebGPU rejects expressions for `*-pattern-size`, `*-pattern-offset`, `*-pattern-offset-origin`, and stroke `*-pattern-spacing` / `*-pattern-start-offset` with clear errors. Validation happens before any pattern texture is fetched/decoded.
 *   **Expression + Style Parity**:
     * WGSL now supports `['has', ...]`, and missing feature properties in the WebGPU `props` buffer are encoded with `UNDEFINED_PROP_VALUE = -9999999` (aligns with WebGL “undefined” semantics for numeric reads).
     * WGSL now supports `['id']` by packing feature ids into the `props` buffer (strings encoded as stable numeric ids); enables `updateStyleVariables()`-driven hover/highlight filters like `examples/webgpu-vector-layer.html`.
@@ -28,7 +29,7 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
     * **Assertion/string ops in WGSL**: `number()` / `string()` assertions and literal-folding support for `concat()` / `to-string()` (improves compat-matrix expression probe coverage for WebGPU).
     * **Polygon fill-color correctness**: polygon `fill-color` expressions are compiled to WGSL when used as expressions (fixes “wrong colors” patterns like `['*', ['get','COLOR'], [220,220,220]]` in `examples/webgpu-vector-layer.html`).
 *   **Compatibility Matrix Baseline Updated**: Regenerated `test/compat-matrix/baseline.json` after the above changes.
-*   **Validation (Latest)**: `npm run lint`, `npm run typecheck`, `npm run typecheck-libcheck`, `npm run build-full`, `node test/compat-matrix/test.js --headless`, `npm run test-node`, and `npm run test-rendering -- --match webgpu` passing locally. (`npm test` is currently blocked by `npm run typecheck-strict` failures unrelated to WebGPU.)
+*   **Validation (Latest)**: `npm run lint`, `npm run typecheck`, `npm run build-full`, `node test/compat-matrix/test.js --headless`, and `npm run test-node` passing locally.
 
 **Notes / Risks (current)**
 *   **String semantics in WGSL**: strings are encoded as stable numeric ids (`getStringNumberEquivalent()`) so shaders can do equality-based operations (`==`, `match`, `in`). This is not “string support” beyond comparisons, and the mapping is runtime-local (not stable across sessions). Large numbers of unique strings can grow the mapping table.
@@ -190,7 +191,7 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 
 ### P2 (scope expansion beyond vector)
 - [ ] **WebGPU points-only layer** (`WebGLPoints` parity): separate pipeline + hit detection.
-- [ ] **WebGPU vector tiles** (`WebGLVectorTile` parity): masking, patterns, tile lifecycle/cache integration.
+- [ ] **WebGPU vector tiles** (`WebGLVectorTile` parity): WIP scaffolding exists (`src/ol/layer/WebGPUVectorTile.js`, `src/ol/renderer/webgpu/VectorTileLayer.js`, `examples/webgpu-vector-tiles.html`) but still missing masking + tile-extent discard + transitions/hit detection.
 - [ ] **WebGPU tile rendering** (`WebGLTile` parity): reprojection, palettes/bands, data tiles, tile-specific tests/examples.
 
 ## 6. Next Steps

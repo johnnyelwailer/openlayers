@@ -1346,4 +1346,134 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
     expect(last[14]).to.be(0);
     expect(last[15]).to.be(0);
   });
+
+  it('rejects stroke pattern expression options before loading the pattern texture', async () => {
+    const device = {
+      createBuffer: ({size}) => ({
+        size,
+        getMappedRange: () => new ArrayBuffer(size),
+        unmap: () => {},
+      }),
+      queue: {
+        writeBuffer: () => {},
+      },
+    };
+    const helper = {
+      getDevice: () => device,
+    };
+
+    const renderer = new VectorStyleRenderer(
+      [
+        {
+          style: {
+            'stroke-width': 1,
+            'stroke-pattern-src': 'pattern.png',
+            'stroke-pattern-size': ['get', 'size'],
+          },
+        },
+      ],
+      {},
+      /** @type {*} */ (helper),
+    );
+
+    renderer.getPatternTexture_ = () => {
+      throw new Error('pattern texture should not be requested');
+    };
+
+    const feature = {
+      get: () => 1,
+    };
+    const geometryBatch = {
+      pointBatch: {entries: {}},
+      lineStringBatch: {
+        entries: {
+          a: {
+            ref: 1,
+            feature,
+            flatCoordss: [[0, 0, 0, 10, 10, 1]],
+          },
+        },
+      },
+      polygonBatch: {entries: {}},
+    };
+
+    /** @type {Error|undefined} */
+    let error;
+    try {
+      await renderer.generateBuffers(
+        /** @type {*} */ (geometryBatch),
+        /** @type {*} */ ([]),
+      );
+    } catch (err) {
+      error = /** @type {Error} */ (err);
+    }
+
+    expect(!!error).to.be(true);
+    expect(error.message || String(error)).to.contain('stroke-pattern-size');
+  });
+
+  it('rejects fill pattern expression options before loading the pattern texture', async () => {
+    const device = {
+      createBuffer: ({size}) => ({
+        size,
+        getMappedRange: () => new ArrayBuffer(size),
+        unmap: () => {},
+      }),
+      queue: {
+        writeBuffer: () => {},
+      },
+    };
+    const helper = {
+      getDevice: () => device,
+    };
+
+    const renderer = new VectorStyleRenderer(
+      [
+        {
+          style: {
+            'fill-pattern-src': 'pattern.png',
+            'fill-pattern-size': ['var', 'size'],
+          },
+        },
+      ],
+      {},
+      /** @type {*} */ (helper),
+    );
+
+    renderer.getPatternTexture_ = () => {
+      throw new Error('pattern texture should not be requested');
+    };
+
+    const feature = {
+      get: () => 1,
+    };
+    const geometryBatch = {
+      pointBatch: {entries: {}},
+      lineStringBatch: {entries: {}},
+      polygonBatch: {
+        entries: {
+          a: {
+            ref: 1,
+            feature,
+            flatCoordss: [[0, 0, 10, 0, 10, 10, 0, 10]],
+            ringsVerticesCounts: [[4]],
+          },
+        },
+      },
+    };
+
+    /** @type {Error|undefined} */
+    let error;
+    try {
+      await renderer.generateBuffers(
+        /** @type {*} */ (geometryBatch),
+        /** @type {*} */ ([]),
+      );
+    } catch (err) {
+      error = /** @type {Error} */ (err);
+    }
+
+    expect(!!error).to.be(true);
+    expect(error.message || String(error)).to.contain('fill-pattern-size');
+  });
 });

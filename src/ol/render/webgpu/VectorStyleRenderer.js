@@ -2208,8 +2208,6 @@ class VectorStyleRenderer {
         let patternTexture;
         let patternOptions;
         if (hasStrokePattern) {
-          patternTexture = await this.getPatternTexture_(patternSrc);
-          const textureSize = patternTexture.size;
           const sampleSizeValue = style['stroke-pattern-size'];
           if (
             sampleSizeValue !== undefined &&
@@ -2220,9 +2218,6 @@ class VectorStyleRenderer {
               'WebGPU layers do not support expressions for the stroke-pattern-size style property',
             );
           }
-          const sampleSize = isSizeLiteral(sampleSizeValue)
-            ? sampleSizeValue
-            : textureSize;
 
           const offsetValue = style['stroke-pattern-offset'];
           if (
@@ -2234,7 +2229,6 @@ class VectorStyleRenderer {
               'WebGPU layers do not support expressions for the stroke-pattern-offset style property',
             );
           }
-          const baseOffset = isSizeLiteral(offsetValue) ? offsetValue : [0, 0];
 
           const originValue = style['stroke-pattern-offset-origin'];
           if (
@@ -2245,17 +2239,6 @@ class VectorStyleRenderer {
             throw new Error(
               'WebGPU layers do not support expressions for the stroke-pattern-offset-origin style property',
             );
-          }
-          const origin = originValue || 'top-left';
-          let offsetX = baseOffset[0] || 0;
-          let offsetY = baseOffset[1] || 0;
-          if (origin === 'top-right') {
-            offsetX = textureSize[0] - sampleSize[0] - offsetX;
-          } else if (origin === 'bottom-left') {
-            offsetY = textureSize[1] - sampleSize[1] - offsetY;
-          } else if (origin === 'bottom-right') {
-            offsetX = textureSize[0] - sampleSize[0] - offsetX;
-            offsetY = textureSize[1] - sampleSize[1] - offsetY;
           }
 
           const spacingValue = style['stroke-pattern-spacing'];
@@ -2268,7 +2251,6 @@ class VectorStyleRenderer {
               'WebGPU layers do not support expressions for the stroke-pattern-spacing style property',
             );
           }
-          const spacingPx = spacingValue || 0;
 
           const startOffsetValue = style['stroke-pattern-start-offset'];
           if (
@@ -2280,6 +2262,28 @@ class VectorStyleRenderer {
               'WebGPU layers do not support expressions for the stroke-pattern-start-offset style property',
             );
           }
+
+          patternTexture = await this.getPatternTexture_(patternSrc);
+          const textureSize = patternTexture.size;
+          const sampleSize = isSizeLiteral(sampleSizeValue)
+            ? sampleSizeValue
+            : textureSize;
+
+          const baseOffset = isSizeLiteral(offsetValue) ? offsetValue : [0, 0];
+
+          const origin = originValue || 'top-left';
+          let offsetX = baseOffset[0] || 0;
+          let offsetY = baseOffset[1] || 0;
+          if (origin === 'top-right') {
+            offsetX = textureSize[0] - sampleSize[0] - offsetX;
+          } else if (origin === 'bottom-left') {
+            offsetY = textureSize[1] - sampleSize[1] - offsetY;
+          } else if (origin === 'bottom-right') {
+            offsetX = textureSize[0] - sampleSize[0] - offsetX;
+            offsetY = textureSize[1] - sampleSize[1] - offsetY;
+          }
+
+          const spacingPx = spacingValue || 0;
           const startOffsetPx = startOffsetValue || 0;
           const tintEnabled = 'stroke-color' in style;
           patternOptions = {
@@ -2721,8 +2725,6 @@ class VectorStyleRenderer {
           /** @type {import("./WGSLBuilder.js").FillPatternShaderOptions|undefined} */
           let fillPatternOptions;
           if (hasFillPattern) {
-            fillPatternTexture = await this.getPatternTexture_(fillPatternSrc);
-            const textureSize = fillPatternTexture.size;
             const sampleSizeValue = polyStyle['fill-pattern-size'];
             if (
               sampleSizeValue !== undefined &&
@@ -2733,9 +2735,6 @@ class VectorStyleRenderer {
                 'WebGPU layers do not support expressions for the fill-pattern-size style property',
               );
             }
-            const sampleSize = isSizeLiteral(sampleSizeValue)
-              ? sampleSizeValue
-              : textureSize;
 
             const offsetValue = polyStyle['fill-pattern-offset'];
             if (
@@ -2747,9 +2746,6 @@ class VectorStyleRenderer {
                 'WebGPU layers do not support expressions for the fill-pattern-offset style property',
               );
             }
-            const baseOffset = isSizeLiteral(offsetValue)
-              ? offsetValue
-              : [0, 0];
 
             const originValue = polyStyle['fill-pattern-offset-origin'];
             if (
@@ -2761,6 +2757,16 @@ class VectorStyleRenderer {
                 'WebGPU layers do not support expressions for the fill-pattern-offset-origin style property',
               );
             }
+
+            fillPatternTexture = await this.getPatternTexture_(fillPatternSrc);
+            const textureSize = fillPatternTexture.size;
+            const sampleSize = isSizeLiteral(sampleSizeValue)
+              ? sampleSizeValue
+              : textureSize;
+
+            const baseOffset = isSizeLiteral(offsetValue)
+              ? offsetValue
+              : [0, 0];
             const origin = originValue || 'top-left';
             let offsetX = baseOffset[0] || 0;
             let offsetY = baseOffset[1] || 0;

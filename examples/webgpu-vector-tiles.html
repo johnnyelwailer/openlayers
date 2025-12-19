@@ -1,0 +1,16 @@
+---
+layout: example.html
+title: WebGPU Vector Tiles Layer
+shortdesc: Example of a vector tiles map rendered using WebGPU.
+docs: >
+  A simple map showing Mapbox vector tiles, rendered using WebGPU. **Note**: WebGPU vector tiles are experimental and currently missing masking and tile-extent clipping, so you may see artifacts during tile loading or at tile seams.
+tags: "simple, mapbox, vector, tiles, webgpu"
+experimental: true
+resources:
+  - resources/mapbox-streets-v6-style.js
+cloak:
+  - key: pk.eyJ1IjoiYWhvY2V2YXIiLCJhIjoiY2t0cGdwMHVnMGdlbzMxbDhwazBic2xrNSJ9.WbcTL9uj8JPAsnT9mgb7oQ
+    value: Your Mapbox access token from https://mapbox.com/ here
+---
+<div id="map" class="map"></div>
+

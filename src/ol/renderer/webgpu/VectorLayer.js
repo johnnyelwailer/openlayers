@@ -447,6 +447,15 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
   }
 
   /**
+   * Returns the last error encountered while generating buffers/styles.
+   * This is primarily intended for diagnostics (e.g. compat-matrix runner).
+   * @return {Error|null} Last error.
+   */
+  getLastError() {
+    return this.error_;
+  }
+
+  /**
    * @param {import("../../coordinate.js").Coordinate} coordinate Coordinate.
    * @param {import("../../Map.js").FrameState} frameState Frame state.
    * @param {number} hitTolerance Hit tolerance in pixels.

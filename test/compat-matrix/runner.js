@@ -1405,6 +1405,20 @@ fn main() {
             });
           }
         }
+        if (renderer === 'webgpu' && entry.status !== 'ok') {
+          try {
+            const lastError =
+              runCtx?.layer?.getRenderer?.()?.getLastError?.() || null;
+            if (lastError) {
+              entry.messages.push({
+                type: 'renderer',
+                message: lastError.message || String(lastError),
+              });
+            }
+          } catch {
+            // ignore
+          }
+        }
       } catch (err) {
         entry.status = 'not_supported';
         entry.messages.push({
