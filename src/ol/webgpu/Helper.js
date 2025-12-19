@@ -58,6 +58,9 @@ function getOrCreateCanvasCacheItem(key) {
     canvas.style.position = 'absolute';
     canvas.style.left = '0';
     const context = canvas.getContext('webgpu');
+    if (!context) {
+      throw new Error('WebGPU canvas context not supported');
+    }
     cacheItem = {
       users: 0,
       context,
@@ -108,7 +111,7 @@ function releaseCanvas(key) {
   // WebGPU doesn't have a direct "loseContext" extension equivalent that is standard/required here,
   // but we can at least remove it from the cache and resize it down.
   const context = cacheItem.context;
-  const canvas = context.canvas;
+  const canvas = /** @type {HTMLCanvasElement} */ (context.canvas);
   canvas.width = 1;
   canvas.height = 1;
   canvas.style.display = 'none';
@@ -125,14 +128,6 @@ export const ShaderType = {
 /**
  * @typedef {Object} Options
  * @property {string} [canvasCacheKey] The request cache key for the canvas.
- */
-
-/**
- * @typedef {Object} GPUCanvasContext
- * @property {HTMLCanvasElement} canvas Canvas.
- * @property {function(Object): void} configure Configure the canvas context.
- * @property {function(): string} getCurrentTexture Get the current texture.
- * @property {function(): void} unconfigure Unconfigure the context.
  */
 
 /**
@@ -171,7 +166,7 @@ class WebGPUHelper extends Disposable {
 
     /**
      * @private
-     * @type {GPUCanvasContext}
+     * @type {CanvasCacheItem}
      */
     this.cacheItem_ = getOrCreateCanvasCacheItem(this.canvasCacheKey_);
 
@@ -185,7 +180,7 @@ class WebGPUHelper extends Disposable {
      * @private
      * @type {HTMLCanvasElement}
      */
-    this.canvas_ = this.context_.canvas;
+    this.canvas_ = /** @type {HTMLCanvasElement} */ (this.context_.canvas);
 
     /**
      * @private
@@ -213,11 +208,12 @@ class WebGPUHelper extends Disposable {
     }
 
     this.cacheItem_.readyPromise = (async () => {
-      if (!navigator.gpu) {
+      const gpu = navigator.gpu;
+      if (!gpu) {
         throw new Error('WebGPU not supported');
       }
 
-      const adapter = await navigator.gpu.requestAdapter();
+      const adapter = await gpu.requestAdapter();
       if (!adapter) {
         throw new Error('No WebGPU adapter found');
       }

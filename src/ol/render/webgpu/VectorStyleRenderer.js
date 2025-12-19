@@ -94,9 +94,13 @@ function getExpressionSpecialInputUsage(expr) {
  * @property {WebGPUBuffer} vertex Vertex buffer.
  * @property {WebGPUBuffer} style Style buffer.
  * @property {string} [fillShader] Optional WGSL shader override.
+ * @property {boolean} [usesVars] Whether the shader reads from the `vars` buffer.
+ * @property {boolean} [usesProps] Whether the shader reads from the `props` buffer.
  * @property {StrokePatternTexture} [pattern] Optional fill pattern resources.
  * @property {(device: GPUDevice, ref: number, feature: import("../../Feature.js").default|import("../../render/Feature.js").default) => void} [updateStyle]
  * Update per-feature style record for a given ref.
+ * @property {(device: GPUDevice, dirtyRefs: Map<number, import("../../Feature.js").default|import("../../render/Feature.js").default>) => void} [updateStyleBatch]
+ * Update per-feature style records for a set of dirty refs.
  */
 
 /**
@@ -104,7 +108,13 @@ function getExpressionSpecialInputUsage(expr) {
  * @property {WebGPUBuffer} vertex Vertex buffer (instanced: position + featureIndex).
  * @property {WebGPUBuffer} style Style buffer.
  * @property {string} [symbolShader] Optional WGSL shader override.
+ * @property {boolean} [usesVars] Whether the shader reads from the `vars` buffer.
+ * @property {boolean} [usesProps] Whether the shader reads from the `props` buffer.
  * @property {StrokePatternTexture} [pattern] Optional symbol texture resources.
+ * @property {(device: GPUDevice, ref: number, feature: import("../../Feature.js").default|import("../../render/Feature.js").default) => void} [updateStyle]
+ * Update per-feature style record for a given ref.
+ * @property {(device: GPUDevice, dirtyRefs: Map<number, import("../../Feature.js").default|import("../../render/Feature.js").default>) => void} [updateStyleBatch]
+ * Update per-feature style records for a set of dirty refs.
  */
 
 /**
@@ -112,7 +122,13 @@ function getExpressionSpecialInputUsage(expr) {
  * @property {WebGPUBuffer} vertex Vertex buffer.
  * @property {WebGPUBuffer} style Style buffer.
  * @property {string} [strokeShader] Optional WGSL shader override.
+ * @property {boolean} [usesVars] Whether the shader reads from the `vars` buffer.
+ * @property {boolean} [usesProps] Whether the shader reads from the `props` buffer.
  * @property {StrokePatternTexture} [pattern] Optional stroke pattern resources.
+ * @property {(device: GPUDevice, ref: number, feature: import("../../Feature.js").default|import("../../render/Feature.js").default) => void} [updateStyle]
+ * Update per-feature style record for a given ref.
+ * @property {(device: GPUDevice, dirtyRefs: Map<number, import("../../Feature.js").default|import("../../render/Feature.js").default>) => void} [updateStyleBatch]
+ * Update per-feature style records for a set of dirty refs.
  */
 
 /**
@@ -746,7 +762,11 @@ class VectorStyleRenderer {
       });
       this.variablesBufferSize_ = byteSize;
       this.variablesData_ = new Float32Array(count * 4);
-      device.queue.writeBuffer(this.variablesBuffer_, 0, this.variablesData_);
+      device.queue.writeBuffer(
+        this.variablesBuffer_,
+        0,
+        /** @type {GPUAllowSharedBufferSource} */ (this.variablesData_),
+      );
     }
     return this.variablesBuffer_;
   }
@@ -819,7 +839,11 @@ class VectorStyleRenderer {
     }
 
     if (dirty) {
-      device.queue.writeBuffer(buffer, 0, data);
+      device.queue.writeBuffer(
+        buffer,
+        0,
+        /** @type {GPUAllowSharedBufferSource} */ (data),
+      );
     }
   }
 
@@ -909,7 +933,9 @@ class VectorStyleRenderer {
     const loadPromise = (async () => {
       /** @type {ImageBitmap|HTMLImageElement} */
       let imageSource;
+      /** @type {number} */
       let width;
+      /** @type {number} */
       let height;
       try {
         const response = await fetch(src);
@@ -954,7 +980,7 @@ class VectorStyleRenderer {
       return {
         sampler,
         view: texture.createView(),
-        size: [width, height],
+        size: /** @type {[number, number]} */ ([width, height]),
       };
     })();
 
@@ -1211,7 +1237,7 @@ class VectorStyleRenderer {
            * @param {*} value Value.
            * @param {[number, number]} fallback Fallback.
            * @param {string} name Name for error messages.
-           * @return {((feature: import(\"../../Feature.js\").default|import(\"../../render/Feature.js\").default) => [number, number])|null} Evaluator.
+           * @return {((feature: import("../../Feature.js").default|import("../../render/Feature.js").default) => [number, number])|null} Evaluator.
            */
           const tryBuildSizeEvaluator = (value, fallback, name) => {
             if (!Array.isArray(value) || typeof value[0] !== 'string') {
@@ -1489,7 +1515,7 @@ class VectorStyleRenderer {
               device.queue.writeBuffer(
                 styleBuffer.getBuffer(),
                 ref * strideBytes,
-                scratch,
+                /** @type {GPUAllowSharedBufferSource} */ (scratch),
               );
             },
             updateStyleBatch: (device, dirtyRefs) => {
@@ -1514,7 +1540,7 @@ class VectorStyleRenderer {
                   device.queue.writeBuffer(
                     styleBuffer.getBuffer(),
                     ref * strideBytes,
-                    scratch,
+                    /** @type {GPUAllowSharedBufferSource} */ (scratch),
                   );
                 }
                 return;
@@ -1547,7 +1573,9 @@ class VectorStyleRenderer {
                 device.queue.writeBuffer(
                   styleBuffer.getBuffer(),
                   runStart * strideBytes,
-                  batchScratch.subarray(0, needed),
+                  /** @type {GPUAllowSharedBufferSource} */ (
+                    batchScratch.subarray(0, needed)
+                  ),
                 );
                 if (ref === null) {
                   break;
@@ -1742,7 +1770,7 @@ class VectorStyleRenderer {
               device.queue.writeBuffer(
                 styleBuffer.getBuffer(),
                 ref * strideBytes,
-                scratch,
+                /** @type {GPUAllowSharedBufferSource} */ (scratch),
               );
             },
             updateStyleBatch: (device, dirtyRefs) => {
@@ -1767,7 +1795,7 @@ class VectorStyleRenderer {
                   device.queue.writeBuffer(
                     styleBuffer.getBuffer(),
                     ref * strideBytes,
-                    scratch,
+                    /** @type {GPUAllowSharedBufferSource} */ (scratch),
                   );
                 }
                 return;
@@ -1800,7 +1828,9 @@ class VectorStyleRenderer {
                 device.queue.writeBuffer(
                   styleBuffer.getBuffer(),
                   runStart * strideBytes,
-                  batchScratch.subarray(0, needed),
+                  /** @type {GPUAllowSharedBufferSource} */ (
+                    batchScratch.subarray(0, needed)
+                  ),
                 );
                 if (ref === null) {
                   break;
@@ -1965,7 +1995,7 @@ class VectorStyleRenderer {
               device.queue.writeBuffer(
                 styleBuffer.getBuffer(),
                 ref * strideBytes,
-                scratch,
+                /** @type {GPUAllowSharedBufferSource} */ (scratch),
               );
             },
             updateStyleBatch: (device, dirtyRefs) => {
@@ -1990,7 +2020,7 @@ class VectorStyleRenderer {
                   device.queue.writeBuffer(
                     styleBuffer.getBuffer(),
                     ref * strideBytes,
-                    scratch,
+                    /** @type {GPUAllowSharedBufferSource} */ (scratch),
                   );
                 }
                 return;
@@ -2023,7 +2053,9 @@ class VectorStyleRenderer {
                 device.queue.writeBuffer(
                   styleBuffer.getBuffer(),
                   runStart * strideBytes,
-                  batchScratch.subarray(0, needed),
+                  /** @type {GPUAllowSharedBufferSource} */ (
+                    batchScratch.subarray(0, needed)
+                  ),
                 );
                 if (ref === null) {
                   break;
@@ -2456,7 +2488,7 @@ class VectorStyleRenderer {
             device.queue.writeBuffer(
               lineStyleBuffer.getBuffer(),
               ref * strideBytes,
-              scratch,
+              /** @type {GPUAllowSharedBufferSource} */ (scratch),
             );
           },
           updateStyleBatch: (device, dirtyRefs) => {
@@ -2481,7 +2513,7 @@ class VectorStyleRenderer {
                 device.queue.writeBuffer(
                   lineStyleBuffer.getBuffer(),
                   ref * strideBytes,
-                  scratch,
+                  /** @type {GPUAllowSharedBufferSource} */ (scratch),
                 );
               }
               return;
@@ -2514,7 +2546,9 @@ class VectorStyleRenderer {
               device.queue.writeBuffer(
                 lineStyleBuffer.getBuffer(),
                 runStart * strideBytes,
-                batchScratch.subarray(0, needed),
+                /** @type {GPUAllowSharedBufferSource} */ (
+                  batchScratch.subarray(0, needed)
+                ),
               );
               if (ref === null) {
                 break;
@@ -2891,7 +2925,7 @@ class VectorStyleRenderer {
                   device.queue.writeBuffer(
                     polyStyleBuffer.getBuffer(),
                     ref * 16,
-                    scratch,
+                    /** @type {GPUAllowSharedBufferSource} */ (scratch),
                   );
                 }
                 return;
@@ -2925,7 +2959,9 @@ class VectorStyleRenderer {
                 device.queue.writeBuffer(
                   polyStyleBuffer.getBuffer(),
                   runStart * 16,
-                  batchScratch.subarray(0, needed),
+                  /** @type {GPUAllowSharedBufferSource} */ (
+                    batchScratch.subarray(0, needed)
+                  ),
                 );
                 if (ref === null) {
                   break;
@@ -2941,7 +2977,7 @@ class VectorStyleRenderer {
 
     const maxRef = Math.max(pointMaxRef, lineMaxRef, polyMaxRef);
     const featureCount = maxRef + 1;
-    /** @type {{buffer: WebGPUBuffer, propNames: Array<string>, propCount: number, indexByName: Map<string, number>, update: (device: GPUDevice, ref: number, feature: import(\"../../Feature.js\").default|import(\"../../render/Feature.js\").default) => void}|null} */
+    /** @type {{buffer: WebGPUBuffer, propNames: Array<string>, propCount: number, indexByName: Map<string, number>, update: (device: GPUDevice, ref: number, feature: import("../../Feature.js").default|import("../../render/Feature.js").default) => void, updateBatch?: (device: GPUDevice, dirtyRefs: Map<number, import("../../Feature.js").default|import("../../render/Feature.js").default>) => void}|null} */
     let featureProperties = null;
     if (propCount > 0 && featureCount > 0) {
       const featureByRef = new Array(featureCount);
@@ -3194,7 +3230,7 @@ class VectorStyleRenderer {
               device.queue.writeBuffer(
                 propsBuffer.getBuffer(),
                 ref * strideBytes,
-                scratch,
+                /** @type {GPUAllowSharedBufferSource} */ (scratch),
               );
             }
             return;
@@ -3223,7 +3259,9 @@ class VectorStyleRenderer {
             device.queue.writeBuffer(
               propsBuffer.getBuffer(),
               runStart * strideBytes,
-              batchScratch.subarray(0, needed),
+              /** @type {GPUAllowSharedBufferSource} */ (
+                batchScratch.subarray(0, needed)
+              ),
             );
             if (ref === null) {
               break;
@@ -3532,7 +3570,9 @@ class VectorStyleRenderer {
         device.queue.writeBuffer(
           this.compositeUniformBufferOne_,
           0,
-          this.compositeUniformDataOne_,
+          /** @type {GPUAllowSharedBufferSource} */ (
+            this.compositeUniformDataOne_
+          ),
         );
       }
       return this.compositeUniformBufferOne_;
@@ -3550,7 +3590,9 @@ class VectorStyleRenderer {
       device.queue.writeBuffer(
         this.compositeUniformBufferOpacity_,
         0,
-        this.compositeUniformDataOpacity_,
+        /** @type {GPUAllowSharedBufferSource} */ (
+          this.compositeUniformDataOpacity_
+        ),
       );
     }
     return this.compositeUniformBufferOpacity_;
@@ -3623,9 +3665,10 @@ class VectorStyleRenderer {
 
     const commandEncoder = device.createCommandEncoder();
 
+    const gpu = navigator.gpu;
     const format =
       this.canvasFormat_ ||
-      (this.canvasFormat_ = navigator.gpu.getPreferredCanvasFormat());
+      (this.canvasFormat_ = gpu.getPreferredCanvasFormat());
     const widthPx = Math.round(width * pixelRatio);
     const heightPx = Math.round(height * pixelRatio);
     const frameView = this.helper_.getFrameTextureView(
@@ -3706,7 +3749,11 @@ class VectorStyleRenderer {
       uniformData[25] = 0;
       uniformData[26] = 0;
       uniformData[27] = 0;
-      device.queue.writeBuffer(this.uniformBuffer_, 0, uniformData);
+      device.queue.writeBuffer(
+        this.uniformBuffer_,
+        0,
+        /** @type {GPUAllowSharedBufferSource} */ (uniformData),
+      );
     }
 
     const passEncoder = commandEncoder.beginRenderPass(renderPassDesc);

@@ -193,7 +193,9 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
    * @param {import("../../Map.js").FrameState} frameState Frame state.
    */
   addInitialFeatures_(frameState) {
-    const source = this.getLayer().getSource();
+    const source = /** @type {import("../../source/Vector.js").default} */ (
+      this.getLayer().getSource()
+    );
     const userProjection = getUserProjection();
     let projectionTransform;
     if (userProjection) {
@@ -320,7 +322,10 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
     }
 
     const layer = this.getLayer();
-    const vectorSource = layer.getSource();
+    const vectorSource =
+      /** @type {import("../../source/Vector.js").default} */ (
+        layer.getSource()
+      );
     const viewState = frameState.viewState;
     const viewNotMoving =
       !frameState.viewHints[ViewHint.ANIMATING] &&
@@ -386,9 +391,9 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
    * @inheritDoc
    * @override
    */
-  renderFrame(frameState) {
+  renderFrame(frameState, target) {
     if (!this.helper || !this.styleRenderer_) {
-      return null;
+      return target || document.createElement('canvas');
     }
 
     const size = frameState.size;
@@ -467,7 +472,9 @@ class WebGPUVectorLayerRenderer extends WebGPULayerRenderer {
     }
 
     const layer = this.getLayer();
-    const source = layer.getSource();
+    const source = /** @type {import("../../source/Vector.js").default} */ (
+      layer.getSource()
+    );
     if (!source) {
       return undefined;
     }

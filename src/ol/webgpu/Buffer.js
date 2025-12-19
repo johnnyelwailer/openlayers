@@ -77,7 +77,11 @@ class WebGPUBuffer {
       this.create(helper);
     }
     const device = helper.getDevice();
-    device.queue.writeBuffer(this.buffer_, 0, data);
+    device.queue.writeBuffer(
+      this.buffer_,
+      0,
+      /** @type {GPUAllowSharedBufferSource} */ (data),
+    );
   }
 }
 
