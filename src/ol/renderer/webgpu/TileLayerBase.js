@@ -382,6 +382,12 @@ class WebGPUBaseTileLayerRenderer extends WebGPULayerRenderer {
   }
 
   /**
+   * @param {import("../../Map.js").FrameState} frameState Frame state.
+   * @protected
+   */
+  afterTilesMaskRender(frameState) {}
+
+  /**
    * @param {TileRepresentation} tileRepresentation Tile representation
    * @param {number} tileZ Tile zoom level
    * @param {import("../../extent.js").Extent} extent Tile extent
@@ -653,6 +659,7 @@ class WebGPUBaseTileLayerRenderer extends WebGPULayerRenderer {
           );
         }
       }
+      this.afterTilesMaskRender(frameState);
     }
 
     // Compute draw calls to provide a stable renderIndex/renderCount.

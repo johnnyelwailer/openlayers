@@ -94,6 +94,104 @@ describe('ol/render/webgpu/VectorStyleRenderer', () => {
     expect(bindGroupsCreated).to.be(1);
   });
 
+  it('binds tile mask resources when requested', () => {
+    if (typeof navigator === 'undefined' || !navigator) {
+      Object.defineProperty(globalThis, 'navigator', {
+        value: {},
+        configurable: true,
+      });
+    }
+    navigator.gpu = {
+      getPreferredCanvasFormat: () => 'bgra8unorm',
+    };
+
+    /** @type {Array<any>} */
+    const bindGroupArgs = [];
+    const device = {
+      createBuffer: () => ({}),
+      createShaderModule: () => ({}),
+      createRenderPipeline: () => ({
+        getBindGroupLayout: () => ({}),
+      }),
+      createBindGroup: (args) => {
+        bindGroupArgs.push(args);
+        return {};
+      },
+      createCommandEncoder: () => ({
+        beginRenderPass: () => ({
+          setPipeline: () => {},
+          setBindGroup: () => {},
+          setVertexBuffer: () => {},
+          draw: () => {},
+          end: () => {},
+        }),
+        finish: () => ({}),
+      }),
+      queue: {
+        writeBuffer: () => {},
+        submit: () => {},
+      },
+    };
+
+    const helper = {
+      getDevice: () => device,
+      getContext: () => ({getCurrentTexture: () => ({createView: () => ({})})}),
+      getFrameTextureView: () => ({}),
+      getCurrentTextureView: () => ({}),
+      isFirstPass: () => true,
+    };
+
+    const renderer = new VectorStyleRenderer(
+      [{}],
+      {},
+      /** @type {*} */ (helper),
+    );
+    renderer.setTileMaskEnabled(true);
+    const tileMaskSampler = {};
+    const tileMaskView = {};
+    renderer.setTileMaskResources(
+      /** @type {*} */ (tileMaskSampler),
+      /** @type {*} */ (tileMaskView),
+    );
+
+    const vertexBuffer = {size: 12};
+    const styleBuffer = {};
+    const buffers = {
+      polygonBuffers: [],
+      lineStringBuffers: [],
+      pointBuffers: [
+        {
+          vertex: {
+            getBuffer: () => vertexBuffer,
+          },
+          style: {
+            getBuffer: () => styleBuffer,
+          },
+          usesTileMask: true,
+        },
+      ],
+    };
+
+    const frameState = {
+      index: 0,
+      size: [32, 32],
+      pixelRatio: 1,
+      viewState: {
+        center: [0, 0],
+        resolution: 1,
+        rotation: 0,
+        zoom: 0,
+      },
+    };
+
+    renderer.render(buffers, frameState, 0, 1, true, false, true, 1, 0);
+
+    const last = bindGroupArgs[bindGroupArgs.length - 1];
+    const bindings = last.entries.map((e) => e.binding);
+    expect(bindings).to.contain(6);
+    expect(bindings).to.contain(7);
+  });
+
   it('does not allocate featureProperties for CPU-only get() usage', async () => {
     const device = {
       createBuffer: ({size}) => ({

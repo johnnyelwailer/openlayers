@@ -174,9 +174,9 @@ Vector tile porting will surface the following more aggressively:
 ## Test and example checklist
 
 Add WebGPU counterparts of the existing WebGL vector tile rendering fixtures:
-- `test/rendering/cases/webgpu-vectortile`
-- `test/rendering/cases/webgpu-vectortile-masking`
-- `test/rendering/cases/webgpu-vectortile-pattern`
+- ✅ `test/rendering/cases/webgpu-vectortile`
+- ✅ `test/rendering/cases/webgpu-vectortile-masking`
+- ⏳ `test/rendering/cases/webgpu-vectortile-pattern`
 
 Add a browser spec test suite mirroring `test/browser/spec/ol/renderer/webgl/VectorTileLayer.test.js` for WebGPU:
 - Renderer initialization and style injection (mask discard + uniforms).
@@ -196,4 +196,3 @@ Add an example similar to `examples/webgl-vector-tiles.html` / `examples/webgl-v
 - **Uniform layout stability:** WebGPU pipelines currently rely on `layout: 'auto'` and “binding presence” heuristics. Adding tile-mask bindings and new uniforms should be done carefully to avoid validation issues.
 - **Precision vs complexity:** world-coordinate buffers are simplest; tile-local coordinates likely needed for high-zoom correctness.
 - **Command submission overhead:** calling WebGPU `render()` per tile will work but can become a bottleneck; plan a refactor to share encoders/passes once correctness is proven.
-

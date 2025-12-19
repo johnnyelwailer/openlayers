@@ -15,6 +15,7 @@
  * @property {FillPatternShaderOptions} [pattern] Fill pattern sampling options.
  * @property {string} [fillColor] WGSL `vec4f` expression for the fill color.
  * @property {string} [discard] WGSL `bool` expression for fragment discard.
+ * @property {boolean} [tileMask] Whether to discard fragments covered by a tile mask.
  */
 
 /**
@@ -33,6 +34,7 @@
  * @property {string} [strokeWidth] WGSL `f32` expression for the stroke width.
  * @property {string} [discard] WGSL `bool` expression for fragment discard.
  * @property {StrokePatternShaderOptions} [pattern] Stroke pattern sampling options.
+ * @property {boolean} [tileMask] Whether to discard fragments covered by a tile mask.
  */
 
 /**
@@ -40,6 +42,7 @@
  * @property {string} [fillColor] WGSL `vec4f` expression for the circle fill color.
  * @property {string} [strokeColor] WGSL `vec4f` expression for the circle stroke color.
  * @property {string} [discard] WGSL `bool` expression for fragment discard.
+ * @property {boolean} [tileMask] Whether to discard fragments covered by a tile mask.
  */
 
 /**
@@ -47,12 +50,14 @@
  * @property {string} [fillColor] WGSL `vec4f` expression for the shape fill color.
  * @property {string} [strokeColor] WGSL `vec4f` expression for the shape stroke color.
  * @property {string} [discard] WGSL `bool` expression for fragment discard.
+ * @property {boolean} [tileMask] Whether to discard fragments covered by a tile mask.
  */
 
 /**
  * @typedef {Object} IconSymbolShaderOptions
  * @property {string} [tint] WGSL `vec4f` expression for the icon tint.
  * @property {string} [discard] WGSL `bool` expression for fragment discard.
+ * @property {boolean} [tileMask] Whether to discard fragments covered by a tile mask.
  */
 
 /**
@@ -124,10 +129,17 @@ export class WGSLBuilder {
     const pattern = options.pattern;
     const fillColorExpr = options.fillColor || 'style.fillColor';
     const discardExpr = options.discard || 'false';
+    const tileMask = !!options.tileMask;
     const patternBindings = pattern
       ? `
       @group(0) @binding(2) var fillPatternSampler : sampler;
       @group(0) @binding(3) var fillPatternTexture : texture_2d<f32>;
+      `
+      : '';
+    const tileMaskBindings = tileMask
+      ? `
+      @group(0) @binding(6) var tileMaskSampler : sampler;
+      @group(0) @binding(7) var tileMaskTexture : texture_2d<f32>;
       `
       : '';
     const patternFns = pattern
@@ -206,7 +218,18 @@ export class WGSLBuilder {
       ${patternBindings}
       @group(0) @binding(4) var<storage, read> vars : array<vec4f>;
       @group(0) @binding(5) var<storage, read> props : array<vec4f>;
+      ${tileMaskBindings}
       ${patternFns}
+      ${
+        tileMask
+          ? `
+      fn isTileMasked(fragPosPx : vec2f) -> bool {
+        let uv = fragPosPx / (uniforms.viewportSizePx * uniforms.pixelRatio);
+        return textureSampleLevel(tileMaskTexture, tileMaskSampler, uv, 0.0).r * 50.0 > uniforms.padding.y + 0.5;
+      }
+      `
+          : ''
+      }
 
       @vertex
       fn vs_main(
@@ -227,7 +250,7 @@ export class WGSLBuilder {
 
       @fragment
       fn fs_main(input : VertexOutput) -> @location(0) vec4f {
-        if (${discardExpr}) {
+        if (${tileMask ? `(${discardExpr}) || isTileMasked(input.position.xy)` : discardExpr}) {
           discard;
         }
         ${
@@ -249,11 +272,13 @@ export class WGSLBuilder {
           pxOrigin,
           pxPos,
         );
-        let outColor = ${pattern.tint} * c;
+        var outColor = ${pattern.tint} * c;
+        outColor.a = outColor.a * uniforms.padding.x;
         return vec4f(outColor.rgb * outColor.a, outColor.a);
             `
             : `
-        let outColor = input.color;
+        var outColor = input.color;
+        outColor.a = outColor.a * uniforms.padding.x;
         return vec4f(outColor.rgb * outColor.a, outColor.a);
             `
         }
@@ -285,11 +310,18 @@ export class WGSLBuilder {
     const strokeColorExpr = options.strokeColor || 'style.color';
     const strokeWidthExpr = options.strokeWidth || 'style.width';
     const discardExpr = options.discard || 'false';
+    const tileMask = !!options.tileMask;
     const pattern = options.pattern;
     const patternBindings = pattern
       ? `
       @group(0) @binding(2) var strokePatternSampler : sampler;
       @group(0) @binding(3) var strokePatternTexture : texture_2d<f32>;
+      `
+      : '';
+    const tileMaskBindings = tileMask
+      ? `
+      @group(0) @binding(6) var tileMaskSampler : sampler;
+      @group(0) @binding(7) var tileMaskTexture : texture_2d<f32>;
       `
       : '';
     const patternFns = pattern
@@ -374,6 +406,7 @@ export class WGSLBuilder {
       ${patternBindings}
       @group(0) @binding(4) var<storage, read> vars : array<vec4f>;
       @group(0) @binding(5) var<storage, read> props : array<vec4f>;
+      ${tileMaskBindings}
 
       const LINESTRING_ANGLE_COSINE_CUTOFF : f32 = 0.985;
 
@@ -572,6 +605,16 @@ export class WGSLBuilder {
         return r + select(0.0, m, r < 0.0);
       }
       ${patternFns}
+      ${
+        tileMask
+          ? `
+      fn isTileMasked(fragPosPx : vec2f) -> bool {
+        let uv = fragPosPx / (uniforms.viewportSizePx * uniforms.pixelRatio);
+        return textureSampleLevel(tileMaskTexture, tileMaskSampler, uv, 0.0).r * 50.0 > uniforms.padding.y + 0.5;
+      }
+      `
+          : ''
+      }
 
       fn getSingleDashDistance(distance : f32, radius : f32, dashOffset : f32, dashLength : f32, dashLengthTotal : f32, capType : f32, lineWidth : f32) -> f32 {
         let localDistance = positiveMod(distance, dashLengthTotal);
@@ -633,7 +676,7 @@ export class WGSLBuilder {
         let currentLengthPx = lengthToPointPx + input.distancePx;
         let currentRadiusRatio = dot(segmentNormal, startToPointPx) * 2.0 / max(lineWidth, 1.17549435e-38);
 
-        if (${discardExpr}) {
+        if (${tileMask ? `(${discardExpr}) || isTileMasked(input.position.xy)` : discardExpr}) {
           discard;
         }
 
@@ -701,6 +744,7 @@ export class WGSLBuilder {
             : strokeColorExpr
         };
         color.a = color.a * smoothstep(0.5, -0.5, distanceField);
+        color.a = color.a * uniforms.padding.x;
         return vec4f(color.rgb * color.a, color.a);
       }
       `;
@@ -732,6 +776,7 @@ export class WGSLBuilder {
     const fillColorExpr = options.fillColor || 'style.fillColor';
     const strokeColorExpr = options.strokeColor || 'style.strokeColor';
     const discardExpr = options.discard || 'false';
+    const tileMask = !!options.tileMask;
     return `
       struct VertexOutput {
         @builtin(position) position : vec4f,
@@ -776,6 +821,24 @@ export class WGSLBuilder {
       @group(0) @binding(1) var<uniform> uniforms : Uniforms;
       @group(0) @binding(4) var<storage, read> vars : array<vec4f>;
       @group(0) @binding(5) var<storage, read> props : array<vec4f>;
+      ${
+        tileMask
+          ? `
+      @group(0) @binding(6) var tileMaskSampler : sampler;
+      @group(0) @binding(7) var tileMaskTexture : texture_2d<f32>;
+      `
+          : ''
+      }
+      ${
+        tileMask
+          ? `
+      fn isTileMasked(fragPosPx : vec2f) -> bool {
+        let uv = fragPosPx / (uniforms.viewportSizePx * uniforms.pixelRatio);
+        return textureSampleLevel(tileMaskTexture, tileMaskSampler, uv, 0.0).r * 50.0 > uniforms.padding.y + 0.5;
+      }
+      `
+          : ''
+      }
 
       fn localPosition(vertexIndex : u32) -> vec2f {
         // triangle-strip order: (-1,-1), (1,-1), (-1,1), (1,1)
@@ -848,7 +911,7 @@ export class WGSLBuilder {
 
       @fragment
       fn fs_main(input : VertexOutput) -> @location(0) vec4f {
-        if (${discardExpr}) {
+        if (${tileMask ? `(${discardExpr}) || isTileMasked(input.position.xy)` : discardExpr}) {
           discard;
         }
         // Convert from physical pixels with top-left origin to CSS pixels with bottom-left origin.
@@ -869,7 +932,7 @@ export class WGSLBuilder {
         );
 
         var color = colorFromDistanceField(df, input.fillColor, input.strokeColor, input.strokeWidth);
-        color.a = color.a * input.opacity;
+        color.a = color.a * input.opacity * uniforms.padding.x;
         return vec4f(color.rgb * color.a, color.a);
       }
     `;
@@ -883,6 +946,7 @@ export class WGSLBuilder {
   getIconSymbolShader(options = {}) {
     const tintExpr = options.tint || 'style.tint';
     const discardExpr = options.discard || 'false';
+    const tileMask = !!options.tileMask;
     return `
       struct VertexOutput {
         @builtin(position) position : vec4f,
@@ -923,6 +987,24 @@ export class WGSLBuilder {
       @group(0) @binding(3) var iconTexture : texture_2d<f32>;
       @group(0) @binding(4) var<storage, read> vars : array<vec4f>;
       @group(0) @binding(5) var<storage, read> props : array<vec4f>;
+      ${
+        tileMask
+          ? `
+      @group(0) @binding(6) var tileMaskSampler : sampler;
+      @group(0) @binding(7) var tileMaskTexture : texture_2d<f32>;
+      `
+          : ''
+      }
+      ${
+        tileMask
+          ? `
+      fn isTileMasked(fragPosPx : vec2f) -> bool {
+        let uv = fragPosPx / (uniforms.viewportSizePx * uniforms.pixelRatio);
+        return textureSampleLevel(tileMaskTexture, tileMaskSampler, uv, 0.0).r * 50.0 > uniforms.padding.y + 0.5;
+      }
+      `
+          : ''
+      }
 
       fn localPosition(vertexIndex : u32) -> vec2f {
         if (vertexIndex == 0u) { return vec2f(-1.0, -1.0); }
@@ -968,11 +1050,11 @@ export class WGSLBuilder {
 
       @fragment
       fn fs_main(input : VertexOutput) -> @location(0) vec4f {
-        if (${discardExpr}) {
+        if (${tileMask ? `(${discardExpr}) || isTileMasked(input.position.xy)` : discardExpr}) {
           discard;
         }
         var color = input.tint * textureSampleLevel(iconTexture, iconSampler, input.texCoord, 0.0);
-        color.a = color.a * input.opacity;
+        color.a = color.a * input.opacity * uniforms.padding.x;
         return vec4f(color.rgb * color.a, color.a);
       }
     `;
@@ -987,6 +1069,7 @@ export class WGSLBuilder {
     const fillColorExpr = options.fillColor || 'style.fillColor';
     const strokeColorExpr = options.strokeColor || 'style.strokeColor';
     const discardExpr = options.discard || 'false';
+    const tileMask = !!options.tileMask;
     return `
       struct VertexOutput {
         @builtin(position) position : vec4f,
@@ -1034,6 +1117,24 @@ export class WGSLBuilder {
       @group(0) @binding(1) var<uniform> uniforms : Uniforms;
       @group(0) @binding(4) var<storage, read> vars : array<vec4f>;
       @group(0) @binding(5) var<storage, read> props : array<vec4f>;
+      ${
+        tileMask
+          ? `
+      @group(0) @binding(6) var tileMaskSampler : sampler;
+      @group(0) @binding(7) var tileMaskTexture : texture_2d<f32>;
+      `
+          : ''
+      }
+      ${
+        tileMask
+          ? `
+      fn isTileMasked(fragPosPx : vec2f) -> bool {
+        let uv = fragPosPx / (uniforms.viewportSizePx * uniforms.pixelRatio);
+        return textureSampleLevel(tileMaskTexture, tileMaskSampler, uv, 0.0).r * 50.0 > uniforms.padding.y + 0.5;
+      }
+      `
+          : ''
+      }
 
       fn localPosition(vertexIndex : u32) -> vec2f {
         if (vertexIndex == 0u) { return vec2f(-1.0, -1.0); }
@@ -1138,7 +1239,7 @@ export class WGSLBuilder {
 
       @fragment
       fn fs_main(input : VertexOutput) -> @location(0) vec4f {
-        if (${discardExpr}) {
+        if (${tileMask ? `(${discardExpr}) || isTileMasked(input.position.xy)` : discardExpr}) {
           discard;
         }
         var coordsPx = vec2f(
@@ -1160,7 +1261,7 @@ export class WGSLBuilder {
         );
 
         var color = colorFromDistanceField(df, input.fillColor, input.strokeColor, input.strokeWidth);
-        color.a = color.a * input.opacity;
+        color.a = color.a * input.opacity * uniforms.padding.x;
         return vec4f(color.rgb * color.a, color.a);
       }
     `;

@@ -96,6 +96,7 @@ function getExpressionSpecialInputUsage(expr) {
  * @property {string} [fillShader] Optional WGSL shader override.
  * @property {boolean} [usesVars] Whether the shader reads from the `vars` buffer.
  * @property {boolean} [usesProps] Whether the shader reads from the `props` buffer.
+ * @property {boolean} [usesTileMask] Whether the shader samples the tile mask texture.
  * @property {StrokePatternTexture} [pattern] Optional fill pattern resources.
  * @property {(device: GPUDevice, ref: number, feature: import("../../Feature.js").default|import("../../render/Feature.js").default) => void} [updateStyle]
  * Update per-feature style record for a given ref.
@@ -110,6 +111,7 @@ function getExpressionSpecialInputUsage(expr) {
  * @property {string} [symbolShader] Optional WGSL shader override.
  * @property {boolean} [usesVars] Whether the shader reads from the `vars` buffer.
  * @property {boolean} [usesProps] Whether the shader reads from the `props` buffer.
+ * @property {boolean} [usesTileMask] Whether the shader samples the tile mask texture.
  * @property {StrokePatternTexture} [pattern] Optional symbol texture resources.
  * @property {(device: GPUDevice, ref: number, feature: import("../../Feature.js").default|import("../../render/Feature.js").default) => void} [updateStyle]
  * Update per-feature style record for a given ref.
@@ -124,6 +126,7 @@ function getExpressionSpecialInputUsage(expr) {
  * @property {string} [strokeShader] Optional WGSL shader override.
  * @property {boolean} [usesVars] Whether the shader reads from the `vars` buffer.
  * @property {boolean} [usesProps] Whether the shader reads from the `props` buffer.
+ * @property {boolean} [usesTileMask] Whether the shader samples the tile mask texture.
  * @property {StrokePatternTexture} [pattern] Optional stroke pattern resources.
  * @property {(device: GPUDevice, ref: number, feature: import("../../Feature.js").default|import("../../render/Feature.js").default) => void} [updateStyle]
  * Update per-feature style record for a given ref.
@@ -372,6 +375,24 @@ class VectorStyleRenderer {
      */
     this.variablesData_ = null;
 
+    /**
+     * @private
+     * @type {boolean}
+     */
+    this.tileMaskEnabled_ = false;
+
+    /**
+     * @private
+     * @type {GPUSampler|null}
+     */
+    this.tileMaskSampler_ = null;
+
+    /**
+     * @private
+     * @type {GPUTextureView|null}
+     */
+    this.tileMaskView_ = null;
+
     // TODO: Phase 2 - Implement proper style parsing
     // For now, we manually create a single builder/shader pair
     const builder = new WGSLBuilder();
@@ -452,6 +473,24 @@ class VectorStyleRenderer {
     this.defaultCircleSymbolShaderUsesProps_ = this.shaderUsesProps_(
       this.defaultCircleSymbolShader_,
     );
+
+    /**
+     * @private
+     * @type {boolean}
+     */
+    this.defaultFillShaderUsesTileMask_ = false;
+
+    /**
+     * @private
+     * @type {boolean}
+     */
+    this.defaultStrokeShaderUsesTileMask_ = false;
+
+    /**
+     * @private
+     * @type {boolean}
+     */
+    this.defaultCircleSymbolShaderUsesTileMask_ = false;
 
     /**
      * @private
@@ -587,6 +626,67 @@ class VectorStyleRenderer {
   }
 
   /**
+   * Enable or disable tile mask sampling/discard in generated shaders.
+   * @param {boolean} enabled Enabled.
+   */
+  setTileMaskEnabled(enabled) {
+    if (this.tileMaskEnabled_ === enabled) {
+      return;
+    }
+    this.tileMaskEnabled_ = enabled;
+
+    const builder = this.styleShaders_[0].builder;
+    this.defaultFillShader_ = builder.getFillShader({tileMask: enabled});
+    this.defaultStrokeShader_ = builder.getStrokeShader({tileMask: enabled});
+    this.defaultCircleSymbolShader_ = builder.getCircleSymbolShader({
+      tileMask: enabled,
+    });
+
+    this.defaultFillShaderUsesVars_ = this.shaderUsesVars_(
+      this.defaultFillShader_,
+    );
+    this.defaultFillShaderUsesProps_ = this.shaderUsesProps_(
+      this.defaultFillShader_,
+    );
+    this.defaultStrokeShaderUsesVars_ = this.shaderUsesVars_(
+      this.defaultStrokeShader_,
+    );
+    this.defaultStrokeShaderUsesProps_ = this.shaderUsesProps_(
+      this.defaultStrokeShader_,
+    );
+    this.defaultCircleSymbolShaderUsesVars_ = this.shaderUsesVars_(
+      this.defaultCircleSymbolShader_,
+    );
+    this.defaultCircleSymbolShaderUsesProps_ = this.shaderUsesProps_(
+      this.defaultCircleSymbolShader_,
+    );
+
+    this.defaultFillShaderUsesTileMask_ = this.shaderUsesTileMask_(
+      this.defaultFillShader_,
+    );
+    this.defaultStrokeShaderUsesTileMask_ = this.shaderUsesTileMask_(
+      this.defaultStrokeShader_,
+    );
+    this.defaultCircleSymbolShaderUsesTileMask_ = this.shaderUsesTileMask_(
+      this.defaultCircleSymbolShader_,
+    );
+
+    this.fillPipelineCache_.clear();
+    this.strokePipelineCache_.clear();
+    this.symbolPipelineCache_.clear();
+  }
+
+  /**
+   * Set the tile mask resources for rendering (sampler + view).
+   * @param {GPUSampler|null} sampler Sampler.
+   * @param {GPUTextureView|null} view View.
+   */
+  setTileMaskResources(sampler, view) {
+    this.tileMaskSampler_ = sampler;
+    this.tileMaskView_ = view;
+  }
+
+  /**
    * @param {Object|null|undefined} obj Object.
    * @return {number} Stable numeric id for the object.
    * @private
@@ -649,6 +749,8 @@ class VectorStyleRenderer {
    * @param {number} patternViewId Pattern view id.
    * @param {number} varsBufferId Vars buffer id.
    * @param {number} propsBufferId Props buffer id.
+   * @param {number} tileMaskSamplerId Tile mask sampler id.
+   * @param {number} tileMaskViewId Tile mask view id.
    * @param {() => GPUBindGroup} create Create callback.
    * @return {GPUBindGroup} Cached bind group.
    * @private
@@ -662,6 +764,8 @@ class VectorStyleRenderer {
     patternViewId,
     varsBufferId,
     propsBufferId,
+    tileMaskSamplerId,
+    tileMaskViewId,
     create,
   ) {
     let m1 = cache.get(pipelineId);
@@ -694,10 +798,20 @@ class VectorStyleRenderer {
       m6 = new Map();
       m5.set(varsBufferId, m6);
     }
-    let bindGroup = m6.get(propsBufferId);
+    let m7 = m6.get(propsBufferId);
+    if (!m7) {
+      m7 = new Map();
+      m6.set(propsBufferId, m7);
+    }
+    let m8 = m7.get(tileMaskSamplerId);
+    if (!m8) {
+      m8 = new Map();
+      m7.set(tileMaskSamplerId, m8);
+    }
+    let bindGroup = m8.get(tileMaskViewId);
     if (!bindGroup) {
       bindGroup = create();
-      m6.set(propsBufferId, bindGroup);
+      m8.set(tileMaskViewId, bindGroup);
     }
     return bindGroup;
   }
@@ -724,6 +838,18 @@ class VectorStyleRenderer {
    */
   shaderUsesProps_(code) {
     return /\bprops\s*\[/.test(code);
+  }
+
+  /**
+   * WebGPU pipelines created with `layout: 'auto'` only expose bindings that are
+   * statically used by the shader. We therefore must only add tile mask bindings
+   * when the shader samples from `tileMaskTexture`.
+   * @param {string} code WGSL shader code.
+   * @return {boolean} Whether the shader samples the tile mask texture.
+   * @private
+   */
+  shaderUsesTileMask_(code) {
+    return /\btileMaskTexture\b/.test(code);
   }
 
   /**
@@ -1119,11 +1245,16 @@ class VectorStyleRenderer {
     if (pointBuffer) {
       const STYLE_STRIDE = 20;
       const baseCircleShader =
-        this.styleShaders_[0].builder.getCircleSymbolShader();
-      const baseIconShader =
-        this.styleShaders_[0].builder.getIconSymbolShader();
+        this.styleShaders_[0].builder.getCircleSymbolShader({
+          tileMask: this.tileMaskEnabled_,
+        });
+      const baseIconShader = this.styleShaders_[0].builder.getIconSymbolShader({
+        tileMask: this.tileMaskEnabled_,
+      });
       const baseShapeShader =
-        this.styleShaders_[0].builder.getShapeSymbolShader();
+        this.styleShaders_[0].builder.getShapeSymbolShader({
+          tileMask: this.tileMaskEnabled_,
+        });
 
       /** @type {Array<any>} */
       const prevPointFilters = [];
@@ -1492,11 +1623,15 @@ class VectorStyleRenderer {
           const symbolShader =
             discard === 'false'
               ? tint
-                ? this.styleShaders_[0].builder.getIconSymbolShader({tint})
+                ? this.styleShaders_[0].builder.getIconSymbolShader({
+                    tint,
+                    tileMask: this.tileMaskEnabled_,
+                  })
                 : baseIconShader
               : this.styleShaders_[0].builder.getIconSymbolShader({
                   discard,
                   ...(tint ? {tint} : {}),
+                  tileMask: this.tileMaskEnabled_,
                 });
           /** @type {Float32Array|null} */
           let batchScratch = null;
@@ -1506,6 +1641,7 @@ class VectorStyleRenderer {
             symbolShader,
             usesVars: this.shaderUsesVars_(symbolShader),
             usesProps: this.shaderUsesProps_(symbolShader),
+            usesTileMask: this.shaderUsesTileMask_(symbolShader),
             pattern: texture,
             updateStyle: (device, ref, feature) => {
               if (!ref || ref > pointMaxRef) {
@@ -1753,7 +1889,10 @@ class VectorStyleRenderer {
           const symbolShader =
             discard === 'false'
               ? baseShapeShader
-              : this.styleShaders_[0].builder.getShapeSymbolShader({discard});
+              : this.styleShaders_[0].builder.getShapeSymbolShader({
+                  discard,
+                  tileMask: this.tileMaskEnabled_,
+                });
           /** @type {Float32Array|null} */
           let batchScratch = null;
           pointBuffers.push({
@@ -1762,6 +1901,7 @@ class VectorStyleRenderer {
             symbolShader,
             usesVars: this.shaderUsesVars_(symbolShader),
             usesProps: this.shaderUsesProps_(symbolShader),
+            usesTileMask: this.shaderUsesTileMask_(symbolShader),
             updateStyle: (device, ref, feature) => {
               if (!ref || ref > pointMaxRef) {
                 return;
@@ -1978,6 +2118,7 @@ class VectorStyleRenderer {
               ? baseCircleShader
               : this.styleShaders_[0].builder.getCircleSymbolShader({
                   discard,
+                  tileMask: this.tileMaskEnabled_,
                 });
           /** @type {Float32Array|null} */
           let batchScratch = null;
@@ -1987,6 +2128,7 @@ class VectorStyleRenderer {
             symbolShader,
             usesVars: this.shaderUsesVars_(symbolShader),
             usesProps: this.shaderUsesProps_(symbolShader),
+            usesTileMask: this.shaderUsesTileMask_(symbolShader),
             updateStyle: (device, ref, feature) => {
               if (!ref || ref > pointMaxRef) {
                 return;
@@ -2467,6 +2609,7 @@ class VectorStyleRenderer {
             strokeWidth: widthExpr,
             discard: discard,
             pattern: patternOptions,
+            tileMask: this.tileMaskEnabled_,
           });
         }
 
@@ -2483,6 +2626,9 @@ class VectorStyleRenderer {
           usesProps: strokeShader
             ? this.shaderUsesProps_(strokeCode)
             : this.defaultStrokeShaderUsesProps_,
+          usesTileMask: strokeShader
+            ? this.shaderUsesTileMask_(strokeCode)
+            : this.defaultStrokeShaderUsesTileMask_,
           pattern: patternTexture,
           updateStyle: (device, ref, feature) => {
             if (!ref || ref > lineMaxRef) {
@@ -2874,6 +3020,7 @@ class VectorStyleRenderer {
                   pattern: fillPatternOptions,
                   ...(fillColorWgslExpr ? {fillColor: fillColorWgslExpr} : {}),
                   discard: polyDiscard,
+                  tileMask: this.tileMaskEnabled_,
                 })
               : undefined;
           const fillCode = fillShader || this.defaultFillShader_;
@@ -2889,6 +3036,9 @@ class VectorStyleRenderer {
             usesProps: fillShader
               ? this.shaderUsesProps_(fillCode)
               : this.defaultFillShaderUsesProps_,
+            usesTileMask: fillShader
+              ? this.shaderUsesTileMask_(fillCode)
+              : this.defaultFillShaderUsesTileMask_,
             pattern: fillPatternTexture,
             updateStyle: (device, ref, feature) => {
               if (!resolveFillColor || !ref || ref > polyMaxRef) {
@@ -3612,6 +3762,8 @@ class VectorStyleRenderer {
    * @param {boolean} [isFirstWorld] Whether this is the first world pass.
    * @param {boolean} [isLastWorld] Whether this is the last world pass.
    * @param {boolean} [isFirstPass] Whether this is the first pass for the shared canvas.
+   * @param {number} [globalAlpha] Per-draw alpha multiplier (defaults to 1).
+   * @param {number} [tileZoomLevel] Per-draw tile zoom level (defaults to 0).
    */
   render(
     buffers,
@@ -3621,6 +3773,8 @@ class VectorStyleRenderer {
     isFirstWorld = true,
     isLastWorld = true,
     isFirstPass = false,
+    globalAlpha = 1,
+    tileZoomLevel = 0,
   ) {
     const device = this.helper_.getDevice();
     const context = this.helper_.getContext();
@@ -3744,8 +3898,10 @@ class VectorStyleRenderer {
       uniformData[19] = height;
       uniformData[20] = rotation;
       uniformData[21] = zoom;
-      uniformData[22] = 0;
-      uniformData[23] = 0;
+      // uniforms.padding.x and uniforms.padding.y are intentionally used as
+      // generic per-draw values (e.g. tile alpha and tile zoom level).
+      uniformData[22] = globalAlpha;
+      uniformData[23] = tileZoomLevel;
       const now =
         typeof frameState.time === 'number' ? frameState.time : Date.now();
       if (this.startTime_ === null) {
@@ -3837,6 +3993,9 @@ class VectorStyleRenderer {
           buffers.featureProperties && usesProps
             ? buffers.featureProperties.buffer.getBuffer()
             : null;
+        const usesTileMask = bufferSet.usesTileMask;
+        const tileMaskSampler = usesTileMask ? this.tileMaskSampler_ : null;
+        const tileMaskView = usesTileMask ? this.tileMaskView_ : null;
         const patternSampler = bufferSet.pattern?.sampler || null;
         const patternView = bufferSet.pattern?.view || null;
         const bindGroup = this.getCachedBindGroup_(
@@ -3848,6 +4007,8 @@ class VectorStyleRenderer {
           this.getObjectId_(patternView),
           this.getObjectId_(varsBuffer),
           this.getObjectId_(propsBuffer),
+          this.getObjectId_(tileMaskSampler),
+          this.getObjectId_(tileMaskView),
           () =>
             device.createBindGroup({
               layout: pipeline.getBindGroupLayout(0),
@@ -3893,6 +4054,18 @@ class VectorStyleRenderer {
                         resource: {
                           buffer: propsBuffer,
                         },
+                      },
+                    ]
+                  : []),
+                ...(tileMaskSampler && tileMaskView
+                  ? [
+                      {
+                        binding: 6,
+                        resource: tileMaskSampler,
+                      },
+                      {
+                        binding: 7,
+                        resource: tileMaskView,
                       },
                     ]
                   : []),
@@ -4016,6 +4189,9 @@ class VectorStyleRenderer {
           buffers.featureProperties && usesProps
             ? buffers.featureProperties.buffer.getBuffer()
             : null;
+        const usesTileMask = bufferSet.usesTileMask;
+        const tileMaskSampler = usesTileMask ? this.tileMaskSampler_ : null;
+        const tileMaskView = usesTileMask ? this.tileMaskView_ : null;
         const patternSampler = bufferSet.pattern?.sampler || null;
         const patternView = bufferSet.pattern?.view || null;
         const bindGroup = this.getCachedBindGroup_(
@@ -4027,6 +4203,8 @@ class VectorStyleRenderer {
           this.getObjectId_(patternView),
           this.getObjectId_(varsBuffer),
           this.getObjectId_(propsBuffer),
+          this.getObjectId_(tileMaskSampler),
+          this.getObjectId_(tileMaskView),
           () =>
             device.createBindGroup({
               layout: pipeline.getBindGroupLayout(0),
@@ -4072,6 +4250,18 @@ class VectorStyleRenderer {
                         resource: {
                           buffer: propsBuffer,
                         },
+                      },
+                    ]
+                  : []),
+                ...(tileMaskSampler && tileMaskView
+                  ? [
+                      {
+                        binding: 6,
+                        resource: tileMaskSampler,
+                      },
+                      {
+                        binding: 7,
+                        resource: tileMaskView,
                       },
                     ]
                   : []),
@@ -4160,6 +4350,9 @@ class VectorStyleRenderer {
           buffers.featureProperties && usesProps
             ? buffers.featureProperties.buffer.getBuffer()
             : null;
+        const usesTileMask = bufferSet.usesTileMask;
+        const tileMaskSampler = usesTileMask ? this.tileMaskSampler_ : null;
+        const tileMaskView = usesTileMask ? this.tileMaskView_ : null;
         const patternSampler = bufferSet.pattern?.sampler || null;
         const patternView = bufferSet.pattern?.view || null;
         const bindGroup = this.getCachedBindGroup_(
@@ -4171,6 +4364,8 @@ class VectorStyleRenderer {
           this.getObjectId_(patternView),
           this.getObjectId_(varsBuffer),
           this.getObjectId_(propsBuffer),
+          this.getObjectId_(tileMaskSampler),
+          this.getObjectId_(tileMaskView),
           () =>
             device.createBindGroup({
               layout: pipeline.getBindGroupLayout(0),
@@ -4216,6 +4411,18 @@ class VectorStyleRenderer {
                         resource: {
                           buffer: propsBuffer,
                         },
+                      },
+                    ]
+                  : []),
+                ...(tileMaskSampler && tileMaskView
+                  ? [
+                      {
+                        binding: 6,
+                        resource: tileMaskSampler,
+                      },
+                      {
+                        binding: 7,
+                        resource: tileMaskView,
                       },
                     ]
                   : []),

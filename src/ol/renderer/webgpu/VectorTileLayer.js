@@ -3,8 +3,56 @@
  */
 import EventType from '../../events/EventType.js';
 import VectorStyleRenderer from '../../render/webgpu/VectorStyleRenderer.js';
+import {
+  create as createTransform,
+  multiply as multiplyTransform,
+  reset as resetTransform,
+  rotate as rotateTransform,
+  scale as scaleTransform,
+  translate as translateTransform,
+} from '../../transform.js';
+import {
+  create as createMat4,
+  fromTransform as mat4FromTransform,
+} from '../../vec/mat4.js';
 import TileGeometry from '../../webgpu/TileGeometry.js';
 import WebGPUBaseTileLayerRenderer from './TileLayerBase.js';
+
+const MASK_TEXTURE_FORMAT = 'rgba8unorm';
+const MASK_DEPTH_FORMAT = 'depth24plus';
+
+const MASK_SHADER_CODE = `
+  struct MaskUniforms {
+    transform : mat4x4<f32>,
+    extent : vec4f,
+    depth : f32,
+    tileZoomLevel : f32,
+    _pad0 : vec2f,
+  };
+
+  @group(0) @binding(0) var<uniform> u : MaskUniforms;
+
+  fn vertexPos(vertexIndex : u32) -> vec2f {
+    // Two triangles: (min,min)-(max,min)-(min,max) and (min,max)-(max,min)-(max,max)
+    if (vertexIndex == 0u) { return vec2f(u.extent.x, u.extent.y); }
+    if (vertexIndex == 1u) { return vec2f(u.extent.z, u.extent.y); }
+    if (vertexIndex == 2u) { return vec2f(u.extent.x, u.extent.w); }
+    if (vertexIndex == 3u) { return vec2f(u.extent.x, u.extent.w); }
+    if (vertexIndex == 4u) { return vec2f(u.extent.z, u.extent.y); }
+    return vec2f(u.extent.z, u.extent.w);
+  }
+
+  @vertex
+  fn vs_main(@builtin(vertex_index) vertexIndex : u32) -> @builtin(position) vec4f {
+    let pos = vertexPos(vertexIndex);
+    return u.transform * vec4f(pos, u.depth, 1.0);
+  }
+
+  @fragment
+  fn fs_main() -> @location(0) vec4f {
+    return vec4f(u.tileZoomLevel / 50.0, 0.0, 0.0, 1.0);
+  }
+`;
 
 /**
  * @typedef {import("../../layer/BaseTile.js").default} LayerType
@@ -64,6 +112,96 @@ class WebGPUVectorTileLayerRenderer extends WebGPUBaseTileLayerRenderer {
      * @type {number}
      */
     this.opacity_ = 1;
+
+    /**
+     * @private
+     * @type {GPUTexture|null}
+     */
+    this.tileMaskTexture_ = null;
+
+    /**
+     * @private
+     * @type {GPUTextureView|null}
+     */
+    this.tileMaskView_ = null;
+
+    /**
+     * @private
+     * @type {GPUTexture|null}
+     */
+    this.tileMaskDepthTexture_ = null;
+
+    /**
+     * @private
+     * @type {GPUTextureView|null}
+     */
+    this.tileMaskDepthView_ = null;
+
+    /**
+     * @private
+     * @type {GPUSampler|null}
+     */
+    this.tileMaskSampler_ = null;
+
+    /**
+     * @private
+     * @type {GPURenderPipeline|null}
+     */
+    this.tileMaskPipeline_ = null;
+
+    /**
+     * @private
+     * @type {GPUBuffer|null}
+     */
+    this.tileMaskUniformBuffer_ = null;
+
+    /**
+     * @private
+     * @type {GPUBindGroup|null}
+     */
+    this.tileMaskBindGroup_ = null;
+
+    /**
+     * @private
+     * @type {Float32Array}
+     */
+    this.tileMaskUniformData_ = new Float32Array(24);
+
+    /**
+     * @private
+     * @type {import("../../transform.js").Transform}
+     */
+    this.tileMaskRenderTransform_ = createTransform();
+
+    /**
+     * @private
+     * @type {import("../../transform.js").Transform}
+     */
+    this.tileMaskClipTransform_ = createTransform();
+
+    /**
+     * @private
+     * @type {import("../../vec/mat4.js").Mat4}
+     */
+    this.tileMaskMat4_ = createMat4();
+
+    /**
+     * @private
+     * @type {[number, number]}
+     */
+    this.tileMaskSize_ = [0, 0];
+
+    /**
+     * @private
+     * @type {GPUCommandEncoder|null}
+     */
+    this.tileMaskEncoder_ = null;
+
+    /**
+     * @private
+     * @type {GPURenderPassEncoder|null}
+     */
+    this.tileMaskPass_ = null;
   }
 
   /**
@@ -77,6 +215,8 @@ class WebGPUVectorTileLayerRenderer extends WebGPUBaseTileLayerRenderer {
       this.styleVariables_,
       this.helper,
     );
+    this.styleRenderer_.setTileMaskEnabled(true);
+    this.styleRenderer_.setTileMaskResources(null, null);
   }
 
   /**
@@ -113,6 +253,216 @@ class WebGPUVectorTileLayerRenderer extends WebGPUBaseTileLayerRenderer {
   /**
    * @override
    */
+  beforeTilesMaskRender(frameState) {
+    if (!this.helper || !this.styleRenderer_) {
+      return false;
+    }
+    const device = this.helper.getDevice();
+    if (!device) {
+      return false;
+    }
+
+    const size = frameState.size;
+    const pixelRatio = frameState.pixelRatio;
+    const widthPx = Math.round(size[0] * pixelRatio);
+    const heightPx = Math.round(size[1] * pixelRatio);
+
+    // Ensure the WebGPU context is configured for the frame before rendering the mask.
+    this.helper.configureContextForFrame(
+      frameState.index,
+      widthPx,
+      heightPx,
+      pixelRatio,
+    );
+
+    const needsResize =
+      this.tileMaskSize_[0] !== widthPx || this.tileMaskSize_[1] !== heightPx;
+    if (needsResize) {
+      this.tileMaskSize_[0] = widthPx;
+      this.tileMaskSize_[1] = heightPx;
+      if (this.tileMaskTexture_) {
+        this.tileMaskTexture_.destroy();
+      }
+      if (this.tileMaskDepthTexture_) {
+        this.tileMaskDepthTexture_.destroy();
+      }
+      this.tileMaskTexture_ = device.createTexture({
+        size: {width: widthPx, height: heightPx},
+        format: MASK_TEXTURE_FORMAT,
+        usage: 0x10 | 0x04, // RENDER_ATTACHMENT | TEXTURE_BINDING
+      });
+      this.tileMaskView_ = this.tileMaskTexture_.createView();
+      this.tileMaskDepthTexture_ = device.createTexture({
+        size: {width: widthPx, height: heightPx},
+        format: MASK_DEPTH_FORMAT,
+        usage: 0x10, // RENDER_ATTACHMENT
+      });
+      this.tileMaskDepthView_ = this.tileMaskDepthTexture_.createView();
+
+      // Mask resources changed -> drop cached bind group.
+      this.tileMaskBindGroup_ = null;
+    }
+
+    if (!this.tileMaskSampler_) {
+      this.tileMaskSampler_ = device.createSampler({
+        addressModeU: 'clamp-to-edge',
+        addressModeV: 'clamp-to-edge',
+        magFilter: 'nearest',
+        minFilter: 'nearest',
+      });
+    }
+
+    if (!this.tileMaskUniformBuffer_) {
+      this.tileMaskUniformBuffer_ = device.createBuffer({
+        size: this.tileMaskUniformData_.byteLength, // 24 floats
+        usage: 0x0040 | 0x0008, // UNIFORM | COPY_DST
+      });
+    }
+
+    if (!this.tileMaskPipeline_) {
+      const shaderModule = device.createShaderModule({code: MASK_SHADER_CODE});
+      this.tileMaskPipeline_ = device.createRenderPipeline({
+        layout: 'auto',
+        vertex: {
+          module: shaderModule,
+          entryPoint: 'vs_main',
+        },
+        fragment: {
+          module: shaderModule,
+          entryPoint: 'fs_main',
+          targets: [
+            {
+              format: MASK_TEXTURE_FORMAT,
+              blend: undefined,
+            },
+          ],
+        },
+        primitive: {
+          topology: 'triangle-list',
+        },
+        depthStencil: {
+          format: MASK_DEPTH_FORMAT,
+          depthWriteEnabled: true,
+          depthCompare: 'less-equal',
+        },
+      });
+      this.tileMaskBindGroup_ = null;
+    }
+
+    if (!this.tileMaskBindGroup_) {
+      this.tileMaskBindGroup_ = device.createBindGroup({
+        layout: this.tileMaskPipeline_.getBindGroupLayout(0),
+        entries: [
+          {
+            binding: 0,
+            resource: {buffer: this.tileMaskUniformBuffer_},
+          },
+        ],
+      });
+    }
+
+    // Compute the world -> clip transform for the current view (same math as VectorStyleRenderer).
+    const width = size[0];
+    const height = size[1];
+    const rotation = frameState.viewState.rotation;
+    const resolution = frameState.viewState.resolution;
+    const center = frameState.viewState.center;
+
+    const renderTransform = this.tileMaskRenderTransform_;
+    resetTransform(renderTransform);
+    translateTransform(renderTransform, width / 2, height / 2);
+    scaleTransform(renderTransform, 1 / resolution, -1 / resolution);
+    rotateTransform(renderTransform, -rotation);
+    translateTransform(renderTransform, -center[0], -center[1]);
+
+    const clipTransform = this.tileMaskClipTransform_;
+    resetTransform(clipTransform);
+    translateTransform(clipTransform, -1, 1);
+    scaleTransform(clipTransform, 2 / width, -2 / height);
+    multiplyTransform(clipTransform, renderTransform);
+
+    mat4FromTransform(this.tileMaskMat4_, clipTransform);
+
+    // Begin mask render pass.
+    const encoder = device.createCommandEncoder();
+    const pass = encoder.beginRenderPass({
+      colorAttachments: [
+        {
+          view: this.tileMaskView_,
+          clearValue: {r: 0, g: 0, b: 0, a: 0},
+          loadOp: 'clear',
+          storeOp: 'store',
+        },
+      ],
+      depthStencilAttachment: {
+        view: this.tileMaskDepthView_,
+        depthClearValue: 1.0,
+        depthLoadOp: 'clear',
+        depthStoreOp: 'store',
+      },
+    });
+    pass.setPipeline(this.tileMaskPipeline_);
+    pass.setBindGroup(0, this.tileMaskBindGroup_);
+    this.tileMaskEncoder_ = encoder;
+    this.tileMaskPass_ = pass;
+    return true;
+  }
+
+  /**
+   * @override
+   */
+  renderTileMask(tileRepresentation, tileZ, extent, depth) {
+    if (!this.tileMaskPass_ || !this.helper || !tileRepresentation.ready) {
+      return;
+    }
+    const device = this.helper.getDevice();
+    if (!device) {
+      return;
+    }
+    const data = this.tileMaskUniformData_;
+    data.set(this.tileMaskMat4_, 0);
+    data[16] = extent[0];
+    data[17] = extent[1];
+    data[18] = extent[2];
+    data[19] = extent[3];
+    data[20] = depth;
+    data[21] = tileZ;
+    data[22] = 0;
+    data[23] = 0;
+    device.queue.writeBuffer(
+      this.tileMaskUniformBuffer_,
+      0,
+      /** @type {GPUAllowSharedBufferSource} */ (data),
+    );
+    this.tileMaskPass_.draw(6);
+  }
+
+  /**
+   * @override
+   */
+  afterTilesMaskRender(frameState) {
+    if (!this.helper) {
+      return;
+    }
+    const device = this.helper.getDevice();
+    if (!device || !this.tileMaskPass_ || !this.tileMaskEncoder_) {
+      return;
+    }
+    this.tileMaskPass_.end();
+    device.queue.submit([this.tileMaskEncoder_.finish()]);
+    this.tileMaskPass_ = null;
+    this.tileMaskEncoder_ = null;
+
+    // Make the mask available to geometry passes for this frame.
+    this.styleRenderer_.setTileMaskResources(
+      this.tileMaskSampler_,
+      this.tileMaskView_,
+    );
+  }
+
+  /**
+   * @override
+   */
   renderTile(
     tileRepresentation,
     tileTransform,
@@ -141,6 +491,7 @@ class WebGPUVectorTileLayerRenderer extends WebGPUBaseTileLayerRenderer {
     // - composite/blit only once at the end
     const isFirstTile = renderIndex === 0;
     const isLastTile = renderIndex === renderCount - 1;
+    const tileZ = tileRepresentation.tile.tileCoord[0];
     this.styleRenderer_.render(
       buffers,
       frameState,
@@ -149,6 +500,8 @@ class WebGPUVectorTileLayerRenderer extends WebGPUBaseTileLayerRenderer {
       isFirstTile,
       isLastTile,
       this.isFirstPass_ && isFirstTile,
+      alpha,
+      tileZ,
     );
   }
 }

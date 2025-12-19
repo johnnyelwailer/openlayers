@@ -191,7 +191,7 @@ The core infrastructure for WebGPU vector rendering has been implemented, mirror
 
 ### P2 (scope expansion beyond vector)
 - [ ] **WebGPU points-only layer** (`WebGLPoints` parity): separate pipeline + hit detection.
-- [ ] **WebGPU vector tiles** (`WebGLVectorTile` parity): WIP scaffolding exists (`src/ol/layer/WebGPUVectorTile.js`, `src/ol/renderer/webgpu/VectorTileLayer.js`, `examples/webgpu-vector-tiles.html`) but still missing masking + tile-extent discard + transitions/hit detection.
+- [ ] **WebGPU vector tiles** (`WebGLVectorTile` parity): scaffolding + masking exists (`src/ol/layer/WebGPUVectorTile.js`, `src/ol/renderer/webgpu/VectorTileLayer.js`, `examples/webgpu-vector-tiles.html`, `test/rendering/cases/webgpu-vectortile*`). Still missing tile-extent discard + patterns + hit detection (and likely performance refactors).
 - [ ] **WebGPU tile rendering** (`WebGLTile` parity): reprojection, palettes/bands, data tiles, tile-specific tests/examples.
 
 ## 6. Next Steps
