@@ -638,36 +638,15 @@ class WebGPUBaseTileLayerRenderer extends WebGPULayerRenderer {
 
     const zs = Object.keys(representationsByZ).map(Number).sort(descending);
 
-    const renderTileMask = this.beforeTilesMaskRender(frameState);
-
-    if (renderTileMask) {
-      for (let j = 0, jj = zs.length; j < jj; ++j) {
-        const tileZ = zs[j];
-        for (const tileRepresentation of representationsByZ[tileZ]) {
-          const tileCoord = tileRepresentation.tile.tileCoord;
-          const tileCoordKey = getTileCoordKey(tileCoord);
-          // do not render the tile mask if alpha < 1
-          if (tileCoordKey in alphaLookup) {
-            continue;
-          }
-          const tileExtent = tileGrid.getTileCoordExtent(tileCoord);
-          this.renderTileMask(
-            /** @type {TileRepresentation} */ (tileRepresentation),
-            tileZ,
-            tileExtent,
-            depthForZ(tileZ),
-          );
-        }
-      }
-      this.afterTilesMaskRender(frameState);
-    }
-
-    // Compute draw calls to provide a stable renderIndex/renderCount.
+    // Compute draw calls (renderable tiles only) to provide a stable renderIndex/renderCount.
     /** @type {Array<{tileZ:number, tileRepresentation:TileRepresentation}>} */
     const drawCalls = [];
     for (let j = 0, jj = zs.length; j < jj; ++j) {
       const tileZ = zs[j];
       for (const tileRepresentation of representationsByZ[tileZ]) {
+        if (!tileRepresentation.ready) {
+          continue;
+        }
         const tileCoord = tileRepresentation.tile.tileCoord;
         const tileCoordKey = getTileCoordKey(tileCoord);
         if (tileCoordKey in alphaLookup) {
@@ -683,6 +662,9 @@ class WebGPUBaseTileLayerRenderer extends WebGPULayerRenderer {
     }
     if (z in representationsByZ) {
       for (const tileRepresentation of representationsByZ[z]) {
+        if (!tileRepresentation.ready) {
+          continue;
+        }
         const tileCoord = tileRepresentation.tile.tileCoord;
         const tileCoordKey = getTileCoordKey(tileCoord);
         if (tileCoordKey in alphaLookup) {
@@ -694,6 +676,33 @@ class WebGPUBaseTileLayerRenderer extends WebGPULayerRenderer {
           });
         }
       }
+    }
+
+    if (drawCalls.length === 0) {
+      const tileRepresentationCache = this.tileRepresentationCache;
+      tileRepresentationCache.expireCache();
+      return this.helper.getCanvas();
+    }
+
+    const renderTileMask = this.beforeTilesMaskRender(frameState);
+    if (renderTileMask) {
+      for (let i = 0; i < drawCalls.length; i++) {
+        const {tileRepresentation, tileZ} = drawCalls[i];
+        const tileCoord = tileRepresentation.tile.tileCoord;
+        const tileCoordKey = getTileCoordKey(tileCoord);
+        // do not render the tile mask if alpha < 1
+        if (tileCoordKey in alphaLookup) {
+          continue;
+        }
+        const tileExtent = tileGrid.getTileCoordExtent(tileCoord);
+        this.renderTileMask(
+          tileRepresentation,
+          tileZ,
+          tileExtent,
+          depthForZ(tileZ),
+        );
+      }
+      this.afterTilesMaskRender(frameState);
     }
 
     this.beforeTilesRender(frameState, blend, drawCalls.length);
