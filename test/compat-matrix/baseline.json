@@ -1,7 +1,7 @@
 {
   "meta": {
-    "date": "2025-12-17T08:53:55.430Z",
-    "scenarios": 486,
+    "date": "2025-12-19T06:40:03.525Z",
+    "scenarios": 488,
     "renderers": [
       "canvas",
       "webgl",
@@ -27750,6 +27750,36 @@
       "capabilityGetsUsed": 0
     },
     {
+      "id": "capabilities/expr-operators/literal-boolean-true",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": true,
+      "expectedType": 1,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
+      "id": "capabilities/expr-operators/literal-boolean-false",
+      "group": "capability",
+      "geometry": "none",
+      "kind": "expr-probe",
+      "style": null,
+      "expr": false,
+      "expectedType": 1,
+      "needsGet": false,
+      "needsVar": false,
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0
+    },
+    {
       "id": "capabilities/expr-operators/not",
       "group": "capability",
       "geometry": "none",
@@ -46302,13 +46332,8 @@
       "capabilityCount": 1,
       "capabilityVarsUsed": 0,
       "capabilityGetsUsed": 0,
-      "status": "not_supported",
-      "messages": [
-        {
-          "type": "expr",
-          "message": "WGSL backend does not support geometry-type()"
-        }
-      ]
+      "status": "ok",
+      "messages": []
     },
     {
       "id": "capabilities/expr-operators/id",
@@ -46346,13 +46371,8 @@
       "capabilityCount": 1,
       "capabilityVarsUsed": 0,
       "capabilityGetsUsed": 0,
-      "status": "not_supported",
-      "messages": [
-        {
-          "type": "expr",
-          "message": "WGSL backend does not support id()"
-        }
-      ]
+      "status": "ok",
+      "messages": []
     },
     {
       "id": "capabilities/expr-operators/has",
@@ -46390,13 +46410,86 @@
       "capabilityCount": 1,
       "capabilityVarsUsed": 0,
       "capabilityGetsUsed": 0,
-      "status": "not_supported",
-      "messages": [
-        {
-          "type": "expr",
-          "message": "WGSL backend does not support has()"
-        }
-      ]
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/literal-boolean-true",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/literal-boolean-true",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/literal-boolean-true",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/literal-boolean-false",
+      "renderer": "canvas",
+      "targetId": "target-canvas",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/literal-boolean-false",
+      "renderer": "webgl",
+      "targetId": "target-webgl",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
+    },
+    {
+      "id": "capabilities/expr-operators/literal-boolean-false",
+      "renderer": "webgpu",
+      "targetId": "target-webgpu",
+      "scenarioGroup": "capability",
+      "scenarioGeometry": "none",
+      "capabilityKind": "expr-operators",
+      "capabilityCount": 1,
+      "capabilityVarsUsed": 0,
+      "capabilityGetsUsed": 0,
+      "status": "ok",
+      "messages": []
     },
     {
       "id": "capabilities/expr-operators/not",
@@ -47643,13 +47736,8 @@
       "capabilityCount": 1,
       "capabilityVarsUsed": 0,
       "capabilityGetsUsed": 0,
-      "status": "not_supported",
-      "messages": [
-        {
-          "type": "expr",
-          "message": "WGSL backend does not support string values"
-        }
-      ]
+      "status": "ok",
+      "messages": []
     },
     {
       "id": "capabilities/expr-operators/between",
@@ -47765,13 +47853,8 @@
       "capabilityCount": 1,
       "capabilityVarsUsed": 0,
       "capabilityGetsUsed": 0,
-      "status": "not_supported",
-      "messages": [
-        {
-          "type": "expr",
-          "message": "WGSL backend only supports numeric in()"
-        }
-      ]
+      "status": "ok",
+      "messages": []
     },
     {
       "id": "capabilities/expr-operators/number",
@@ -47814,13 +47897,8 @@
       "capabilityCount": 1,
       "capabilityVarsUsed": 0,
       "capabilityGetsUsed": 0,
-      "status": "not_supported",
-      "messages": [
-        {
-          "type": "expr",
-          "message": "WGSL backend does not support number()"
-        }
-      ]
+      "status": "ok",
+      "messages": []
     },
     {
       "id": "capabilities/expr-operators/string",
@@ -47863,13 +47941,8 @@
       "capabilityCount": 1,
       "capabilityVarsUsed": 0,
       "capabilityGetsUsed": 0,
-      "status": "not_supported",
-      "messages": [
-        {
-          "type": "expr",
-          "message": "WGSL backend does not support string()"
-        }
-      ]
+      "status": "ok",
+      "messages": []
     },
     {
       "id": "capabilities/expr-operators/concat",
@@ -47912,13 +47985,8 @@
       "capabilityCount": 1,
       "capabilityVarsUsed": 0,
       "capabilityGetsUsed": 0,
-      "status": "not_supported",
-      "messages": [
-        {
-          "type": "expr",
-          "message": "WGSL backend does not support concat()"
-        }
-      ]
+      "status": "ok",
+      "messages": []
     },
     {
       "id": "capabilities/expr-operators/coalesce",
@@ -47961,13 +48029,8 @@
       "capabilityCount": 1,
       "capabilityVarsUsed": 0,
       "capabilityGetsUsed": 0,
-      "status": "not_supported",
-      "messages": [
-        {
-          "type": "expr",
-          "message": "WGSL backend does not support coalesce()"
-        }
-      ]
+      "status": "ok",
+      "messages": []
     },
     {
       "id": "capabilities/expr-operators/coalesce-color",
@@ -48010,13 +48073,8 @@
       "capabilityCount": 1,
       "capabilityVarsUsed": 0,
       "capabilityGetsUsed": 0,
-      "status": "not_supported",
-      "messages": [
-        {
-          "type": "expr",
-          "message": "WGSL backend does not support coalesce()"
-        }
-      ]
+      "status": "ok",
+      "messages": []
     },
     {
       "id": "capabilities/expr-operators/to-string",
@@ -48059,13 +48117,8 @@
       "capabilityCount": 1,
       "capabilityVarsUsed": 0,
       "capabilityGetsUsed": 0,
-      "status": "not_supported",
-      "messages": [
-        {
-          "type": "expr",
-          "message": "WGSL backend does not support to-string()"
-        }
-      ]
+      "status": "ok",
+      "messages": []
     }
   ]
 }

@@ -436,6 +436,56 @@ export function compileExpressionToWgsl(expression, ctx, options) {
     return tests.length ? `(${tests.join(' || ')})` : 'false';
   }
 
+  if (op === Ops.Number || op === Ops.String) {
+    const desiredType = op === Ops.Number ? NumberType : StringType;
+    for (const arg of call.args) {
+      if (isType(arg.type, desiredType)) {
+        return compileExpressionToWgsl(arg, ctx, options);
+      }
+    }
+    reportUnsupported(
+      op,
+      `WGSL backend cannot resolve ${op}() without a statically typed ${op} argument`,
+      options,
+    );
+    return defaultForType(call.type);
+  }
+
+  if (op === Ops.Concat) {
+    // String concatenation is not supported in WGSL at runtime; only fold literal concatenations.
+    if (call.args.every((arg) => arg instanceof LiteralExpression)) {
+      const value = call.args
+        .map((arg) => /** @type {LiteralExpression} */ (arg).value)
+        .map((v) => String(v))
+        .join('');
+      return numberToWgsl(getStringNumberEquivalent(value));
+    }
+    reportUnsupported(
+      op,
+      'WGSL backend only supports concat() with literal arguments',
+      options,
+    );
+    return defaultForType(call.type);
+  }
+
+  if (op === Ops.ToString) {
+    const arg = call.args[0];
+    // Strings are represented as stable numeric ids (WebGL parity).
+    if (isType(arg.type, StringType)) {
+      return compileExpressionToWgsl(arg, ctx, options);
+    }
+    // Runtime string conversion is not supported in WGSL; only fold literal conversions.
+    if (arg instanceof LiteralExpression) {
+      return numberToWgsl(getStringNumberEquivalent(String(arg.value)));
+    }
+    reportUnsupported(
+      op,
+      'WGSL backend only supports to-string() for string-typed expressions or literal values',
+      options,
+    );
+    return defaultForType(call.type);
+  }
+
   reportUnsupported(op, `WGSL backend does not support ${op}()`, options);
   return defaultForType(call.type);
 }

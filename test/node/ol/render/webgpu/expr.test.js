@@ -111,9 +111,9 @@ describe('ol/render/webgpu/expr', () => {
 
     it('throws for unsupported operators instead of returning defaults', () => {
       expect(() => {
-        compileWgslExpression(['number', 1, '1'], ctx, 'f32');
+        compileWgslExpression(['palette', 0, ['rgb(0,0,0)']], ctx, 'vec4f');
       }).to.throwException((e) => {
-        expect(e.message).to.be('WGSL backend does not support number()');
+        expect(e.message).to.be('WGSL backend does not support palette()');
       });
     });
   });

@@ -264,4 +264,31 @@ describe('ol/expr/wgsl', () => {
       `${numberToWgsl(getStringNumberEquivalent('b'))}`,
     );
   });
+
+  it('compiles number() and string() assertions', () => {
+    const parsingContext = newParsingContext();
+    const numberExpr = parse(['number', 1, '1'], NumberType, parsingContext);
+    expect(compileExpressionToWgsl(numberExpr, ctx)).to.be('1.0');
+
+    const stringExpr = parse(['string', 1, 'a'], StringType, parsingContext);
+    expect(compileExpressionToWgsl(stringExpr, ctx)).to.be(
+      numberToWgsl(getStringNumberEquivalent('a')),
+    );
+  });
+
+  it('compiles concat() with literals', () => {
+    const parsingContext = newParsingContext();
+    const expr = parse(['concat', 'a', 'b'], StringType, parsingContext);
+    expect(compileExpressionToWgsl(expr, ctx)).to.be(
+      numberToWgsl(getStringNumberEquivalent('ab')),
+    );
+  });
+
+  it('compiles to-string() for literals', () => {
+    const parsingContext = newParsingContext();
+    const expr = parse(['to-string', 1], StringType, parsingContext);
+    expect(compileExpressionToWgsl(expr, ctx)).to.be(
+      numberToWgsl(getStringNumberEquivalent('1')),
+    );
+  });
 });
