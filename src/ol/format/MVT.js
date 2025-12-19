@@ -27,6 +27,7 @@ import FeatureFormat, {transformGeometryWithOptions} from './Feature.js';
  * @property {string} [layerName='layer'] Name of the feature attribute that holds the layer name.
  * @property {Array<string>} [layers] Layers to read features from. If not provided, features will be read from all
  * @property {string} [idProperty] Optional property that will be assigned as the feature id and removed from the properties.
+ * @property {Array<string>} [properties] Optional allowlist of property names to include.
  * layers.
  */
 
@@ -84,6 +85,12 @@ class MVT extends FeatureFormat {
      * @type {string}
      */
     this.idProperty_ = options.idProperty;
+
+    /**
+     * @private
+     * @type {Array<string>|null}
+     */
+    this.properties_ = options.properties ? options.properties : null;
 
     this.supportedMediaTypes = [
       'application/vnd.mapbox-vector-tile',
@@ -175,10 +182,25 @@ class MVT extends FeatureFormat {
       id = rawFeature.id;
     } else {
       id = values[this.idProperty_];
-      delete values[this.idProperty_];
+      if (!this.properties_) {
+        delete values[this.idProperty_];
+      }
     }
 
-    values[this.layerName_] = rawFeature.layer.name;
+    let properties = values;
+    if (this.properties_) {
+      properties = {};
+      for (const name of this.properties_) {
+        if (name === this.idProperty_) {
+          continue;
+        }
+        if (name in values) {
+          properties[name] = values[name];
+        }
+      }
+    }
+
+    properties[this.layerName_] = rawFeature.layer.name;
 
     const flatCoordinates = /** @type {Array<number>} */ ([]);
     const ends = /** @type {Array<number>} */ ([]);
@@ -190,7 +212,7 @@ class MVT extends FeatureFormat {
       feature =
         new /** @type {import('./Feature.js').FeatureToFeatureClass<RenderFeature>} */ (
           this.featureClass
-        )(geometryType, flatCoordinates, ends, 2, values, id);
+        )(geometryType, flatCoordinates, ends, 2, properties, id);
       feature.transform(options.dataProjection);
     } else {
       let geom;
@@ -224,7 +246,7 @@ class MVT extends FeatureFormat {
       if (id !== undefined) {
         feature.setId(id);
       }
-      feature.setProperties(values, true);
+      feature.setProperties(properties, true);
     }
 
     return /** @type {FeatureType} */ (feature);

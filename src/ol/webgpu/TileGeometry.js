@@ -14,6 +14,44 @@ import BaseTileRepresentation from './BaseTileRepresentation.js';
  * @typedef {import("../render/webgpu/VectorStyleRenderer.js").default} VectorStyleRenderer
  */
 
+/** @type {Array<TileGeometry>} */
+const uploadQueue = [];
+let uploadInProgress = false;
+
+function scheduleUploadProcessing() {
+  if (uploadInProgress) {
+    return;
+  }
+  // Use rAF to give the browser a chance to process input/render between tile uploads.
+  const raf =
+    typeof requestAnimationFrame === 'function'
+      ? requestAnimationFrame
+      : (cb) => setTimeout(() => cb(0), 0);
+  raf(() => processUploadQueue());
+}
+
+function processUploadQueue() {
+  if (uploadInProgress) {
+    return;
+  }
+  const next = uploadQueue.shift();
+  if (!next) {
+    return;
+  }
+  uploadInProgress = true;
+  next
+    .processUpload()
+    .catch(() => {
+      // ignore
+    })
+    .finally(() => {
+      uploadInProgress = false;
+      if (uploadQueue.length) {
+        scheduleUploadProcessing();
+      }
+    });
+}
+
 /**
  * @extends {BaseTileRepresentation<TileType>}
  */
@@ -48,6 +86,20 @@ class TileGeometry extends BaseTileRepresentation {
      */
     this.buffers = null;
 
+    /**
+     * Used to cancel queued uploads when a tile is updated or helper/style renderer changes.
+     * @private
+     * @type {number}
+     */
+    this.uploadRevision_ = 0;
+
+    /**
+     * Whether this tile is currently queued for upload processing.
+     * @private
+     * @type {boolean}
+     */
+    this.queued_ = false;
+
     this.setTile(options.tile);
   }
 
@@ -55,6 +107,7 @@ class TileGeometry extends BaseTileRepresentation {
    * @override
    */
   uploadTile() {
+    this.uploadRevision_++;
     const styleRenderer = this.getStyleRenderer_();
     if (!styleRenderer) {
       return;
@@ -62,6 +115,24 @@ class TileGeometry extends BaseTileRepresentation {
 
     this.ready = false;
     this.buffers = null;
+
+    if (!this.queued_) {
+      this.queued_ = true;
+      uploadQueue.push(this);
+      scheduleUploadProcessing();
+    }
+  }
+
+  /**
+   * @return {Promise<void>} Promise.
+   */
+  async processUpload() {
+    this.queued_ = false;
+    const revision = this.uploadRevision_;
+    const styleRenderer = this.getStyleRenderer_();
+    if (!styleRenderer) {
+      return;
+    }
 
     this.batch_.clear();
     const sourceTiles = this.tile.getSourceTiles();
@@ -76,16 +147,22 @@ class TileGeometry extends BaseTileRepresentation {
     this.batch_.addFeatures(features);
 
     const transform = createTransform(); // Currently unused by WebGPU VectorStyleRenderer.
-    styleRenderer
-      .generateBuffers(this.batch_, transform)
-      .then((buffers) => {
-        this.buffers = buffers;
-        this.setReady();
-      })
-      .catch(() => {
-        // Keep the tile non-ready to allow for retries on the next frame/helper recreation.
+    try {
+      const buffers = await styleRenderer.generateBuffers(
+        this.batch_,
+        transform,
+      );
+      if (revision !== this.uploadRevision_) {
+        return;
+      }
+      this.buffers = buffers;
+      this.setReady();
+    } catch {
+      // Keep the tile non-ready to allow for retries on the next frame/helper recreation.
+      if (revision === this.uploadRevision_) {
         this.buffers = null;
-      });
+      }
+    }
   }
 
   /**

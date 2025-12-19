@@ -52,7 +52,7 @@ new Map({
   layers: [
     new WebGPUVectorTileLayer({
       source: new VectorTileSource({
-        format: new MVT(),
+        format: new MVT({properties: ['layer', 'class']}),
         url:
           'https://api.mapbox.com/v4/mapbox.mapbox-streets-v6/{z}/{x}/{y}.vector.pbf?access_token=' +
           key,
