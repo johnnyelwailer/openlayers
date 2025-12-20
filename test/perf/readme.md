@@ -55,4 +55,5 @@ Current scenarios:
 - `style-vars`: rapid `updateStyleVariables()` churn
 - `pan`: view panning
 - `opacity`: layer opacity animation (exercises offscreen compositing in WebGPU)
-- `geometry-churn`: periodic geometry updates (forces batch/buffer rebuilds; surfaces hitching)
+- `geometry-churn`: periodic geometry updates (forces batch/buffer rebuilds; surfaces hitching) (currently opt-in via `--scenarios geometry-churn`)
+- Vector tile scenarios are opt-in via `--vectortiles` because headless Chrome can be unstable for tile workloads.

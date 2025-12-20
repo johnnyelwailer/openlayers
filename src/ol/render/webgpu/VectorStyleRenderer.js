@@ -1,7 +1,7 @@
 /**
  * @module ol/render/webgpu/VectorStyleRenderer
  */
-import {asArray} from '../../color.js';
+import {tryFromString} from '../../color.js';
 import {
   buildExpression as buildCpuExpression,
   newEvaluationContext,
@@ -259,26 +259,25 @@ function resolveColor(value, feature, fallback, variables) {
   if (!resolved) {
     return fallback;
   }
-  try {
-    const c = asArray(resolved);
-    const r = Number(c[0]);
-    const g = Number(c[1]);
-    const b = Number(c[2]);
-    if (!Number.isFinite(r) || !Number.isFinite(g) || !Number.isFinite(b)) {
-      return fallback;
-    }
-    const max = Math.max(r, g, b);
-    const scale = max > 1.5 ? 1 / 255 : 1;
-    const alpha = c.length > 3 ? Number(c[3]) : 1;
-    return [
-      r * scale,
-      g * scale,
-      b * scale,
-      Number.isFinite(alpha) ? alpha : 1,
-    ];
-  } catch {
+
+  const c = Array.isArray(resolved)
+    ? resolved
+    : typeof resolved === 'string'
+      ? tryFromString(resolved)
+      : null;
+  if (!c) {
     return fallback;
   }
+  const r = Number(c[0]);
+  const g = Number(c[1]);
+  const b = Number(c[2]);
+  if (!Number.isFinite(r) || !Number.isFinite(g) || !Number.isFinite(b)) {
+    return fallback;
+  }
+  const max = Math.max(r, g, b);
+  const scale = max > 1.5 ? 1 / 255 : 1;
+  const alpha = c.length > 3 ? Number(c[3]) : 1;
+  return [r * scale, g * scale, b * scale, Number.isFinite(alpha) ? alpha : 1];
 }
 
 /**
@@ -957,13 +956,13 @@ class VectorStyleRenderer {
       } else if (typeof value === 'boolean') {
         x = value ? 1 : 0;
       } else if (typeof value === 'string') {
-        try {
-          const c = asArray(value);
+        const c = tryFromString(value);
+        if (c) {
           x = c[0] / 255;
           y = c[1] / 255;
           z = c[2] / 255;
           w = c.length > 3 ? c[3] : 1;
-        } catch {
+        } else {
           x = getStringNumberEquivalent(value);
         }
       } else if (Array.isArray(value) && value.length >= 3) {
@@ -3125,8 +3124,8 @@ class VectorStyleRenderer {
               data[colorOffset + 3] = alpha;
             }
           } else if (typeof value === 'string') {
-            try {
-              const rgba = asArray(value);
+            const rgba = tryFromString(value);
+            if (rgba) {
               const r = Number(rgba[0]);
               const g = Number(rgba[1]);
               const b = Number(rgba[2]);
@@ -3145,8 +3144,6 @@ class VectorStyleRenderer {
                 data[colorOffset + 2] = b * scale;
                 data[colorOffset + 3] = alpha;
               }
-            } catch {
-              // ignore invalid colors
             }
           }
         }
@@ -3226,8 +3223,8 @@ class VectorStyleRenderer {
               dst[colorOffset + 3] = alpha;
             }
           } else if (typeof value === 'string') {
-            try {
-              const rgba = asArray(value);
+            const rgba = tryFromString(value);
+            if (rgba) {
               const r = Number(rgba[0]);
               const g = Number(rgba[1]);
               const b = Number(rgba[2]);
@@ -3246,8 +3243,6 @@ class VectorStyleRenderer {
                 dst[colorOffset + 2] = b * scale;
                 dst[colorOffset + 3] = alpha;
               }
-            } catch {
-              // ignore invalid colors
             }
           }
         }

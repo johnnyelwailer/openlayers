@@ -32,8 +32,10 @@
       <div id="target-webgl" class="target"></div>
       <div id="target-webgpu" class="target"></div>
     </div>
+    <script>
+      globalThis.__olPerfStatus = {stage: 'html-loaded'};
+    </script>
     <script src="/ol.js"></script>
     <script type="module" src="/perf/runner.js"></script>
   </body>
 </html>
-

@@ -1,10 +1,10 @@
 const ol = globalThis.ol;
 
-const RENDERERS = /** @type {const} */ (['webgl', 'webgpu']);
+const ALL_RENDERERS = /** @type {const} */ (['webgl', 'webgpu']);
 
 /**
  * @param {Array<number>} values Values.
- * @return {{count: number, mean: number, median: number, p95: number, max: number, over16ms: number, over33ms: number}} Stats summary.
+ * @return {{count: number, mean: number, median: number, p95: number, max: number, over16ms: number, over33ms: number, over100ms: number, over250ms: number}} Stats summary.
  */
 function stats(values) {
   const count = values.length;
@@ -17,6 +17,8 @@ function stats(values) {
       max: 0,
       over16ms: 0,
       over33ms: 0,
+      over100ms: 0,
+      over250ms: 0,
     };
   }
   const sorted = values.slice().sort((a, b) => a - b);
@@ -30,6 +32,8 @@ function stats(values) {
   const max = sorted[count - 1];
   let over16ms = 0;
   let over33ms = 0;
+  let over100ms = 0;
+  let over250ms = 0;
   for (const v of values) {
     if (v > 16.67) {
       over16ms++;
@@ -37,12 +41,58 @@ function stats(values) {
     if (v > 33.34) {
       over33ms++;
     }
+    if (v > 100) {
+      over100ms++;
+    }
+    if (v > 250) {
+      over250ms++;
+    }
   }
-  return {count, mean, median, p95, max, over16ms, over33ms};
+  return {
+    count,
+    mean,
+    median,
+    p95,
+    max,
+    over16ms,
+    over33ms,
+    over100ms,
+    over250ms,
+  };
 }
 
-function nextFrame() {
-  return new Promise((resolve) => requestAnimationFrame(resolve));
+/**
+ * @return {{durations: Array<number>, stop: () => void}} Recorder.
+ */
+function startLongTaskRecorder() {
+  /** @type {Array<number>} */
+  const durations = [];
+  let observer = null;
+  if ('PerformanceObserver' in globalThis) {
+    try {
+      observer = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          const d = entry?.duration;
+          if (typeof d === 'number') {
+            durations.push(d);
+          }
+        }
+      });
+      observer.observe({type: 'longtask', buffered: true});
+    } catch {
+      observer = null;
+    }
+  }
+  return {
+    durations,
+    stop: () => {
+      try {
+        observer?.disconnect();
+      } catch {
+        // ignore
+      }
+    },
+  };
 }
 
 /**
@@ -112,32 +162,100 @@ function createMap(renderer, target, source, features) {
 }
 
 /**
- * @param {any} runCtx Run context.
- * @param {{id: string, warmup: number, frames: number, reset?: (runCtx: any) => void, step: (i: number, runCtx: any) => void}} scenario Scenario.
- * @return {Promise<{frameTimes: Array<number>, workTimes: Array<number>}>} Frame and work timings.
+ * @param {'webgl'|'webgpu'} renderer Renderer.
+ * @param {any} target Target element.
+ * @return {{map: any, layer: any, view: any, source: any}} Map context.
  */
-async function runScenario(runCtx, scenario) {
-  const {map} = runCtx;
-  const total = scenario.warmup + scenario.frames;
-  const frameTimes = [];
-  const workTimes = [];
+function createVectorTileMap(renderer, target) {
+  const {Map, View} = ol;
+  const {
+    WebGLVectorTile: WebGLVectorTileLayer,
+    WebGPUVectorTile: WebGPUVectorTileLayer,
+  } = ol.layer;
+  const {VectorTile: VectorTileSource} = ol.source;
+  const {MVT} = ol.format;
+  const {createXYZ} = ol.tilegrid;
+  const {createEmpty, extend} = ol.extent;
 
-  let lastTs = null;
-  for (let i = 0; i < total; i++) {
-    const ts = await nextFrame();
-    if (lastTs !== null && i >= scenario.warmup) {
-      frameTimes.push(ts - lastTs);
-    }
-    lastTs = ts;
+  const style = [
+    {
+      filter: ['==', ['get', 'layer'], 'water'],
+      style: {'fill-color': '#a0c8f0'},
+    },
+    {
+      filter: [
+        'all',
+        ['==', ['get', 'layer'], 'landuse'],
+        ['==', ['get', 'class'], 'park'],
+      ],
+      style: {'fill-color': '#d8e8c8'},
+    },
+    {
+      filter: ['==', ['get', 'layer'], 'building'],
+      style: {
+        'fill-color': '#f2eae2',
+        'stroke-color': '#dfdbd7',
+        'stroke-width': 1,
+      },
+    },
+    {
+      filter: ['==', ['get', 'layer'], 'road'],
+      style: {'stroke-color': '#cfcdca', 'stroke-width': 1},
+    },
+    {
+      filter: ['==', ['get', 'layer'], 'place_label'],
+      style: {'circle-radius': 3, 'circle-fill-color': '#707070'},
+    },
+  ];
 
-    const start = performance.now();
-    scenario.step(i, runCtx);
-    map.renderSync();
-    if (i >= scenario.warmup) {
-      workTimes.push(performance.now() - start);
+  // Restrict requests to the local 3x3 tile fixture coverage (z=14).
+  const tempGrid = createXYZ({minZoom: 14, maxZoom: 14});
+  const fixtureExtent = createEmpty();
+  for (let x = 8937; x <= 8939; x++) {
+    for (let y = 5679; y <= 5681; y++) {
+      extend(fixtureExtent, tempGrid.getTileCoordExtent([14, x, y]));
     }
   }
-  return {frameTimes, workTimes};
+  const tileGrid = createXYZ({minZoom: 14, maxZoom: 14, extent: fixtureExtent});
+
+  /** @type {import('../../src/ol/Tile.js').UrlFunction} */
+  const tileUrlFunction = (tileCoord) => {
+    if (!tileCoord) {
+      return undefined;
+    }
+    const x = Math.min(8939, Math.max(8937, tileCoord[1]));
+    const y = Math.min(5681, Math.max(5679, tileCoord[2]));
+    return `/data/tiles/mapbox-streets-v6/14/${x}/${y}.vector.pbf`;
+  };
+
+  const source = new VectorTileSource({
+    format: new MVT({properties: ['layer', 'class']}),
+    tileGrid,
+    tileUrlFunction,
+    transition: 0,
+  });
+
+  const layer =
+    renderer === 'webgl'
+      ? new WebGLVectorTileLayer({source, style})
+      : new WebGPUVectorTileLayer({source, style});
+
+  const view = new View({
+    center: [1825927.7316762917, 6143091.089223046],
+    zoom: 14,
+    extent: fixtureExtent,
+  });
+
+  const map = new Map({
+    target,
+    layers: [layer],
+    controls: [],
+    interactions: [],
+    view,
+  });
+
+  map.updateSize();
+  return {map, layer, view, source, tileUrlFunction};
 }
 
 /**
@@ -173,31 +291,62 @@ async function collectEnv() {
     // ignore
   }
 
-  if (navigator.gpu?.requestAdapter) {
-    try {
-      const adapter = await navigator.gpu.requestAdapter();
-      if (adapter?.requestAdapterInfo) {
-        env.webgpuAdapterInfo = await adapter.requestAdapterInfo();
-      }
-    } catch {
-      // ignore
-    }
-  }
-
   return env;
 }
 
-async function main() {
-  const url = new URL(location.href);
-  const frames = Number(url.searchParams.get('frames') || 240);
-  const warmup = Number(url.searchParams.get('warmup') || 60);
-  const featureCount = Number(url.searchParams.get('features') || 2000);
+/**
+ * @typedef {{id: string, warmup: number, frames: number, reset?: (runCtx: any) => void, step: (i: number, runCtx: any) => void}} Scenario
+ */
 
-  const env = await collectEnv();
+/**
+ * Controlled runner state used by Puppeteer-driven stepping.
+ * @typedef {Object} PerfState
+ * @property {any} env Env info.
+ * @property {number} frames Frames per scenario.
+ * @property {number} warmup Warmup frames.
+ * @property {number} featureCount Feature count.
+ * @property {Array<'webgl'|'webgpu'>} renderers Renderers to run.
+ * @property {Array<Scenario>} vectorScenarios Vector scenarios.
+ * @property {Array<Scenario>} vectorTileScenarios Vector tile scenarios.
+ * @property {Array<any>} results Results.
+ * @property {number} groupIndex 0=vector,1=vectortile.
+ * @property {number} scenarioIndex Current scenario index.
+ * @property {number} rendererIndex Current renderer index.
+ * @property {number} frameIndex Current frame index.
+ * @property {number|null} lastAdvanceTime Last advance timestamp.
+ * @property {any} contexts Active contexts.
+ * @property {Array<number>} frameTimes Current run frame times.
+ * @property {Array<number>} workTimes Current run work times.
+ * @property {ReturnType<typeof startLongTaskRecorder>|null} longTaskRecorder Longtask recorder.
+ */
 
+/** @type {PerfState|null} */
+let PERF_STATE = null;
+
+/**
+ * @param {URL} url URL.
+ * @return {Array<'webgl'|'webgpu'>} Renderers.
+ */
+function getRenderers(url) {
+  const rendererParam = url.searchParams.get('renderer');
+  if (
+    rendererParam &&
+    ALL_RENDERERS.includes(/** @type {any} */ (rendererParam))
+  ) {
+    return /** @type {Array<'webgl'|'webgpu'>} */ ([rendererParam]);
+  }
+  return /** @type {Array<'webgl'|'webgpu'>} */ (ALL_RENDERERS.slice());
+}
+
+/**
+ * @param {Array<'webgl'|'webgpu'>} renderers Renderers.
+ * @param {(renderer: 'webgl'|'webgpu', target: HTMLElement) => any} createFn Factory.
+ * @return {Record<string, any>} Contexts.
+ */
+function createContexts(renderers, createFn) {
   /** @type {Record<string, any>} */
   const contexts = {};
-  for (const renderer of RENDERERS) {
+  for (const renderer of renderers) {
     const target = document.getElementById(`target-${renderer}`);
     if (!target) {
       contexts[renderer] = {
@@ -213,14 +362,36 @@ async function main() {
       };
       continue;
     }
-    const {Vector: VectorSource} = ol.source;
-    const features = createPointFeatures(featureCount);
-    const source = new VectorSource({features});
-    contexts[renderer] = createMap(renderer, target, source, features);
+    contexts[renderer] = createFn(renderer, target);
   }
+  return contexts;
+}
 
-  const scenarios = [
-    /** @type {const} */ ({
+/**
+ * Initialize the controlled runner state and expose an `__olPerfAdvance()` function.
+ * This avoids relying on page timers/rAF in headless mode by letting Puppeteer
+ * drive the progression.
+ * @param {URL} url URL.
+ */
+async function initControlledRunner(url) {
+  globalThis.__olPerfDone = false;
+  globalThis.__olPerfResult = null;
+  globalThis.__olPerfStatus = {stage: 'collecting-env'};
+
+  const renderers = getRenderers(url);
+  const frames = Number(url.searchParams.get('frames') || 240);
+  const warmup = Number(url.searchParams.get('warmup') || 60);
+  const featureCount = Number(url.searchParams.get('features') || 2000);
+  const includeVectorTiles = url.searchParams.get('vectortiles') !== '0';
+  const scenariosParam = url.searchParams.get('scenarios');
+  const allowedScenarios = scenariosParam
+    ? new Set(scenariosParam.split(',').filter(Boolean))
+    : null;
+  const env = await collectEnv();
+
+  /** @type {Array<Scenario>} */
+  const allVectorScenarios = [
+    {
       id: 'style-vars',
       warmup,
       frames,
@@ -239,8 +410,8 @@ async function main() {
           color: [r, g, b, 0.6],
         });
       },
-    }),
-    /** @type {const} */ ({
+    },
+    {
       id: 'pan',
       warmup,
       frames,
@@ -253,8 +424,8 @@ async function main() {
         const dy = Math.cos(i * 0.05) * 10000;
         runCtx.view.setCenter([dx, dy]);
       },
-    }),
-    /** @type {const} */ ({
+    },
+    {
       id: 'opacity',
       warmup,
       frames,
@@ -267,8 +438,8 @@ async function main() {
         const opacity = 0.6 + 0.3 * (0.5 + 0.5 * Math.sin(t));
         runCtx.layer.setOpacity(opacity);
       },
-    }),
-    /** @type {const} */ ({
+    },
+    {
       id: 'geometry-churn',
       warmup,
       frames,
@@ -277,8 +448,6 @@ async function main() {
         runCtx.view.setCenter([0, 0]);
       },
       step: (i, runCtx) => {
-        // Update a chunk of feature geometries periodically to force buffer rebuilds.
-        // The intent is to surface "hiccups" (long frame times) rather than maximize steady-state FPS.
         if (i % 10 !== 0) {
           return;
         }
@@ -299,63 +468,264 @@ async function main() {
           geom.setCoordinates([x, y]);
         }
       },
-    }),
+    },
+  ];
+  const vectorScenarios = allowedScenarios
+    ? allVectorScenarios.filter((s) => allowedScenarios.has(s.id))
+    : allVectorScenarios.filter((s) => s.id !== 'geometry-churn');
+
+  /** @type {Array<Scenario>} */
+  const vectorTileScenarios = [
+    {
+      id: 'vectortile-cold-zoom-pan',
+      warmup: 0,
+      frames,
+      reset: (runCtx) => {
+        runCtx.view.setCenter([1825927.7316762917, 6143091.089223046]);
+        runCtx.view.setZoom(14);
+        if (runCtx.tileUrlFunction && runCtx.source?.setTileUrlFunction) {
+          runCtx.source.setTileUrlFunction(
+            runCtx.tileUrlFunction,
+            `reset-${Date.now()}`,
+          );
+        } else if (runCtx.source?.refresh) {
+          runCtx.source.refresh();
+        }
+      },
+      step: (i, runCtx) => {
+        const t = i * 0.25;
+        const e = runCtx.view.get('extent');
+        const width = e ? e[2] - e[0] : 0;
+        const height = e ? e[3] - e[1] : 0;
+        const dx = 0.25 * width * Math.sin(t * 0.7);
+        const dy = 0.25 * height * Math.cos(t * 0.6);
+        runCtx.view.setCenter([
+          1825927.7316762917 + dx,
+          6143091.089223046 + dy,
+        ]);
+      },
+    },
   ];
 
-  /** @type {Array<any>} */
-  const results = [];
-  for (const scenario of scenarios) {
-    for (const renderer of RENDERERS) {
-      const runCtx = contexts[renderer];
-      /** @type {any} */
-      const entry = {renderer, scenario: scenario.id, status: 'ok'};
-      if (!runCtx?.map || !runCtx?.layer) {
-        entry.status = 'unavailable';
-        entry.message = runCtx?.message || `${renderer} unavailable`;
-        results.push(entry);
-        continue;
-      }
-      try {
-        if (scenario.reset) {
-          scenario.reset(runCtx);
+  /** @type {PerfState} */
+  const state = {
+    env,
+    frames,
+    warmup,
+    featureCount,
+    renderers,
+    vectorScenarios,
+    vectorTileScenarios,
+    results: [],
+    groupIndex: 0,
+    scenarioIndex: 0,
+    rendererIndex: 0,
+    frameIndex: -1,
+    lastAdvanceTime: null,
+    contexts: null,
+    frameTimes: [],
+    workTimes: [],
+    longTaskRecorder: null,
+  };
+  PERF_STATE = state;
+
+  // Create initial contexts for the vector group.
+  globalThis.__olPerfStatus = {stage: 'vector:init'};
+  const {Vector: VectorSource} = ol.source;
+  const features = createPointFeatures(featureCount);
+  state.contexts = createContexts(renderers, (renderer, target) => {
+    const source = new VectorSource({features});
+    return createMap(renderer, target, source, features);
+  });
+  globalThis.__olPerfStatus = {stage: 'ready'};
+
+  globalThis.__olPerfAdvance = () => {
+    if (!PERF_STATE) {
+      return {done: true};
+    }
+
+    const st = PERF_STATE;
+    const groups = [
+      {id: 'vector', scenarios: st.vectorScenarios, createContexts: null},
+      ...(includeVectorTiles
+        ? [
+            {
+              id: 'vectortile',
+              scenarios: st.vectorTileScenarios,
+              createContexts: () =>
+                createContexts(st.renderers, (renderer, target) =>
+                  createVectorTileMap(renderer, target),
+                ),
+            },
+          ]
+        : []),
+    ];
+
+    const group = groups[st.groupIndex];
+    if (!group) {
+      const payload = {
+        meta: {
+          date: new Date().toISOString(),
+          env: st.env,
+          frames: st.frames,
+          warmup: st.warmup,
+          featureCount: st.featureCount,
+        },
+        results: st.results,
+      };
+      globalThis.__olPerfStatus = {stage: 'reporting'};
+      globalThis.__olPerfResult = payload;
+      globalThis.__olPerfDone = true;
+      globalThis.reportDone?.(payload);
+      PERF_STATE = null;
+      return {done: true};
+    }
+
+    // Move to the next scenario/renderer when needed.
+    const scenario = group.scenarios[st.scenarioIndex];
+    if (!scenario) {
+      // Cleanup contexts for this group.
+      if (st.contexts) {
+        for (const r of st.renderers) {
+          const ctx = st.contexts[r];
+          if (ctx?.map) {
+            ctx.map.setTarget(null);
+          }
         }
-        // Give the browser one frame for layout and one for initial render/shader compile.
-        await nextFrame();
+      }
+      st.groupIndex++;
+      st.scenarioIndex = 0;
+      st.rendererIndex = 0;
+      st.frameIndex = -1;
+      st.lastAdvanceTime = null;
+      st.frameTimes = [];
+      st.workTimes = [];
+      st.longTaskRecorder?.stop();
+      st.longTaskRecorder = null;
+
+      const nextGroup = groups[st.groupIndex];
+      if (nextGroup?.id === 'vectortile') {
+        globalThis.__olPerfStatus = {stage: 'vectortile:init'};
+        st.contexts = nextGroup.createContexts
+          ? nextGroup.createContexts()
+          : null;
+      }
+      return {done: false};
+    }
+
+    const renderer = st.renderers[st.rendererIndex];
+    if (!renderer) {
+      st.scenarioIndex++;
+      st.rendererIndex = 0;
+      st.frameIndex = -1;
+      st.lastAdvanceTime = null;
+      st.frameTimes = [];
+      st.workTimes = [];
+      st.longTaskRecorder?.stop();
+      st.longTaskRecorder = null;
+      return {done: false};
+    }
+
+    const runCtx = st.contexts?.[renderer];
+    /** @type {any} */
+    const entry = {renderer, scenario: scenario.id, status: 'ok'};
+
+    if (!runCtx?.map || !runCtx?.layer) {
+      entry.status = 'unavailable';
+      entry.message = runCtx?.message || `${renderer} unavailable`;
+      st.results.push(entry);
+      st.rendererIndex++;
+      return {done: false};
+    }
+
+    // Scenario init for this renderer.
+    if (st.frameIndex === -1) {
+      globalThis.__olPerfStatus = {
+        stage: 'setup',
+        group: group.id,
+        renderer,
+        scenario: scenario.id,
+      };
+      try {
+        scenario.reset?.(runCtx);
         runCtx.map.renderSync();
-        await nextFrame();
-        const {frameTimes, workTimes} = await runScenario(runCtx, scenario);
-        entry.frameTimes = stats(frameTimes);
-        entry.workTimes = stats(workTimes);
       } catch (err) {
         entry.status = 'error';
         entry.message = String(err?.message || err);
+        st.results.push(entry);
+        st.rendererIndex++;
+        return {done: false};
       }
-      results.push(entry);
+      st.longTaskRecorder = startLongTaskRecorder();
+      st.frameTimes = [];
+      st.workTimes = [];
+      st.lastAdvanceTime = null;
+      st.frameIndex = 0;
+      return {done: false};
     }
-  }
 
-  for (const renderer of RENDERERS) {
-    const ctx = contexts[renderer];
-    if (ctx?.map) {
-      ctx.map.setTarget(null);
+    const now = performance.now();
+    const frameTime =
+      st.lastAdvanceTime !== null ? now - st.lastAdvanceTime : null;
+    st.lastAdvanceTime = now;
+
+    globalThis.__olPerfStatus = {
+      stage: 'frame',
+      group: group.id,
+      renderer,
+      scenario: scenario.id,
+      i: st.frameIndex,
+    };
+
+    const start = performance.now();
+    try {
+      scenario.step(st.frameIndex, runCtx);
+      runCtx.map.renderSync();
+    } catch (err) {
+      entry.status = 'error';
+      entry.message = String(err?.message || err);
+      st.results.push(entry);
+      st.rendererIndex++;
+      st.frameIndex = -1;
+      st.longTaskRecorder?.stop();
+      st.longTaskRecorder = null;
+      return {done: false};
     }
-  }
+    const workTime = performance.now() - start;
 
-  globalThis.reportDone?.({
-    meta: {
-      date: new Date().toISOString(),
-      env,
-      frames,
-      warmup,
-      featureCount,
-    },
-    results,
-  });
+    if (st.frameIndex >= scenario.warmup) {
+      if (frameTime !== null) {
+        st.frameTimes.push(frameTime);
+      }
+      st.workTimes.push(workTime);
+    }
+
+    st.frameIndex++;
+    if (st.frameIndex >= scenario.warmup + scenario.frames) {
+      st.longTaskRecorder?.stop();
+      entry.frameTimes = stats(st.frameTimes);
+      entry.workTimes = stats(st.workTimes);
+      entry.longTasks = stats(st.longTaskRecorder?.durations || []);
+      st.results.push(entry);
+      st.longTaskRecorder = null;
+      st.frameIndex = -1;
+      st.rendererIndex++;
+    }
+    return {done: false};
+  };
 }
 
-main().catch((err) => {
-  globalThis.reportDone?.({
-    meta: {date: new Date().toISOString()},
-    results: [{status: 'error', message: String(err?.message || err)}],
+// Entry point: always run in controlled mode (driven by Puppeteer).
+{
+  const url = new URL(location.href);
+  globalThis.__olPerfStatus = {stage: 'start'};
+  initControlledRunner(url).catch((err) => {
+    const payload = {
+      meta: {date: new Date().toISOString()},
+      results: [{status: 'error', message: String(err?.message || err)}],
+    };
+    globalThis.__olPerfResult = payload;
+    globalThis.__olPerfDone = true;
+    globalThis.reportDone?.(payload);
   });
-});
+}

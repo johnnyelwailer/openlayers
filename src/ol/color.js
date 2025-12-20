@@ -62,9 +62,9 @@ function throwInvalidColor(color) {
 
 /**
  * @param {string} color Color string.
- * @return {Color} RGBa color array.
+ * @return {Color|null} RGBa color array or null if invalid.
  */
-function parseRgba(color) {
+function tryParseRgba(color) {
   // Fast lane for rgb(a) colors
   if (color.toLowerCase().startsWith('rgb')) {
     const rgb =
@@ -81,7 +81,7 @@ function parseRgba(color) {
         alpha !== undefined ? clamp(toColorComponent(alpha, 100), 0, 1) : 1,
       ];
     }
-    throwInvalidColor(color);
+    return null;
   }
   // Fast lane for hex colors (also with alpha)
   if (color.startsWith('#')) {
@@ -99,7 +99,7 @@ function parseRgba(color) {
       colorFromHex[3] = colorFromHex[3] / 255;
       return colorFromHex;
     }
-    throwInvalidColor(color);
+    return null;
   }
   // Use canvas color serialization to parse the color into hex or rgba
   // See https://www.w3.org/TR/2021/SPSD-2dcontext-20210128/#serialization-of-a-color
@@ -112,18 +112,30 @@ function parseRgba(color) {
     invalidCheckFillStyle = context.fillStyle;
     context.fillStyle = color;
     if (context.fillStyle === invalidCheckFillStyle) {
-      throwInvalidColor(color);
+      return null;
     }
   }
   const colorString = context.fillStyle;
   if (colorString.startsWith('#') || colorString.startsWith('rgba')) {
-    return parseRgba(colorString);
+    return tryParseRgba(colorString);
   }
   context.clearRect(0, 0, 1, 1);
   context.fillRect(0, 0, 1, 1);
   const colorFromImage = Array.from(context.getImageData(0, 0, 1, 1).data);
   colorFromImage[3] = toFixed(colorFromImage[3] / 255, 3);
   return colorFromImage;
+}
+
+/**
+ * @param {string} color Color string.
+ * @return {Color} RGBa color array.
+ */
+function parseRgba(color) {
+  const parsed = tryParseRgba(color);
+  if (!parsed) {
+    throwInvalidColor(color);
+  }
+  return parsed;
 }
 
 /**
@@ -279,6 +291,44 @@ export function fromString(s) {
       throwInvalidColor(s);
     }
   }
+  cache[s] = color;
+  ++cacheSize;
+  return color;
+}
+
+/**
+ * Like `fromString()`, but returns `null` instead of throwing on invalid input.
+ * @param {string} s String.
+ * @return {Color|null} Color.
+ */
+export function tryFromString(s) {
+  if (s === 'none') {
+    return NO_COLOR;
+  }
+  if (cache.hasOwnProperty(s)) {
+    return cache[s];
+  }
+
+  const color = tryParseRgba(s);
+  if (!color || color.length !== 4) {
+    return null;
+  }
+  for (const c of color) {
+    if (isNaN(c)) {
+      return null;
+    }
+  }
+
+  if (cacheSize >= MAX_CACHE_SIZE) {
+    let i = 0;
+    for (const key in cache) {
+      if ((i++ & 3) === 0) {
+        delete cache[key];
+        --cacheSize;
+      }
+    }
+  }
+
   cache[s] = color;
   ++cacheSize;
   return color;
