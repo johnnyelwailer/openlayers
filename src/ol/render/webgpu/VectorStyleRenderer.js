@@ -1,7 +1,6 @@
 /**
  * @module ol/render/webgpu/VectorStyleRenderer
  */
-import earcut from 'earcut';
 import {asArray} from '../../color.js';
 import {
   buildExpression as buildCpuExpression,
@@ -25,13 +24,19 @@ import {
 import {create as createTransform} from '../../transform.js';
 import {create as createMat4} from '../../vec/mat4.js';
 import WebGPUBuffer from '../../webgpu/Buffer.js';
-import {writeLineSegmentToBuffers} from '../linestringUtil.js';
 import {WGSLBuilder} from './WGSLBuilder.js';
 import {
   collectGetProperties,
   collectVarNames,
   compileWgslExpression,
 } from './expr.js';
+import {
+  generateLineInstanceAttributes,
+  generatePolygonVertexData,
+  packLineWork,
+  packPolygonWork,
+} from './vectorstylerenderer/geometry.js';
+import {generateGeometryBuffersInWorker} from './vectorstylerenderer/geometryWorkerClient.js';
 import {getPatternTexture} from './vectorstylerenderer/patterns.js';
 import {renderDraws} from './vectorstylerenderer/render.js';
 
@@ -162,7 +167,7 @@ function isFiniteNumberLiteral(value) {
 
 /**
  * @param {*} value Value.
- * @return {value is [number, number]} Whether value is a [number, number] tuple.
+ * @return {boolean} Whether value is a size array (length 2).
  */
 function isSizeLiteral(value) {
   return (
@@ -279,9 +284,9 @@ function resolveColor(value, feature, fallback, variables) {
 /**
  * @param {*} value Expression or literal.
  * @param {import("../../Feature.js").default|import("../../render/Feature.js").default} feature Feature.
- * @param {[number, number]} fallback Fallback size.
+ * @param {Array<number>} fallback Fallback size.
  * @param {import("../../style/flat.js").StyleVariables} [variables] Style variables.
- * @return {[number, number]} Resolved size.
+ * @return {Array<number>} Resolved size.
  */
 function resolveSize(value, feature, fallback, variables) {
   const resolved = resolveExpression(value, feature, variables);
@@ -484,7 +489,7 @@ class VectorStyleRenderer {
 
     /**
      * @private
-     * @type {[number, number]}
+     * @type {Array<number>}
      */
     this.offscreenTextureSize_ = [0, 0];
 
@@ -1324,9 +1329,9 @@ class VectorStyleRenderer {
 
           /**
            * @param {*} value Value.
-           * @param {[number, number]} fallback Fallback.
+           * @param {Array<number>} fallback Fallback.
            * @param {string} name Name for error messages.
-           * @return {((feature: import("../../Feature.js").default|import("../../render/Feature.js").default) => [number, number])|null} Evaluator.
+           * @return {((feature: import("../../Feature.js").default|import("../../render/Feature.js").default) => Array<number>)|null} Evaluator.
            */
           const tryBuildSizeEvaluator = (value, fallback, name) => {
             if (!Array.isArray(value) || typeof value[0] !== 'string') {
@@ -2169,22 +2174,13 @@ class VectorStyleRenderer {
       }
     }
 
-    // --- 2. Generate LineString Buffers ---
+    // --- 2. Generate LineString and Polygon Buffers (geometry) ---
     const lineBatch = geometryBatch.lineStringBatch;
     const lineEntries = Object.values(lineBatch.entries);
     const lineMaxRef = lineEntries.reduce(
       (max, entry) => Math.max(max, entry.ref || 0),
       0,
     );
-
-    // stride is 3 (XYM) for lines in MixedGeometryBatch
-    const LINE_STRIDE = 3;
-
-    // Generate per-segment instance attributes compatible with the WebGL stroke pipeline:
-    // p0(x,y,m), p1(x,y,m), angle0, angle1, distanceLow, distanceHigh, angleTangentSum, featureIndex
-    // -> 12 floats per segment instance.
-    /** @type {Array<number>} */
-    const lineInstanceAttributes = [];
 
     const strokeRules = rules.filter((r) => {
       const s = r.style;
@@ -2198,74 +2194,101 @@ class VectorStyleRenderer {
     });
     const hasAnyStroke = strokeRules.length > 0;
 
-    const identityTransform = createTransform();
-    // Generate segment instances per feature/linestring
-    for (let i = 0; i < lineEntries.length; i++) {
-      const entry = lineEntries[i];
-      const ref = entry.ref || 0;
+    const polyBatch = geometryBatch.polygonBatch;
+    const polyEntries = Object.values(polyBatch.entries);
+    const polyMaxRef = polyEntries.reduce(
+      (max, entry) => Math.max(max, entry.ref || 0),
+      0,
+    );
 
-      for (const flatCoords of entry.flatCoordss) {
-        const numPoints = flatCoords.length / LINE_STRIDE;
-        if (numPoints < 2) {
-          continue;
+    const polyRules = rules.filter((r) => {
+      const s = r.style;
+      if (!s) {
+        return false;
+      }
+
+      const patternSrc = s['fill-pattern-src'];
+      if (
+        patternSrc !== undefined &&
+        patternSrc !== null &&
+        typeof patternSrc !== 'string'
+      ) {
+        throw new Error(
+          'WebGPU layers do not support expressions for the fill-pattern-src style property',
+        );
+      }
+
+      const fillColor = s['fill-color'];
+      const hasFillColor =
+        fillColor !== undefined &&
+        fillColor !== null &&
+        (typeof fillColor === 'string' || Array.isArray(fillColor));
+
+      return hasFillColor || typeof patternSrc === 'string';
+    });
+
+    const needsLineGeometry = hasAnyStroke;
+    const needsPolygonGeometry = polyRules.length > 0;
+
+    /** @type {Float32Array} */
+    let lineInstanceData = new Float32Array(0);
+    /** @type {Float32Array} */
+    let polygonVertexData = new Float32Array(0);
+
+    if (needsLineGeometry || needsPolygonGeometry) {
+      const canUseWorker = typeof Worker !== 'undefined';
+      if (canUseWorker) {
+        try {
+          const lineWork = needsLineGeometry
+            ? packLineWork(lineEntries)
+            : new Float32Array(0);
+          const polyWork = needsPolygonGeometry
+            ? packPolygonWork(polyEntries)
+            : {
+                meta: new Uint32Array(0),
+                coords: new Float32Array(0),
+                rings: new Uint32Array(0),
+              };
+          const result = await generateGeometryBuffersInWorker({
+            lineWork,
+            polyMeta: polyWork.meta,
+            polyCoords: polyWork.coords,
+            polyRings: polyWork.rings,
+          });
+          lineInstanceData = new Float32Array(result.lineInstance);
+          polygonVertexData = new Float32Array(result.polygonVertices);
+        } catch {
+          // fall through to main-thread implementation
         }
-        const instructions = new Float32Array(flatCoords);
-        const firstInstructionsIndex = 0;
-        const lastInstructionsIndex = (numPoints - 1) * LINE_STRIDE;
-        const isLoop =
-          instructions[firstInstructionsIndex] ===
-            instructions[lastInstructionsIndex] &&
-          instructions[firstInstructionsIndex + 1] ===
-            instructions[lastInstructionsIndex + 1];
+      }
 
-        let currentLength = 0;
-        let currentAngleTangentSum = 0;
-
-        for (let j = 0; j < numPoints - 1; j++) {
-          let beforeIndex = null;
-          if (j > 0) {
-            beforeIndex = (j - 1) * LINE_STRIDE;
-          } else if (isLoop) {
-            beforeIndex = lastInstructionsIndex - LINE_STRIDE;
-          }
-
-          let afterIndex = null;
-          if (j < numPoints - 2) {
-            afterIndex = (j + 2) * LINE_STRIDE;
-          } else if (isLoop) {
-            afterIndex = firstInstructionsIndex + LINE_STRIDE;
-          }
-
-          const measures = writeLineSegmentToBuffers(
-            instructions,
-            j * LINE_STRIDE,
-            (j + 1) * LINE_STRIDE,
-            beforeIndex,
-            afterIndex,
-            lineInstanceAttributes,
-            [ref], // featureIndex as custom attribute (stable ref)
-            identityTransform,
-            currentLength,
-            currentAngleTangentSum,
-          );
-          currentLength = measures.length;
-          currentAngleTangentSum = measures.angle;
-        }
+      if (lineInstanceData.length === 0 && needsLineGeometry) {
+        const lineWork = packLineWork(lineEntries);
+        lineInstanceData = generateLineInstanceAttributes(lineWork);
+      }
+      if (polygonVertexData.length === 0 && needsPolygonGeometry) {
+        const polyWork = packPolygonWork(polyEntries);
+        polygonVertexData = generatePolygonVertexData(
+          polyWork.meta,
+          polyWork.coords,
+          polyWork.rings,
+        );
       }
     }
 
     let lineBuffer = null;
     /** @type {Array<LineStringBufferSet>} */
     const lineStringBuffers = [];
-    if (lineInstanceAttributes.length > 0 && hasAnyStroke) {
-      const lineData = new Float32Array(lineInstanceAttributes);
+    if (lineInstanceData.length > 0 && hasAnyStroke) {
       lineBuffer = new WebGPUBuffer({
-        size: lineData.byteLength,
+        size: lineInstanceData.byteLength,
         usage: 0x0020 | 0x0008, // VERTEX | COPY_DST
         mappedAtCreation: true,
       });
       lineBuffer.create(this.helper_);
-      new Float32Array(lineBuffer.getBuffer().getMappedRange()).set(lineData);
+      new Float32Array(lineBuffer.getBuffer().getMappedRange()).set(
+        lineInstanceData,
+      );
       lineBuffer.getBuffer().unmap();
     }
 
@@ -2669,97 +2692,20 @@ class VectorStyleRenderer {
       }
     }
 
-    // --- 3. Generate Polygon Buffers ---
-    const polyBatch = geometryBatch.polygonBatch;
-    const polyEntries = Object.values(polyBatch.entries);
-    const polyMaxRef = polyEntries.reduce(
-      (max, entry) => Math.max(max, entry.ref || 0),
-      0,
-    );
-
-    const polyRules = rules.filter((r) => {
-      const s = r.style;
-      if (!s) {
-        return false;
-      }
-
-      const patternSrc = s['fill-pattern-src'];
-      if (
-        patternSrc !== undefined &&
-        patternSrc !== null &&
-        typeof patternSrc !== 'string'
-      ) {
-        throw new Error(
-          'WebGPU layers do not support expressions for the fill-pattern-src style property',
-        );
-      }
-
-      const fillColor = s['fill-color'];
-      const hasFillColor =
-        fillColor !== undefined &&
-        fillColor !== null &&
-        (typeof fillColor === 'string' || Array.isArray(fillColor));
-
-      return hasFillColor || typeof patternSrc === 'string';
-    });
+    // --- 3. Generate Polygon Buffers (style) ---
     /** @type {Array<PolygonBufferSet>} */
     const polygonBuffers = [];
     if (polyRules.length > 0) {
-      // To estimate size, we'd need to triangulate first or use a dynamic array.
-      // Since earcut is fast enough for 2D, triangulate into a temp array once.
-
-      const POLY_STRIDE = 2; // MixedGeometryBatch usually 2 unless M/Z
-      const polyVertices = []; // [x, y, featureIndex, x, y, featureIndex]
-      for (let i = 0; i < polyEntries.length; i++) {
-        const entry = polyEntries[i];
-        const ref = entry.ref || 0;
-
-        // entry.flatCoordss is Array<Array<number>> (polygons)
-        // entry.ringsVerticesCounts is Array<Array<number>> (rings per polygon)
-        for (let pOffset = 0; pOffset < entry.flatCoordss.length; pOffset++) {
-          const flatCoords = entry.flatCoordss[pOffset];
-          const ringsCounts = entry.ringsVerticesCounts[pOffset];
-
-          if (!flatCoords || flatCoords.length === 0) {
-            continue;
-          }
-
-          // Calculate holes
-          // holes: array of vertex-indices where holes start
-          const holes = [];
-          let currentVertexIndex = 0;
-          for (let r = 0; r < ringsCounts.length; r++) {
-            // ringsCounts[r] is number of vertices in this ring
-            if (r > 0) {
-              holes.push(currentVertexIndex);
-            }
-            currentVertexIndex += ringsCounts[r];
-          }
-
-          // Triangulate
-          const triangles = earcut(flatCoords, holes, POLY_STRIDE);
-
-          // triangles is flat array of vertex indices
-          for (let t = 0; t < triangles.length; t++) {
-            const vIdx = triangles[t]; // Index of vertex (0-based)
-            const px = flatCoords[vIdx * POLY_STRIDE];
-            const py = flatCoords[vIdx * POLY_STRIDE + 1];
-            polyVertices.push(px, py, ref); // x, y, featureIndex (stable ref)
-          }
-        }
-      }
-
       let polyBuffer = null;
-      if (polyVertices.length > 0) {
-        const polyDataFloat = new Float32Array(polyVertices);
+      if (polygonVertexData.length > 0) {
         polyBuffer = new WebGPUBuffer({
-          size: polyDataFloat.byteLength,
+          size: polygonVertexData.byteLength,
           usage: 0x0020 | 0x0008,
           mappedAtCreation: true,
         });
         polyBuffer.create(this.helper_);
         new Float32Array(polyBuffer.getBuffer().getMappedRange()).set(
-          polyDataFloat,
+          polygonVertexData,
         );
         polyBuffer.getBuffer().unmap();
       }
@@ -3091,7 +3037,7 @@ class VectorStyleRenderer {
 
     const maxRef = Math.max(pointMaxRef, lineMaxRef, polyMaxRef);
     const featureCount = maxRef + 1;
-    /** @type {{buffer: WebGPUBuffer, propNames: Array<string>, propCount: number, indexByName: Map<string, number>, update: (device: GPUDevice, ref: number, feature: import("../../Feature.js").default|import("../../render/Feature.js").default) => void, updateBatch?: (device: GPUDevice, dirtyRefs: Map<number, import("../../Feature.js").default|import("../../render/Feature.js").default>) => void}|null} */
+    /** @type {{buffer: WebGPUBuffer, propNames: Array<string>, propCount: number, indexByName: Map<string, number>, update: (device: GPUDevice, ref: number, feature: import("../../Feature.js").default|import("../../render/Feature.js").default) => void, updateBatch: ((device: GPUDevice, dirtyRefs: Map<number, import("../../Feature.js").default|import("../../render/Feature.js").default>) => void)|undefined}|null} */
     let featureProperties = null;
     if (propCount > 0 && featureCount > 0) {
       const featureByRef = new Array(featureCount);

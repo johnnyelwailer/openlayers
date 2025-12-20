@@ -1,16 +1,17 @@
 /**
  * @module ol/render/webgpu/vectorstylerenderer/patterns
  */
+// @ts-check
 
 /**
  * @typedef {Object} StrokePatternTexture
  * @property {GPUSampler} sampler Sampler.
  * @property {GPUTextureView} view Texture view.
- * @property {[number, number]} size Texture size in pixels.
+ * @property {Array<number>} size Texture size in pixels.
  */
 
 /**
- * @param {import('../VectorStyleRenderer.js').default} renderer Vector style renderer.
+ * @param {*} renderer Vector style renderer.
  * @param {string} src Image URL or data URL.
  * @return {Promise<StrokePatternTexture>} Texture resources.
  */
@@ -73,7 +74,7 @@ export async function getPatternTexture(renderer, src) {
     return {
       sampler,
       view: texture.createView(),
-      size: /** @type {[number, number]} */ ([width, height]),
+      size: [width, height],
     };
   })();
 

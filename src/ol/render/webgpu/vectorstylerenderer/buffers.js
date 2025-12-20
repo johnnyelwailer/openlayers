@@ -1,11 +1,12 @@
 /**
  * @module ol/render/webgpu/vectorstylerenderer/buffers
  */
+// @ts-check
 
 const BIND_GROUP_CACHE = Symbol('ol/webgpu/VectorStyleRenderer.bindGroupCache');
 
 /**
- * @param {Object} buffers Current buffers.
+ * @param {*} buffers Current buffers.
  * @return {Map<number, *>} Bind group cache.
  */
 function getBindGroupCache(buffers) {
@@ -19,11 +20,11 @@ function getBindGroupCache(buffers) {
 
 /**
  * Encode draw calls for a buffer set into an existing render pass.
- * @param {import('../VectorStyleRenderer.js').default} renderer Vector style renderer.
+ * @param {*} renderer Vector style renderer.
  * @param {GPURenderPassEncoder} passEncoder Render pass encoder.
  * @param {GPUDevice} device Device.
  * @param {GPUTextureFormat} format Target format.
- * @param {Object} buffers Buffers object (polygon/line/point).
+ * @param {*} buffers Buffers object (polygon/line/point).
  * @param {GPUBuffer} uniformBuffer Uniform buffer for this draw.
  */
 export function renderBuffers(

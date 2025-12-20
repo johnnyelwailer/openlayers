@@ -1,6 +1,7 @@
 /**
  * @module ol/render/webgpu/vectorstylerenderer/render
  */
+// @ts-check
 
 import {
   multiply as multiplyTransform,
@@ -23,9 +24,9 @@ const UNIFORM_BYTE_SIZE = 112; // 28 * 4 bytes
 
 /**
  * Render one or more draw calls in a single WebGPU command submission.
- * @param {import('../VectorStyleRenderer.js').default} renderer Vector style renderer.
+ * @param {*} renderer Vector style renderer.
  * @param {Array<Draw>} draws Draw calls.
- * @param {import('../../../Map.js').FrameState} frameState Frame state.
+ * @param {*} frameState Frame state.
  * @param {Object} options Options.
  * @param {number} [options.worldOffsetX] World offset in map units.
  * @param {number} [options.opacity] Layer opacity.

@@ -53,9 +53,9 @@ export function writeLineSegmentToBuffers(
 
   /**
    * Compute the angle between p0pA and p0pB
-   * @param {import("../coordinate.js").Coordinate} p0 Point 0
-   * @param {import("../coordinate.js").Coordinate} pA Point A
-   * @param {import("../coordinate.js").Coordinate} pB Point B
+   * @param {Array<number>} p0 Point 0
+   * @param {Array<number>} pA Point A
+   * @param {Array<number>} pB Point B
    * @return {number} a value in [0, 2PI]
    */
   function angleBetween(p0, pA, pB) {
